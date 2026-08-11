@@ -1,0 +1,74 @@
+{
+  "name": "sword-game-desktop",
+  "version": "0.1.0",
+  "description": "검 게임 설치형 데스크톱 패키지 (Electron)",
+  "주의-CFBundleName": "★build.productName 과 CFBundleName 은 ASCII 로 둔다. 한글로 바꾸면 맥 빌드가 실행 즉시 SIGTRAP 으로 죽는다(ready 도 못 가고 콘솔에 한 줄도 안 남는다). 크로미움이 CFBundleName 으로 헬퍼 프로세스 경로를 만들기 때문이다. 사람이 보는 이름은 mac.extendInfo 의 CFBundleDisplayName(한글 OK) 과 빌드 마지막의 번들 이름 바꾸기(tools/build_desktop.py)가 맡는다. docs/desktop.md 함정 참고.",
+  "private": true,
+  "main": "electron-main.js",
+  "author": "gameproject",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "pack:mac": "electron-builder --mac --arm64",
+    "pack:win": "electron-builder --win --x64",
+    "pack": "electron-builder --mac --arm64 --win --x64"
+  },
+  "devDependencies": {
+    "electron": "43.3.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.gameproject.swordgame",
+    "productName": "SwordGame",
+    "copyright": "gameproject",
+    "directories": {
+      "output": "out",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron-main.js",
+      "package.json",
+      "game/**/*"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "game/**"
+    ],
+    "mac": {
+      "category": "public.app-category.games",
+      "icon": "build/icon.icns",
+      "target": [
+        { "target": "dmg", "arch": ["arm64"] }
+      ],
+      "artifactName": "sword-game-${version}-mac-${arch}.${ext}",
+      "darkModeSupport": true,
+      "extendInfo": {
+        "CFBundleDisplayName": "검 게임"
+      }
+    },
+    "dmg": {
+      "title": "검 게임",
+      "artifactName": "sword-game-${version}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "zip", "arch": ["x64"] }
+      ],
+      "artifactName": "sword-game-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "검 게임",
+      "artifactName": "sword-game-${version}-win-${arch}-setup.${ext}"
+    },
+    "compression": "normal",
+    "removePackageScripts": true
+  }
+}

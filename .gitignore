@@ -5,3 +5,10 @@ dist/
 __pycache__/
 *.pyc
 .playwright-mcp/
+
+# 설치형 데스크톱 패키징 (desktop/)
+# node_modules 는 받으면 되고, game/ 은 dist/ 복사본이고, out/ 은 빌드 산출물이다.
+# 셋 다 저장소에 넣을 이유가 없다(합쳐서 수백 MB).
+desktop/node_modules/
+desktop/game/
+desktop/out/
