@@ -1,7 +1,14 @@
 # -*- coding: utf-8 -*-
 """지형 소품(web/props/*.glb) 안에 박힌 손그림 텍스처를 다시 칠한다.
 
-    python3 tools/regrade_props.py            # 전부
+★★★ 2026-08-11 (12차 파도 12-소품원색) — **여섯 종은 이 파일이 더 이상 안 칠한다** ★★★
+    tree · rock · boulder_xl · crag · bush · cliff_tall_b
+    오너 판정 "Meshy 에서 뽑힌 건 맘에 드는데 게임에 넣으니 이상해진다. 채도 건드린 거냐"
+    -> 답은 "건드렸다" 였고, 그 여섯은 **tools/raw_props.py**(원색 + ACES 역보정)로 옮겼다.
+    이 파일을 이름 없이 그냥 돌리면 그 여섯이 팔레트로 도로 칠해진다. **하지 마라.**
+    (남은 종류 thicket · outcrop · cliff_tall · bank · slab 은 아직 이 파일 소유다.)
+
+    python3 tools/regrade_props.py            # 전부  ← ★위 여섯 종은 빼고 부를 것
     python3 tools/regrade_props.py bush rock  # 몇 개만
     python3 tools/regrade_props.py --dry      # 안 쓰고 숫자만
 
@@ -303,8 +310,14 @@ def regrade(img, spec):
     return Image.fromarray(np.uint8(np.clip(out, 0, 1) * 255 + 0.5)), paint
 
 
+# ★12-소품원색(2026-08-11)에서 tools/raw_props.py 로 넘어간 종류. 여기서 칠하면
+#   오너가 고른 Meshy 원색이 팔레트로 도로 덮인다. --force 없이는 손대지 않는다.
+MOVED_TO_RAW = {"tree", "rock", "boulder_xl", "crag", "bush", "cliff_tall_b"}
+
+
 def main(argv):
     dry = "--dry" in argv
+    force = "--force" in argv
     names = [a for a in argv if not a.startswith("-")]
     files = sorted(f for f in os.listdir(PROPS) if f.endswith(".glb"))
     for f in files:
@@ -312,6 +325,9 @@ def main(argv):
         if key not in TARGET:
             continue
         if names and key not in names:
+            continue
+        if key in MOVED_TO_RAW and not force:
+            print("%-14s 건너뜀 — tools/raw_props.py 소유다(12-소품원색). 정말이면 --force" % key)
             continue
         path = os.path.join(PROPS, f)
         js, bin_ = glb_read(path)
