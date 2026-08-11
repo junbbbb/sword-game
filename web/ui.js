@@ -401,7 +401,7 @@ body.uiBossIn #bHud{opacity:0;transition:opacity .3s ease}
 #uiDeath.on{opacity:1}
 /* 창이 떠 있는 동안 HUD 를 물린다(입장 창과 같은 규칙) */
 body.uiDeathOn #help,body.uiDeathOn #uiDock,body.uiDeathOn #bHud,
-body.uiDeathOn #stat,body.uiDeathOn #stHud{opacity:.05}
+body.uiDeathOn #stat,body.uiDeathOn #stHud,body.uiDeathOn #uiHpFloat{opacity:.05}
 body.uiDeathOn #uiNav,body.uiDeathOn #uiPip,
 body.uiDeathOn #stVig{opacity:.05!important}
 #uiDeath .win{width:min(330px,72vw);padding:13px 24px 22px;text-align:center;
@@ -847,6 +847,42 @@ body.uiCleared #uiClearDim{opacity:1}
   #uiDeath .glyph{font-size:clamp(64px,11vh,92px)}
 }
 
+/* ── 12) 머리 위 체력바 (12차. 오너 지시: 「체력바는 캐릭터 머리 위로, 롤처럼」) ──
+   롤 문법 그대로다. 캐릭터 머리 위에 **월드를 따라다니는** 작은 트랙 하나.
+   ★아래 계기판의 체력 셀·숫자는 **그대로 둔다.** 롤도 머리 위 바와 하단 HUD 를
+     이중으로 쓴다. 하나를 없애면 「지금 몇 남았나」와 「위험한가」 중 하나가 죽는다.
+   ★수치를 안 얹는다. 숫자는 계기판에 이미 있고, 머리 위 숫자는 전투 중에 읽히지도
+     않으면서 캐릭터 얼굴을 가린다(롤 기본 HUD 도 머리 위에는 숫자가 없다).
+   ★폭은 **화면 px 고정**이다. 휠 줌(18~32m)으로 캐릭터가 커졌다 작아져도 바는 안 변한다.
+     월드 크기로 매달면 멀어질 때 2~3px 이 돼서 읽을 수가 없다.
+   ★시스템창 문법을 그대로 탄다: 각진 1px 헤어라인 + 한 단 눌린 판. 발광은 **안 준다**
+     (조사 ③). 대신 바깥 그림자 한 겹만 남긴다 - 1층은 밝은 봄 풀밭이라 그게 없으면
+     바가 배경에 녹는다(계기판이 같은 이유로 그림자를 갖고 있다).
+   ★자리는 JS 가 **transform 으로만** 쓴다. left/top 을 매 프레임 쓰면 레이아웃이 돈다. */
+#uiHpFloat{position:fixed;left:0;top:0;z-index:5;width:84px;height:9px;
+  pointer-events:none;user-select:none;opacity:0;
+  border:1px solid rgba(143,211,241,.42);background:rgba(4,11,22,.88);
+  box-shadow:0 1px 4px rgba(0,0,0,.62);
+  transition:opacity .18s ease;will-change:transform}
+#uiHpFloat.on{opacity:1}
+#uiHpFloat i{position:absolute;left:0;top:0;bottom:0;display:block}
+/* 잔상. 방금 깎여 나간 만큼이 잠깐 남았다가 따라 줄어든다(폭은 JS 가 매 프레임 쓴다).
+   ★채움보다 **뒤에** 깔린다(문서 순서). 그래야 줄어든 구간에서만 보인다. */
+#uiHpFloat .gh{background:rgba(255,120,92,.52);transition:background .2s ease}
+/* 채움. 색(초록/노랑/빨강)은 enemy.js 의 규칙을 그대로 쓴다 - 뜻이 걸린 색이라 안 바꾼다.
+   계기판은 남색 판 위라 많이 눌러 놨지만, 이건 풀밭 위라 살짝만 눌러 준다. */
+#uiHpFloat .fl{filter:saturate(.92);transition:filter .2s ease}
+/* 맞은 순간. ★번쩍이는 것은 **방금 깎여 나간 칸**(잔상)이다. 남은 체력을 하얗게
+   태우면 그 순간 색(초록/노랑/빨강)이 사라져서 "얼마나 위험한가"를 못 읽는다.
+   남은 쪽은 살짝만 들어 올리고 테두리만 같이 밝힌다. 0.2초에 걸쳐 가라앉는다. */
+#uiHpFloat.hit{border-color:rgba(255,224,224,.92)}
+/* ★남은 쪽 밝기는 1.2 를 넘기지 않는다. 1.45 로 두니 옅은 쪽 끝이 흰색으로 타서
+     초록 바가 통째로 청백색으로 읽혔다(f08 실측 (191,255,255)). 색이 곧 뜻이다. */
+#uiHpFloat.hit .fl{filter:saturate(.92) brightness(1.2);transition:none}
+#uiHpFloat.hit .gh{background:rgba(255,247,240,.95);transition:none}
+/* 세로가 짧은 창에서는 캐릭터도 그만큼 작게 잡힌다. 바도 같이 줄인다 */
+@media (max-height:620px){ #uiHpFloat{width:68px;height:8px} }
+
 /* ══ 연출이 화면을 소유한다 (판정 S4 · S5 · S6 · S7) ═══════════════════════
    ★★이 블록은 **반드시 이 파일 CSS 의 맨 끝**에 있어야 한다. 여기 적힌 선택자는
      전부 (0,2,0) 이라 「body.uiHelpOff #uiHelpChip{opacity:.9}」 같은 앞쪽 규칙과
@@ -866,7 +902,8 @@ body.uiCleared #uiClearDim{opacity:1}
      uiCleared = 층 돌파 결과창 (판이 끝날 때까지)
    ★#uiDeath(사망 창)의 표는 위쪽 3) 절에 그대로 둔다. */
 body.uiTitleOn #help,body.uiTitleOn #uiHelpChip,body.uiTitleOn #uiDock,
-body.uiTitleOn #bHud,body.uiTitleOn #stat,body.uiTitleOn #stHud{
+body.uiTitleOn #bHud,body.uiTitleOn #stat,body.uiTitleOn #stHud,
+body.uiTitleOn #uiHpFloat{
   opacity:.06;
   /* ★들어올 때는 **빠르게** 물린다(판정 S4). 예전 값 .5s 는 창이 진해지는 구간과
      그대로 겹쳐서, R 재시작에 창도 0.2·계기판도 0.8 인 프레임이 24장 나왔다.
@@ -874,9 +911,10 @@ body.uiTitleOn #bHud,body.uiTitleOn #stat,body.uiTitleOn #stHud{
   transition:opacity .16s ease}
 body.uiBossIn #help,body.uiBossIn #uiHelpChip,
 body.uiCine #help,body.uiCine #uiHelpChip,body.uiCine #uiDock,
-body.uiCine #bHud,body.uiCine #stat,body.uiCine #stHud,
+body.uiCine #bHud,body.uiCine #stat,body.uiCine #stHud,body.uiCine #uiHpFloat,
 body.uiCleared #help,body.uiCleared #uiHelpChip,body.uiCleared #uiDock,
-body.uiCleared #stat,body.uiCleared #stHud{opacity:0;transition:opacity .22s ease}
+body.uiCleared #stat,body.uiCleared #stHud,
+body.uiCleared #uiHpFloat{opacity:0;transition:opacity .22s ease}
 /* 인라인 opacity 를 쓰는 둘(나침반·마커)만 !important. 인라인은 클래스 규칙을 이긴다 */
 body.uiTitleOn #uiNav,body.uiTitleOn #uiPip{opacity:.06!important}
 body.uiBossIn #uiNav,body.uiBossIn #uiPip,
@@ -998,6 +1036,13 @@ export function initUI() {
   const hpNum = el('b', 'uiHpNum');
   const barEl = document.getElementById('eBar');
   if (barEl && barEl.parentNode) barEl.parentNode.insertBefore(hpNum, barEl.nextSibling);
+
+  // 머리 위 체력바(12차). 잔상(.gh)이 채움(.fl) **뒤**에 깔린다 - 문서 순서가 곧 층이다.
+  const hpFloat = el('div', 'uiHpFloat');
+  hpFloat.innerHTML = '<i class="gh"></i><i class="fl"></i>';
+  const hpGhost = hpFloat.querySelector('.gh');
+  const hpFill = hpFloat.querySelector('.fl');
+  document.body.append(hpFloat);
 
   function cell(label, node) {
     if (!node) return null;                        // 담을 게 없으면 셀도 없다
@@ -1637,6 +1682,125 @@ export function initUI() {
   }
 
   // -------------------------------------------------------------------------
+  // 10-c) 머리 위 체력바 (12차. 오너 지시: 「체력바는 캐릭터 머리 위로, 롤처럼」)
+  // -------------------------------------------------------------------------
+  // 롤 문법: 캐릭터 머리 위 0.4m 에 화면 px 고정폭 트랙 하나. 하단 계기판은 그대로 둔다.
+  //
+  // ★★이것만은 폴링(20Hz)에 못 얹는다. 20Hz 로 붙이면 대시 한 번에 바가 캐릭터
+  //   뒤로 서너 뼘씩 끌려간다(캐릭터는 60fps 로 그려지니까). 그래서 이 한 가지만
+  //   rAF 로 돈다. 하는 일은 곱셈 몇 번 + transform 한 줄이라 프레임 예산은 안 먹는다.
+  //
+  // ★투영은 손으로 안 푼다. main.js 의 window.__screen(x, z, y) 이 **이번 프레임의
+  //   실제 카메라 행렬**(matrixWorldInverse · projectionMatrix)로 NDC 를 내준다.
+  //   목표 방향 나침반이 이미 쓰는 그 창구다. 삼각함수로 어림하면 휠 줌·창 비율이
+  //   바뀔 때마다 어긋난다.
+  // ★★window.__fx 는 **?dev 에서만** 존재한다(main.js 3541행 `if (DEV)`). 평시 URL 에는
+  //   __fx 도 __fx.charH() 도 없다. 키는 window.__dbg 에서 꺼낸다 - __dbg 는
+  //   activateChar 가 캐릭터를 세울 때마다 무조건 다시 쓰므로 F 로 몸을 바꿔도 따라온다.
+  const HP_UP = 0.4;             // 머리 꼭대기에서 바까지(m)
+  const HP_FADE = 1.15;          // 잔상이 따라 줄어드는 속도(1초에 체력바 몇 배)
+  const HP_HOLD = 0.14;          // 맞고 나서 잔상이 버티는 시간(초)
+  const HP_FLASH = 180;          // 맞은 순간 밝아지는 시간(ms)
+  // ★색은 enemy.js 의 규칙을 그대로 옮긴 것이다. 뜻이 걸린 색이라 여기서 안 바꾼다.
+  const HP_INK = ['linear-gradient(90deg,#e04a2e,#f08f7f)',    // 25% 이하
+                  'linear-gradient(90deg,#e0c22e,#f0e07f)',    // 50% 이하
+                  'linear-gradient(90deg,#2ee08a,#7ff0c0)'];   // 그 위
+
+  let fltModel = null, fltH = 0;                 // 지금 몸 · 그 키(m)
+  function playerH() {
+    const d = window.__dbg;
+    if (!d || !d.model || !d.CHARS) return 0;    // 캐릭터 glb 가 아직 안 내려왔다
+    if (d.model !== fltModel) {                  // 몸이 바뀌었을 때만 표를 훑는다
+      fltModel = d.model;
+      fltH = 0;
+      for (const k in d.CHARS) if (d.CHARS[k].model === d.model) fltH = d.CHARS[k].charH || 0;
+    }
+    return fltH;
+  }
+
+  // 바 자체의 픽셀 크기. 창 크기가 바뀔 때만 다시 잰다(매 프레임 재면 레이아웃이 돈다).
+  let fltW = 0, fltHt = 0;
+  function measureFloat() { fltW = hpFloat.offsetWidth; fltHt = hpFloat.offsetHeight; }
+  measureFloat();
+  addEventListener('resize', measureFloat);
+
+  let fltX = -9999, fltY = -9999, fltOn = false;
+  let fltR = -1, fltBand = -1;        // 지금 그려 둔 채움 비율 · 색 단계
+  let ghostR = 0, ghostHold = 0;      // 잔상 비율 · 버티는 시간(초)
+  let fltT = 0, hitTimer = 0;
+
+  function fltShow(on) {
+    if (on === fltOn) return;
+    fltOn = on;
+    hpFloat.classList.toggle('on', on);
+  }
+
+  function updateHpFloat(now) {
+    const scr = window.__screen, root = window.__root, en = window.__enemy;
+    const dt = fltT ? Math.min(0.1, (now - fltT) / 1000) : 0;
+    fltT = now;
+    const h = playerH();
+    if (!scr || !root || !en || !h) { fltShow(false); return; }
+
+    // ── 자리 ──
+    // root.position 을 **그대로** 읽는다. window.__pos() 는 소수 둘째 자리에서 자르는데
+    // 1cm 가 화면에서 0.5px 이라 그 반올림이 그대로 바 떨림으로 보인다.
+    const p = root.position;
+    const s = scr(p.x, p.z, p.y + h + HP_UP);
+    if (s.behind) { fltShow(false); return; }     // 카메라 뒤(고정 쿼터뷰에선 사실상 없다)
+    // ★정수로 못박는다. 반 픽셀에 서면 1px 헤어라인이 두 줄 회색으로 번져서
+    //   가만히 서 있어도 바가 지글거린다.
+    const x = Math.round((s.x + 1) * 0.5 * innerWidth - fltW / 2);
+    const y = Math.round((1 - s.y) * 0.5 * innerHeight - fltHt / 2);
+    if (x !== fltX || y !== fltY) {
+      fltX = x; fltY = y;
+      hpFloat.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0)';
+    }
+    fltShow(true);
+
+    // ── 채움 ──
+    // 최대 체력은 계기판과 같은 값을 쓴다(enemy.js 가 최대를 안 내놓는다. 10) 절 참조).
+    if (en.hp > hpMax) hpMax = Math.ceil(en.hp);
+    const r = Math.max(0, Math.min(1, en.hp / hpMax));
+    if (r !== fltR) {
+      if (r < fltR) {                             // 맞았다
+        ghostHold = HP_HOLD;
+        hpFloat.classList.add('hit');
+        clearTimeout(hitTimer);
+        hitTimer = setTimeout(() => hpFloat.classList.remove('hit'), HP_FLASH);
+      } else {
+        ghostR = r;                               // 회복은 잔상이 바로 따라간다
+      }
+      fltR = r;
+      hpFill.style.width = (r * 100).toFixed(2) + '%';
+      const band = r > 0.5 ? 2 : (r > 0.25 ? 1 : 0);
+      if (band !== fltBand) { fltBand = band; hpFill.style.background = HP_INK[band]; }
+    }
+
+    // ── 잔상 ──
+    // 깎인 자리를 잠깐 붙들었다가 따라 줄어든다. "방금 이만큼 맞았다"를 말하는 층이다.
+    if (ghostR < r) ghostR = r;
+    if (ghostR > r) {
+      if (ghostHold > 0) ghostHold -= dt;
+      else ghostR = Math.max(r, ghostR - dt * HP_FADE);
+      hpGhost.style.width = (ghostR * 100).toFixed(2) + '%';
+    } else if (hpGhost.style.width !== '0%') {
+      hpGhost.style.width = '0%';                 // 붙어 있으면 굳이 안 그린다
+    }
+  }
+
+  // ★★rAF 등록을 **다음 태스크로 미룬다.** main.js 는 이 파일을 부른 **뒤**(파일 맨 끝
+  //   4449행)에 tick() 을 처음 돌린다. 여기서 곧바로 걸면 우리 콜백이 main 보다 **앞**에
+  //   서고, 그러면 한 프레임 전 좌표·카메라로 바를 붙이게 된다(대시 한 번에 10px 넘게
+  //   뒤처진다. 눈에 보인다). setTimeout(0) 한 번이면 등록 순서가 main 뒤로 간다 -
+  //   rAF 콜백은 등록 순서대로 돌고, 둘 다 콜백 맨 앞에서 다시 거니까 그 순서가 유지된다.
+  function fltFrame(now) {
+    requestAnimationFrame(fltFrame);
+    updateHpFloat(now);
+  }
+  setTimeout(() => requestAnimationFrame(fltFrame), 0);
+
+  // -------------------------------------------------------------------------
   // 폴링. 20Hz 면 카운트다운이 매끄럽고, 렌더 루프에는 한 프레임도 안 얹힌다.
   // (rAF 에 붙이면 60fps 예산을 같이 쓰게 된다. UI 는 그럴 이유가 없다)
   // -------------------------------------------------------------------------
@@ -1769,6 +1933,27 @@ export function initUI() {
                           nm: c ? c.querySelector('.nm').textContent : '',
                           ty: c ? c.querySelector('.ty').textContent : '',
                           raw: comboEl ? comboEl.textContent : '' };
+               })(),
+               // 머리 위 체력바: 켜졌나 · 화면 어디에(사각형) · 채움/잔상은 몇 %
+               // ★캐릭터 머리가 화면 어디인지도 같이 준다. 「바가 머리 위에 붙어 있나」를
+               //   촬영 없이 숫자로 대조할 수 있어야 한다(검증 ①⑤).
+               hpFloat: (() => {
+                 const r = hpFloat.getBoundingClientRect();
+                 const root = window.__root, scr = window.__screen;
+                 const h = fltH;
+                 let head = null;
+                 if (root && scr && h) {
+                   const s = scr(root.position.x, root.position.z, root.position.y + h);
+                   head = [Math.round((s.x + 1) * 0.5 * innerWidth),
+                           Math.round((1 - s.y) * 0.5 * innerHeight)];
+                 }
+                 return { on: hpFloat.classList.contains('on'),
+                          op: +getComputedStyle(hpFloat).opacity,
+                          rect: [Math.round(r.left), Math.round(r.top),
+                                 Math.round(r.width), Math.round(r.height)],
+                          fill: hpFill.style.width, ghost: hpGhost.style.width,
+                          ink: fltBand, hit: hpFloat.classList.contains('hit'),
+                          charH: h, head };
                })(),
                // 좁은 창에서 계기판이 화면 안에 다 들어오는가(판정 S2)
                fits: (() => { const r = dock.getBoundingClientRect();
