@@ -11,11 +11,15 @@
   적혀 있어서 실제로 한 번 헛돌았다. 6번은 blender/s34_sword1_swap.py 헤더에 있다.
 
     # 1) 알몸 basic2 + 칼 7자루
+    #    ★2026-08-12 오너 지시 3차로 **오른 주먹을 팔축 둘레 93.9도 돌린다**
+    #      (아래 [5b] 절. FIST_ROLL=0 이면 옛 판 그대로. 칼은 한 톨도 안 건드린다)
     blender -b -P blender/s31_basic2_body.py
     # 2) slayer 무브셋 7종 이식 (레스트 관절 각도차 5.9~10.4도. kensa 보다 작다)
     #    ★점프는 기본값 RELEASE=Jump 로 **한 손 파지**가 되고(2026-08-12 오너 지시),
     #      기본값 SWORD_DOWN=Jump 로 **검 든 오른팔이 몸 옆·아래로 내려간다**
     #      (같은 날 오너 지시 2차. 빼면 검을 앞으로 겨눈 채 뛴다)
+    #    ★기본값 HAND_GRIP=1 로 **왼손목 방향을 자루에서 역산**한다(오너 지시 3차.
+    #      빼면 왼손목이 Attack 169도·Heavy 161도까지 꺾인다. WRIST_LIM=60 이 상한)
     SRC_GLB=web/slayer.glb DST_GLB=web/basic2_body.glb OUT_GLB=web/basic2_moves.glb \
       DST_SWORD=SW_baekah.001 SWORD_FIT=0 GRIP_K=1.0 KEEP_ORIG=1 \
       OUTDIR=renders/history/v97_wave11/char_basic2/moveset blender -b -P blender/s24_moveset.py
@@ -325,6 +329,175 @@ for o in sword_objs:
     md.object = arm_b
     o.parent = arm_b
     o.matrix_parent_inverse = arm_b.matrix_world.inverted()
+
+# ====================================== 5b) 오른 주먹을 '쥔 방향'으로 돌린다 (13-손목)
+# ★오너 지시(2026-08-12): "손등이 왜 하늘을 향하고 있냐? 손잡이를 쥐고 있어야 하는데,
+#   주먹 쥔 캐릭터니까 조절 좀 잘해봐."
+#
+# 무엇이 어긋나 있었나 (실측. blender/probe_wrist.py)
+#   주먹을 쥐고 막대를 잡으면 막대는 **손가락 마디가 늘어선 축**(검지 관절 -> 새끼
+#   관절, 아래에서 '구멍축')으로 지나간다. 손등 노멀과는 90도다. 그런데 이 모델은
+#       구멍축 - 칼축   86.0 도   (0 이어야 쥔 것이다)
+#       손등노멀 - 칼축  7.7 도   (90 이어야 정상)
+#   즉 칼이 손가락 사이가 아니라 **손바닥에서 손등으로 꿰뚫고** 있었다. 그래서 칼이
+#   앞을 가리키면 손등도 같이 앞·위를 보고, 오너 눈에 "손등이 하늘"로 보인 것이다.
+#   주먹 좌표계는 뼈 로컬축을 안 믿고 메시로 만든다(Meshy 리그는 축이 제멋대로다):
+#     팔축   = 손목 원점 -> 주먹 중심 (기하로 확정)
+#     구멍축 = 팔축에 수직인 평면에서 2차원 주성분의 **넓은** 쪽
+#     손등축 = 좁은 쪽(두께)
+#   ★3차원 주성분을 그냥 쓰면 안 된다. 손이 팔축으로 길쭉해(손목->손끝 20cm) 축 셋이
+#     대각으로 섞인다. 실제로 첫 판에서 구멍축이 팔축과 같은 20cm 로 나왔다.
+#
+# 어떻게 고치나 — **칼이 아니라 주먹 메시를 돌린다**
+#   칼을 돌리면 칼끝 방향(dir)·리치(pmax)가 바뀌어 12차에서 맞춰 둔 계약이 깨진다.
+#   반대로 주먹 정점을 **팔축 둘레로** 돌리면
+#     · 회전축이 주먹 중심을 지나므로 주먹 중심 FC 가 **한 톨도 안 움직인다**
+#       (s34 가 자루를 앉히는 기준점이 FC 다. 자루 겹침 91% 가 그대로 지켜진다)
+#     · 칼 메시·뼈·액션을 아예 안 건드리므로 dir·pmax 가 **바이트 단위로 같다**
+#   회전량은 각도를 굳히지 않고 **푼다**: 엄지 쪽 구멍축을 칼끝 방향에 제일 가깝게
+#   보내는 각. 팔축과 칼축이 정확히 90도가 아니라(83.4도) 6.6도가 남는데, 이건
+#   칼이 손가락 사이를 6.6도 비껴 지난다는 뜻이라 눈에 안 보인다.
+#   회전량에 **정점의 손뼈 웨이트를 곱한다**. 주먹(웨이트 1)은 통째로 돌고 손목은
+#   웨이트만큼만 돌아 스킨과 같은 감쇠가 걸린다 = 팔뚝이 꺾이지 않고 비틀린다.
+#   (사람 팔도 같은 일을 한다. 손목이 아니라 아래팔이 도는 pronation 이다)
+FIST_ROLL = os.environ.get("FIST_ROLL", "auto")
+# ★엄지가 어느 쪽인지는 기하로 못 가른다(주먹에 구멍이 안 뚫려 있다. 광선 스캔으로
+#   확인했다). 2026-08-12 에 주먹 접사를 눈으로 보고 정했다
+#   (renders/history/v99_wave13/wrist/fisttex/t_armP.png 에서 손가락 마디 골 네 개와
+#    엄지 위치를 확인). PCA 부호는 실행마다 뒤집히므로 **레스트 월드 기준벡터**와의
+#   내적으로 부호를 고정한다. 리그가 바뀌면 여기서 큰 소리로 죽는다.
+THUMB_REF_W = Vector((0.285, -0.953, -0.100))
+
+
+def fist_axes(HM, P, ref=None, strict=True):
+    """주먹 좌표계 (팔축, 엄지쪽 구멍축, 손등축). 전부 손뼈 로컬 단위벡터.
+
+    ref 는 '엄지축이 레스트 월드에서 어느 쪽이어야 하나'. 기본은 THUMB_REF_W 이고,
+    돌린 뒤 다시 잴 때는 돌아간 예상 방향을 넘긴다(strict=False 로 경고만).
+    """
+    import numpy as np
+    C = Vector((sum(p.x for p in P) / len(P), sum(p.y for p in P) / len(P),
+                sum(p.z for p in P) / len(P)))
+    a = C.normalized()
+    e1 = Vector((1, 0, 0)) if abs(a.x) < 0.9 else Vector((0, 1, 0))
+    e1 = (e1 - a * e1.dot(a)).normalized()
+    e2 = a.cross(e1)
+    Q = []
+    for p in P:
+        q = (p - C)
+        q = q - a * q.dot(a)
+        Q.append([q.dot(e1), q.dot(e2)])
+    Q = np.array(Q, dtype=float)
+    w2, V2 = np.linalg.eigh(Q.T @ Q)
+    t = (e1 * V2[0, 1] + e2 * V2[1, 1]).normalized()      # 넓은 쪽 = 구멍축
+    R3 = HM.to_3x3()
+    R3.normalize()
+    rv = THUMB_REF_W if ref is None else ref
+    if (R3 @ t).dot(rv) < 0:                              # 엄지 쪽으로 부호 고정
+        t = -t
+    d = (R3 @ t).dot(rv)
+    if strict:
+        assert abs(d) > 0.85, ("엄지축 기준벡터와 %.2f 밖에 안 맞는다. 리그가 바뀌었으면"
+                               " 접사를 다시 찍고 THUMB_REF_W 를 갱신해라" % d)
+    return a, t, t.cross(a).normalized()
+
+
+def fist_pts(HM, ob):
+    """손뼈에 웨이트 0.5 초과인 몸 정점(손뼈 로컬). 돌린 뒤 다시 재려고 쓴다."""
+    HMi = HM.inverted()
+    vg = ob.vertex_groups[HAND_R]
+    P = []
+    for v in ob.data.vertices:
+        for g in v.groups:
+            if g.group == vg.index and g.weight > 0.5:
+                P.append(HMi @ (ob.matrix_world @ v.co))
+                break
+    return P
+
+
+def sw_tip_local(HM, o):
+    """손뼈 로컬에서 '손목원점 -> 칼끝'(measureBlade 와 같은 기준)."""
+    HMi = HM.inverted()
+    L = [HMi @ v.co for v in o.data.vertices]             # 칼은 이미 월드로 굳혔다
+    return max(L, key=lambda p: p.length).normalized()
+
+
+A_ARM, A_TUN, A_BAK = fist_axes(HM_b, HP_b)
+GAME_SW = next((o for o in sword_objs if o.name.startswith("SW_nokseun")),
+               sword_objs[0])
+U_L = sw_tip_local(HM_b, GAME_SW)
+print("\n[파지] 오른 주먹 좌표계(손뼈 로컬)와 칼축")
+print("       팔축   (%+.3f,%+.3f,%+.3f)   칼축과 %.1f도"
+      % (A_ARM.x, A_ARM.y, A_ARM.z, math.degrees(A_ARM.angle(U_L))))
+print("       구멍축 (%+.3f,%+.3f,%+.3f)   칼축과 %.1f도  <- 0 이어야 쥔 것"
+      % (A_TUN.x, A_TUN.y, A_TUN.z, math.degrees(A_TUN.angle(U_L))))
+print("       손등축 (%+.3f,%+.3f,%+.3f)   칼축과 %.1f도  <- 90 이어야 정상"
+      % (A_BAK.x, A_BAK.y, A_BAK.z, math.degrees(A_BAK.angle(U_L))))
+# 엄지쪽 구멍축을 칼끝으로 보내는 각을 푼다(팔축 둘레라 주먹 중심은 안 움직인다)
+_c = A_ARM.cross(A_TUN)
+PHI = math.atan2(U_L.dot(_c), U_L.dot(A_TUN))
+if FIST_ROLL not in ("auto", ""):
+    PHI = math.radians(float(FIST_ROLL))
+if abs(math.degrees(PHI)) > 1e-6:
+    HMi_b = HM_b.inverted()
+    MW = body_b.matrix_world.copy()
+    MWi = MW.inverted()
+    vg = body_b.vertex_groups[HAND_R]
+    RMAX = max(p.length for p in HP_b) * 1.35             # 이보다 먼 곁가지 웨이트는 무시
+    n_full = n_part = 0
+    moved = 0.0
+    for v in body_b.data.vertices:
+        w = 0.0
+        for g in v.groups:
+            if g.group == vg.index:
+                w = g.weight
+                break
+        if w <= 1e-4:
+            continue
+        p = HMi_b @ (MW @ v.co)
+        if p.length > RMAX:
+            continue
+        # ★감쇠는 웨이트 그대로가 아니라 **0.5 에서 이미 1** 이 되게 한다.
+        #   주먹 중심 FC 는 '웨이트 0.5 초과' 정점의 무게중심이고 s34 가 자루를 그 점에
+        #   앉힌다. 0.5 위쪽이 전부 같은 각으로 돌면 그 무게중심은 회전축 위에 있으므로
+        #   **한 톨도 안 움직인다**(pmax·자루겹침이 바이트 단위로 보존된다).
+        #   웨이트를 그대로 곱하면 0.5~1.0 구간이 덜 돌아 FC 가 0.36mm 밀리고
+        #   pmax 가 131.53071 -> 131.58113 으로 새어 나간다(실측).
+        #   감쇠는 손목 고리(웨이트 0~0.5, 팔뚝 정점들)에서만 일어난다.
+        k = min(1.0, w / 0.5)
+        q = Matrix.Rotation(PHI * k, 3, A_ARM) @ p
+        v.co = MWi @ (HM_b @ q)
+        moved = max(moved, (q - p).length)
+        if k > 0.999:
+            n_full += 1
+        else:
+            n_part += 1
+    body_b.data.update()
+    # ★검산은 **실제로 바뀐 메시를 다시 재서** 한다(웨이트 감쇠 때문에 해석식과
+    #   미세하게 다르다. 부호는 예상 방향으로 이어 준다)
+    R3b = HM_b.to_3x3()
+    R3b.normalize()
+    HPa = fist_pts(HM_b, body_b)
+    A_ARM2, A_TUN2, A_BAK2 = fist_axes(
+        HM_b, HPa, ref=R3b @ (Matrix.Rotation(PHI, 3, A_ARM) @ A_TUN), strict=False)
+    FCa = Vector((sum(p.x for p in HPa) / len(HPa), sum(p.y for p in HPa) / len(HPa),
+                  sum(p.z for p in HPa) / len(HPa)))
+    print("       ★주먹을 팔축 둘레로 %+.1f도 돌렸다 (정점 웨이트만큼. 통째 %d개 +"
+          " 손목 감쇠 %d개, 최대 이동 %.4f 뼈로컬)"
+          % (math.degrees(PHI), n_full, n_part, moved))
+    print("       돌린 뒤: 구멍축-칼축 %.1f도 / 손등축-칼축 %.1f도 / 주먹중심 이동"
+          " %.6f 뼈로컬 (= %.4f mm 게임)"
+          % (math.degrees(A_TUN2.angle(U_L)), math.degrees(A_BAK2.angle(U_L)),
+             (FCa - FC_b).length,
+             (FCa - FC_b).length * arm_b.matrix_world.to_scale().x * (1.75 / H_b) * 1000))
+    print("       칼 7자루 구멍축과의 각(작을수록 자루가 손가락 사이를 지난다):")
+    for o in sorted(sword_objs, key=lambda x: x.name):
+        u = sw_tip_local(HM_b, o)
+        print("         %-14s 전 %5.1f도 -> 후 %5.1f도"
+              % (o.name, math.degrees(A_TUN.angle(u)),
+                 math.degrees(A_TUN2.angle(u))))
+else:
+    print("       FIST_ROLL=0 이라 주먹을 안 돌린다(옛 판 재현용)")
 
 # ================================================================ 6) 검산
 print("\n[검산] 손목 기준 칼날 축(레스트 월드). 옮기기 전후가 같아야 한다")

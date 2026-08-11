@@ -75,6 +75,12 @@
   RELEASE 에 적은 클립은 왼손을 자루에서 떼고 **균형 잡는 팔**로 바꾼다.
   자세한 표와 근거는 아래 [한 손 파지] 절에 있다.
 
+★★왼손 손목 (HAND_GRIP. 기본 켬) — 2026-08-12 오너 지시 3차
+  "왼쪽(손)은 엄청 꺾여 있음. 그리고 (X 쓸 때) 왼쪽 손도 이상하게 꺾여버리고."
+  IK 는 손목 **위치**만 맞추고 손 방향은 리타게팅에 맡겨 왔다. 그래서 왼손목이
+  Attack 169도 · Heavy 161도까지 꺾였다(사람 한계 60~70도). 자루에서 역산해
+  손뼈 회전만 다시 쓴다. 자세한 표와 근거는 아래 [왼손 손목] 절에 있다.
+
 ★★검 든 오른팔 내리기 (SWORD_DOWN. 기본 Jump) — 2026-08-12 오너 지시 2차
   "점프할 때 한 손으로 검을 앞으로 들고 있는데 넌 그게 말이 된다 생각하냐?"
   1차는 왼손만 풀었고 오른팔은 소스 그대로 **검을 앞으로 겨눈** 자세였다.
@@ -116,6 +122,8 @@
   GRIP_ON/GRIP_OFF  파지 게이트 문턱(키 정규화. 기본 0.10 / 0.18)
   RELEASE   한 손으로 쥘 클립(쉼표)   기본 Jump  (빈 값이면 전부 양손)
   SWORD_DOWN 검 든 오른팔을 내릴 클립  기본 Jump  (빈 값이면 소스 그대로)
+  HAND_GRIP 1(기본) 왼손목 방향을 자루에서 역산 / 0 옛 판(리타게팅 그대로) 재현
+  WRIST_LIM 왼손목 기하각 상한(도)     기본 60  (레스트 중립이 16.8도인 잣대다)
   KEEP_ORIG 1 이면 타깃 원본 액션을 Orig* 이름으로 같이 내보낸다(기본 0)
   VERIFY    1(기본) 결과 glb 재임포트해 파지·접지 실측
   RENDER    1(기본) 렌더 / 0 생략
@@ -562,6 +570,63 @@ if TIP_DIR is not None:
              dname, math.degrees(TIP_DIR.angle(_o)) if _o else -1))
 
 
+# ---- 왼 주먹 좌표계 (아래 [왼손 손목] 이 쓴다) ----
+# ★뼈 로컬축을 안 믿는다. 손 본에 웨이트 0.5 초과인 몸 정점으로 직접 만든다.
+#   팔축   = 손목 원점 -> 주먹 중심 (기하로 확정)
+#   구멍축 = 팔축 수직 평면에서 2차원 주성분의 넓은 쪽(손가락 마디가 늘어선 축).
+#            막대를 쥐면 이 축으로 지나간다. 부호는 **엄지 쪽**으로 고정한다.
+#   ★3차원 주성분을 그냥 쓰면 손이 팔축으로 길쭉해서 축이 대각으로 섞인다(s31 함정과 같다).
+# ★엄지 부호는 기하로 못 가른다(주먹에 구멍이 안 뚫려 있다). 2026-08-12 에 오른 주먹
+#   접사(renders/history/v99_wave13/wrist/fisttex/)를 눈으로 보고 오른손 엄지축의 레스트
+#   월드 방향을 정했고, 왼손은 그것을 좌우 대칭(X 부호 반전)한 값이다. 캐릭터 좌우축이
+#   월드 X 인 것은 레스트 팔축 실측으로 확인했다(오른팔 -X / 왼팔 +X).
+THUMB_REF_W = {HAND_R: Vector((0.285, -0.953, -0.100)),
+               HAND_L: Vector((-0.285, -0.953, -0.100))}
+
+
+def fist_frame(a, meshes, bone):
+    """(주먹중심, 팔축, 엄지쪽 구멍축, 손등축). 전부 손뼈 로컬. 레스트에서 잰다."""
+    import numpy as np
+    a.data.pose_position = "REST"
+    bpy.context.view_layer.update()
+    HM = (a.matrix_world @ a.pose.bones[bone].matrix).copy()
+    a.data.pose_position = "POSE"
+    HMi = HM.inverted()
+    P = []
+    for o in meshes:
+        g = o.vertex_groups.get(bone)
+        if g is None:
+            continue
+        for v in o.data.vertices:
+            w = next((x.weight for x in v.groups if x.group == g.index), 0.0)
+            if w > 0.5:
+                P.append(HMi @ (o.matrix_world @ v.co))
+    if len(P) < 12:
+        return None
+    C = Vector((sum(p.x for p in P) / len(P), sum(p.y for p in P) / len(P),
+                sum(p.z for p in P) / len(P)))
+    ax = C.normalized()
+    e1 = Vector((1, 0, 0)) if abs(ax.x) < 0.9 else Vector((0, 1, 0))
+    e1 = (e1 - ax * e1.dot(ax)).normalized()
+    e2 = ax.cross(e1)
+    Q = []
+    for p in P:
+        q = p - C
+        q = q - ax * q.dot(ax)
+        Q.append([q.dot(e1), q.dot(e2)])
+    w2, V2 = np.linalg.eigh(np.array(Q, dtype=float).T @ np.array(Q, dtype=float))
+    t = (e1 * V2[0, 1] + e2 * V2[1, 1]).normalized()
+    R3 = HM.to_3x3()
+    R3.normalize()
+    if (R3 @ t).dot(THUMB_REF_W[bone]) < 0:
+        t = -t
+    d = (R3 @ t).dot(THUMB_REF_W[bone])
+    if abs(d) < 0.85:
+        print("   ★엄지축 기준벡터와 %.2f 밖에 안 맞는다(%s). 리그가 바뀌었으면 접사를"
+              " 다시 찍고 THUMB_REF_W 를 갱신해라" % (d, bone))
+    return C, ax, t, t.cross(ax).normalized()
+
+
 # ---- 손 크기 대조: 파지 오프셋을 '키 비율'로 환산해도 되는지의 근거 ----
 # 왼손목이 자루축에서 떨어진 거리(0.077H)는 사실 **손목-손바닥 거리**다.
 # 그래서 키가 아니라 손 크기로 환산해야 맞다. 두 리그의 손이 키 대비 같은 크기면
@@ -593,6 +658,13 @@ print("   손 크기(손목->손 정점 평균 / 키): 소스 %.4f / 타깃 %.4f
 if hs and abs(hd_ / hs - 1) > 0.15:
     print("   ★손 크기가 15%% 넘게 다르다. 파지 오프셋을 키가 아니라 손 비율로"
           " 환산해야 할 수 있다(GRIP_K 로 손보라)")
+
+FF_L = fist_frame(arm, DST_BODY, HAND_L)
+if FF_L:
+    print("   왼 주먹(손뼈 로컬): 중심 (%+.2f,%+.2f,%+.2f) / 팔축 (%+.3f,%+.3f,%+.3f)"
+          " / 엄지쪽 구멍축 (%+.3f,%+.3f,%+.3f)"
+          % (FF_L[0].x, FF_L[0].y, FF_L[0].z, FF_L[1].x, FF_L[1].y, FF_L[1].z,
+             FF_L[2].x, FF_L[2].y, FF_L[2].z))
 
 # ================================================================ 6) 엔진
 def src_world_rot(bn):
@@ -938,8 +1010,16 @@ def apply_grip(pose, Rw, gt, ph=None):
             pole = (E - S).normalized().lerp(
                 (torso_frame(pose) @ Vector(BAL_POLE)).normalized(), wb)
     before = (Lw - T).length
+    # ★손목 방향 교정([왼손 손목])에 넘길 값: 자루 기준점 C 와 **파지 전용** 가중치.
+    #   균형 팔(RELEASE)로 넘어간 몫(wb)은 빼야 한다. 안 그러면 손을 놓은 팔이
+    #   허공의 자루를 쥐는 방향으로 손목을 튼다.
+    #   ★제곱으로 빼는 이유: 1차로 빼면 전환 중간(wb 0.8)에도 0.2 가 남아 손목이
+    #     이미 멀어진 자루를 향해 조금 틀린다. 점프 f04 왼손목이 132 -> 143도로
+    #     오히려 나빠졌다(실측). 제곱이면 같은 자리에서 0.03 이라 사실상 0 이다.
+    _wb = bal_weight(ph) if ph is not None else 0.0
+    wh = gt[3] * (1.0 - _wb) ** 2
     if w <= 1e-4:
-        return T, before, before, 0.0
+        return T, before, before, 0.0, C, wh
     R1, R2, Tc = two_bone_ik(S, E, Lw, T, pole)
     R1 = Quaternion().slerp(R1, w)
     R2 = Quaternion().slerp(R2, w)
@@ -948,7 +1028,100 @@ def apply_grip(pose, Rw, gt, ph=None):
     Rw[L_ARM[0]] = M1 @ Rw[L_ARM[0]]
     Rw[L_ARM[1]] = M2 @ Rw[L_ARM[1]]
     Rw[L_ARM[2]] = M2 @ Rw[L_ARM[2]]
-    return T, before, None, w
+    return T, before, None, w, C, wh
+
+
+# ---------------------------------------------------------------- 왼손 손목
+# ★오너 지시(2026-08-12): "왼쪽(손)은 엄청 꺾여 있음. 그리고 (X 쓸 때) 왼쪽 손도
+#   이상하게 꺾여버리고."
+#
+# 무엇이 어긋나 있었나 (실측. blender/probe_wrist.py, 커밋된 basic2.glb)
+#   왼손목 기하각(= 팔꿈치->손목 과 손목->주먹중심 사이각. 레스트 중립이 16.8도):
+#       Idle 73.8 · Attack 최대 169.1 · Heavy(X) 최대 161.0 · Wide 최대 169.3 · Jump 132.5
+#   사람 손목은 굴곡·신전 60~70도가 한계다. 169도는 손이 팔뚝 위로 접힌 그림이다.
+#   원인은 두 겹이다.
+#     1) 소스(slayer) 자체가 그렇다(같은 잣대로 Attack 157 · Heavy 141 · Wide 151).
+#        토이솔저 손은 벙어리장갑이라 안 보였을 뿐이다.
+#     2) 리타게팅은 **회전 델타**를 옮기는 것이라 두 리그의 레스트 손 방향 차이가
+#        그대로 손목 각도 오차로 얹힌다(여기서 10~15도 더 나빠진다).
+#   게다가 왼 주먹 구멍축이 자루축과 67~77도라 **쥔 모양도 아니었다**.
+#
+# 어떻게 고치나 — 손목 방향을 **자루에서 역산**한다(팔은 안 건드린다)
+#   IK 가 잡아 놓은 손목 **위치**와 팔꿈치는 그대로 두고, 손뼈 회전만 다시 쓴다.
+#     · 구멍축 -> 자루축(엄지가 칼끝 쪽. 양손검은 두 엄지가 다 코등이를 본다)
+#     · 팔축   -> 손목에서 자루 기준점 C 로 (주먹 중심이 자루 위에 얹힌다)
+#   두 목표는 서로 수직이라 회전 하나로 **정확히** 만족한다. 남는 손목 굽힘은
+#   '팔뚝이 자루와 얼마나 수직인가'로 결정되는데(실측 중앙 12~46도), 그게 상한을
+#   넘는 프레임에서는 넘는 만큼 되돌린다(WRIST_LIM). 되돌린 만큼 구멍축이 자루에서
+#   기울지만, 부러진 손목보다 낫다.
+#   ★팔 자세·칼·오른손은 한 톨도 안 건드린다. 손뼈 회전 하나만 바뀐다.
+WRIST_LIM = float(os.environ.get("WRIST_LIM", "60"))
+HAND_GRIP = os.environ.get("HAND_GRIP", "1") == "1"      # 0 이면 옛 판 재현
+# ★어느 칼에 맞출 것인가. 파지 **위치**(IK 목표 C)는 예전대로 DST_SWORD(baekah) 기준이지만
+#   손 **방향**은 화면에 실제로 들려 있는 칼에 맞춰야 한다. 게임 시작 칼은 1번(nokseun)이고
+#   7자루의 칼축은 서로 최대 17도 다르다(실측). TIP_DIR 이 이미 그 칼의 축이다
+#   ([자루] 절에서 **타깃 아마추어의 자식**으로 한정해 찾았다. 소스에도 같은 이름의
+#    칼이 있으므로 bpy.data.objects 를 이름으로 뒤지면 검사 칼을 집는다).
+VIS_U = TIP_DIR if TIP_DIR is not None else (
+    Vector(D_SW[0].col[0]) if D_SW else None)
+if VIS_U is not None and D_SW:
+    print("\n[왼손 손목] 방향 기준 칼 %s (파지 기준 %s 와 %.1f도) / 굽힘 상한 %.0f도%s"
+          % (GAME_SW, dname,
+             math.degrees(VIS_U.angle(Vector(D_SW[0].col[0]))), WRIST_LIM,
+             "" if HAND_GRIP else "  ★HAND_GRIP=0 이라 안 건드린다"))
+
+
+def apply_hand_grip(pose, Rw, C, w):
+    """왼손뼈 회전을 자루 파지 방향으로 다시 쓴다. (전 기하각, 후 기하각, 구멍축각, w)."""
+    if FF_L is None or not DO_GRIP or not HAND_GRIP or VIS_U is None:
+        return None
+    FC, ax_l, tu_l, _ = FF_L
+    HM = A2W @ pose[HAND_R]
+    Hr = HM.to_3x3()
+    Hr.normalize()
+    uh = (Hr @ VIS_U).normalized()                        # 월드 자루축(칼끝 쪽)
+    W = wpos(pose, HAND_L)
+    E = wpos(pose, L_ARM[1])
+    Lr = (A2W @ pose[HAND_L]).to_3x3()
+    Lr.normalize()
+    f = (W - E).normalized()
+    g0 = math.degrees(f.angle((Lr @ ax_l).normalized()))
+    if w <= 1e-4:
+        return g0, g0, math.degrees((Lr @ tu_l).normalized().angle(uh)), 0.0
+    n0 = C - W
+    n0 = n0 - uh * n0.dot(uh)                             # 자루축에 수직인 성분만
+    if n0.length < 1e-6:
+        n0 = f - uh * f.dot(uh)
+    if n0.length < 1e-6:
+        return g0, g0, math.degrees((Lr @ tu_l).normalized().angle(uh)), 0.0
+    n0.normalize()
+    # ★굽힘 상한은 **자루축 둘레에서만** 양보한다. 손을 자루축 둘레로 굴리면
+    #   구멍축은 자루에 붙은 채로 팔축만 도니까 **파지를 안 깨고** 손목을 편다.
+    #   (처음엔 임의 축으로 되돌렸다가 구멍축이 자루에서 94도까지 벌어졌다.
+    #    "쥔 것처럼" 이 이번 지시의 본론이라 그 방식은 못 쓴다)
+    #   f·n(th) = A cos th + B sin th = R cos(th - phi). 상한 cos(LIM) 을 만족하는
+    #   두 해 중 n0 에 가까운 쪽을 고른다. R < cos(LIM) 이면 상한까지 못 가므로
+    #   **제일 덜 꺾이는 자리**(th = phi)로 간다. 그게 팔을 안 건드리고 되는 최선이다.
+    A = f.dot(n0)
+    B = f.dot(uh.cross(n0))
+    R = math.hypot(A, B)                                  # = cos(도달 가능한 최소 굽힘)
+    cl = math.cos(math.radians(WRIST_LIM))
+    n = n0
+    if A < cl and R > 1e-6:
+        phi = math.atan2(B, A)
+        d = math.acos(max(-1.0, min(1.0, cl / R))) if R > cl else 0.0
+        th = phi - math.copysign(d, phi)
+        n = (Matrix.Rotation(th, 3, uh) @ n0).normalized()
+    # 손 로컬 (팔축, 엄지축, 그 외적) -> 월드 (n, uh, 그 외적). 둘 다 정규직교라
+    # 행렬 하나가 곧 회전이다(det=+1 이 보장된다).
+    Ml = Matrix((ax_l, tu_l, ax_l.cross(tu_l))).transposed()
+    Mt = Matrix((n, uh, n.cross(uh))).transposed()
+    Ht = Mt @ Ml.inverted()
+    q = Rw[HAND_L].to_quaternion().slerp(Ht.to_quaternion(), w)
+    Rw[HAND_L] = q.to_matrix()
+    g1 = math.degrees(f.angle((Rw[HAND_L] @ ax_l).normalized()))
+    tg = math.degrees((Rw[HAND_L] @ tu_l).normalized().angle(uh))
+    return g0, g1, tg, w
 
 
 def new_action(name):
@@ -1034,7 +1207,7 @@ def bake(name):
                   "   w %.2f"
                   % (t, f0 + int(round(t * (nf - 1))), E, Wd, A, F, _key_at(SWD_W, t)[0]))
 
-    lows, maxerr, befs, afts, swds = [], 0.0, [], [], []
+    lows, maxerr, befs, afts, swds, wrs = [], 0.0, [], [], [], []
     for i, f in enumerate(range(f0, f1 + 1)):
         sc.frame_set(f)
         bpy.context.view_layer.update()
@@ -1047,10 +1220,15 @@ def bake(name):
             swds.append(apply_sword_down(pose, Rw, ph_all(i)))
             pose, basis = build(Rw, pw)
         if DO_GRIP:
-            T, bef, _, w = apply_grip(pose, Rw, gts[i], phase(i))
+            T, bef, _, w, Ch, wh = apply_grip(pose, Rw, gts[i], phase(i))
             pose, basis = build(Rw, pw)
             befs.append((bef / DH, gts[i][3]))
             afts.append(((wpos(pose, HAND_L) - T).length / DH, gts[i][3]))
+            # ★손목 방향 교정은 IK **뒤**에 온다(IK 가 옮겨 놓은 손목 위치를 쓴다)
+            r = apply_hand_grip(pose, Rw, Ch, wh)
+            if r:
+                wrs.append(r)
+                pose, basis = build(Rw, pw)
         for bn in ORDER:
             arm.pose.bones[bn].matrix_basis = basis[bn]
         bpy.context.view_layer.update()
@@ -1078,6 +1256,16 @@ def bake(name):
               " (최대 %.2f주먹)"
               % (min(g_b), max(g_b), max(g_b) / FIST,
                  min(g_a), max(g_a), max(g_a) / FIST))
+    if wrs:
+        on = [r for r in wrs if r[3] > 0.5]
+        if on:
+            b0 = sorted(r[0] for r in on)
+            b1 = sorted(r[1] for r in on)
+            tg = sorted(r[2] for r in on)
+            print("   왼손목(파지 %d/%d 프레임): 기하각 전 %.0f~%.0f(중앙 %.0f)"
+                  " -> 후 %.0f~%.0f(중앙 %.0f) / 구멍축-자루축 후 %.0f~%.0f (상한 %.0f도)"
+                  % (len(on), nf, b0[0], b0[-1], b0[len(b0) // 2],
+                     b1[0], b1[-1], b1[len(b1) // 2], tg[0], tg[-1], WRIST_LIM))
     if swd and swds:
         act_f = [(i, d, wr) for i, (d, wr, w) in enumerate(swds) if w > 1e-4]
         print("   오른팔 회전량: %d/%d 프레임 적용 (팔 최대 %.1f도 f%d / 평균 %.1f도,"
@@ -1100,8 +1288,10 @@ def bake(name):
             apply_sword_down(pose, Rw, ph_all(i))
             pose, basis = build(Rw, pw)
         if DO_GRIP:
-            apply_grip(pose, Rw, gts[i], phase(i))
+            _, _, _, _, Ch, wh = apply_grip(pose, Rw, gts[i], phase(i))
             pose, basis = build(Rw, pw)
+            if apply_hand_grip(pose, Rw, Ch, wh):       # ★1차와 같은 순서로
+                pose, basis = build(Rw, pw)
         for bn in ORDER:
             arm.pose.bones[bn].matrix_basis = basis[bn]
         bpy.context.view_layer.update()
