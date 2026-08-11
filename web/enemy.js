@@ -1925,6 +1925,15 @@ export function createEnemySystem(opts) {
   let lastSwingT = -10;
   let hotState = false;
   let hasPrevBlade = false;
+  // ── 한 방짜리 기술의 캐스트 (2026-08-12 13차) ──
+  // 수면참·횡일섬은 "크게 한 번"이다. 그런데 스윙 번호는 hot 이 켜질 때마다 발급되므로,
+  // 한 캐스트 안에서 hot 이 두 번 켜지면 같은 요괴가 두 번 맞는다. SWING_GAP 은
+  // **떨림**(0.004~0.064초 꺼짐)만 묶으라고 있는 값이라 0.2초 넘게 벌어진 재점화는 못 막는다.
+  // 실측에서 회복 동작의 꼬리가 슬램에서 0.223초 뒤에 다시 켜진 판이 나왔다(경계 바로 위).
+  // 그래서 **한 방짜리 캐스트는 번호를 하나만 쓴다**. 시간 상수가 아니라 캐스트 신원으로
+  // 막으므로 클립 길이·재생속도가 바뀌어도 안 흔들린다.
+  let castId = -1;                 // main.js 가 준 이번 캐스트 번호(공격이 새로 시작될 때만 바뀐다)
+  let castSwing = -1;              // 그 캐스트가 이미 쓴 스윙 번호. -1 = 아직 안 썼다
   let dbgLine = null;
   // 몸 충돌 켜기/끄기. 껐을 때 어떻게 되는지(요괴가 등 뒤 0.1m 에 달라붙는지)를
   // 숫자로 다시 확인할 수 있어야 이 값이 왜 필요한지 나중에도 증명된다.
@@ -2662,11 +2671,21 @@ export function createEnemySystem(opts) {
     // 히스테리시스로 '베는 중'을 판정한다. 켜지는 순간이 새 스윙이다.
     const fast = ctx.fast || 0;
     const wantHot = !!ctx.attacking && (hotState ? fast > HOT_OFF : fast > HOT_ON);
+    // 캐스트가 바뀌면 "이 캐스트가 쓴 번호"를 비운다. main.js 가 공격 클립을 새로
+    // 시작할 때만 ctx.cast 가 올라가므로, 캔슬로 이어 낸 다음 타도 새 캐스트로 잡힌다.
+    if (ctx.cast !== castId) { castId = ctx.cast; castSwing = -1; }
     // ★스윙마다 번호가 바뀌어야 중복 타격이 막힌다. 단 SWING_GAP 안쪽에서
     //   다시 켜진 건 같은 스윙의 떨림으로 보고 번호를 안 올린다(= 재타격 없음).
     if (wantHot && !hotState && T - lastSwingT > SWING_GAP) {
-      swingId++;
-      lastSwingT = T;
+      // ★한 방짜리 기술(ctx.single = 수면참·횡일섬)은 캐스트당 번호 하나다.
+      //   이미 이 캐스트에서 하나 썼으면 새로 안 준다 = 같은 요괴는 두 번 안 맞는다
+      //   (doHits 의 e.lastSwing 검사가 번호가 같은 동안 재타격을 막는다).
+      //   3연타(Attack)는 클립 하나에 진짜 스윙이 셋이라 여기 안 걸린다.
+      if (!(ctx.single && castSwing >= 0)) {
+        swingId++;
+        lastSwingT = T;
+        if (ctx.single) castSwing = swingId;
+      }
     }
     hotState = wantHot;
     if (a && b) {
@@ -3352,8 +3371,12 @@ export function createEnemySystem(opts) {
       return out;
     },
     // 지금 살아 있는 개체의 실제 좌표(무리가 벽에 끼었는지 눈으로 안 보고 확인)
+    // ★hp·maxHp·lastSwing 도 같이 준다(읽기 전용). "한 스윙에 한 번"이 정말 지켜지는지는
+    //   개체별 체력을 따라가야 답이 나온다 - 스윙별 명중 수(log)만으로는 "두 놈을 한 번씩"과
+    //   "한 놈을 두 번"이 구분되지 않는다(13-X 단타 조사에서 이것 때문에 한나절 헤맸다).
     get positions() {
       return live.map(e => ({ g: e.grp ? e.grp.idx : -1, mode: e.mode,
+        hp: e.hp, maxHp: e.maxHp, lastSwing: e.lastSwing,
         x: +e.pos.x.toFixed(2), z: +e.pos.z.toFixed(2), y: +e.pos.y.toFixed(2),
         offHome: e.home ? +Math.hypot(e.pos.x - e.home.x, e.pos.z - e.home.z).toFixed(2) : null,
         stuck: LV.blocked(e.pos.x, e.pos.z, ENEMY_R * e.size * 0.85) }));

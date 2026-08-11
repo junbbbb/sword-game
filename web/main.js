@@ -2277,6 +2277,28 @@ function commitNow() {
   if (atkClip === 'Attack') return ATK_STEP_COMMIT[comboStep] || ATK_STEP_COMMIT[0];
   return ATK_COMMIT[atkClip] || 0.28;
 }
+// ── 한 방짜리 기술의 캐스트 앞구간 (2026-08-12 13차. 오너 "X 쓸 때 2타가 나가네") ──
+// 수면참은 크게 한 번인데 피해가 두 번 들어갔다. 범인은 스윙 모션이 아니라 **몸 보정**이다.
+// 실측(평시 URL, 요괴를 세워 놓고 X 20회. renders/history/v99_wave13/xsingle/):
+//   캐스트가 시작되는 첫 프레임에 방향 스냅(최대 SNAP_BACK_DEG 110도를 0.09초에)과
+//   전진 스텝(STEP_DUR 0.14초)이 **몸을** 옮긴다. 칼은 아직 머리 위에 그대로인데 몸이
+//   도니까 칼끝이 월드에서 확 움직이고, 타격 게이트가 보는 값은 |Δ칼끝|/dt 라
+//   이게 **64~336 m/s** 로 읽혔다(진짜 내려찍기의 최고 속도가 45~70 이다).
+//   그래서 칼을 휘두르기도 전에 타격 구간이 열려 **스윙 번호가 하나 더 발급됐다**:
+//     hot 상승 엣지 [0.017] [0.833]  ← 간격 0.82초. enemy.js 의 SWING_GAP(0.22)으로는
+//     절대 못 묶는다. 두 번호가 같은 요괴를 각각 한 번씩 때린다 = 데미지 숫자 두 개.
+// 그래서 **몸 보정이 끝나기 전에는 판정을 안 연다.** 창의 길이는 추측이 아니라 그 두
+// 보정의 길이에서 나온다: max(스냅 0.09, 스텝 0.14) + 한 프레임 여유.
+// ★3연타(Z)에는 안 건다. Z 는 1타 타격이 0.069초라 이 창 **안**에 있다(가리면 1타가 사라진다).
+//   Z 는 이 떨림이 진짜 1타와 SWING_GAP 안쪽으로 붙어서 어차피 같은 번호로 묶인다.
+// ★수면참의 진짜 타격은 0.83초, 횡일섬은 0.56초다. 양쪽 다 여유가 0.13초 넘게 남는다.
+const CAST_SETTLE = 0.20;
+// 한 방짜리 기술(수면참·횡일섬)인가. 3연타와 규칙이 갈리는 자리는 전부 이걸 본다.
+function isOneShotClip() { return atkClip === 'Heavy' || atkClip === 'Wide'; }
+// 지금 몸 보정 구간인가(= 칼끝 속도가 스윙이 아니라 몸의 이동을 재고 있는 구간)
+function castSettling(now) {
+  return attacking && isOneShotClip() && (now - atkStartT) < CAST_SETTLE;
+}
 function canCancelAttack(now) {
   if (!atkClip) return false;
   if (!atkStruck) return false;              // 아직 한 번도 안 휘둘렀으면 커밋 유지
@@ -3992,6 +4014,11 @@ window.__atk = () => ({
   commit: atkClip ? commitNow() : 0,
   step2: comboStep,
   struck: atkStruck, hot: enemies.hot,
+  // ★칼끝 속도 원값도 같이 준다(읽기 전용). hot 은 0.42/0.16 을 넘었나만 알려줘서
+  //   "왜 켜졌나"를 못 본다 - 클립이 바뀌는 프레임의 **포즈 점프**가 속도로 읽히는지
+  //   아닌지는 이 숫자로만 가려진다(13-X 단타 조사).
+  fast: +swordFast.toFixed(3), tip: +tipSpeed.toFixed(1),
+  clipT: current ? +current.time.toFixed(3) : -1,
   sinceHit: atkHitT > -90 ? +(gameT - atkHitT).toFixed(3) : -1,
   cancelable: canCancelAttack(gameT),
   step: +stepDist.toFixed(3), stepLeft: +stepLeft.toFixed(3),
@@ -4334,7 +4361,10 @@ function tick() {
     //   없으면 안 올라간다("허공에 휘둘러도 획은 그어져야 한다").
     //   대신 칼끝이 빨라지는 순간을 직접 본다. 0.11초 게이트는 9차에서 스윙 간격이
     //   0.14~0.17초까지 좁혀졌으므로(handoff_combat) 두 스윙이 하나로 안 뭉친다.
-    if (attacking && swordFast > 0.52 && gameT - lastSwingFxT > 0.11) {
+    // ★몸 보정 구간(CAST_SETTLE)에는 안 긋는다. 그 구간의 칼끝 속도는 휘두른 게 아니라
+    //   스냅·전진 스텝이 **몸을** 옮긴 것이라, 여기까지 열어 두면 수면참 한 번에 획이
+    //   두 장 그어진다(0.02초에 한 장, 0.83초 슬램에 한 장). 눈에는 그게 곧 "2타"다.
+    if (attacking && swordFast > 0.52 && gameT - lastSwingFxT > 0.11 && !castSettling(gameT)) {
       lastSwingFxT = gameT;
       const sa = screenAngle(b.x, b.y, b.z, swingDir.x, swingDir.y, swingDir.z);
       // ★획의 자리를 **캐릭터 바깥으로** 한 뼘 민다. 칼끝 화면 좌표 그대로 두면 획이
@@ -4420,11 +4450,19 @@ function tick() {
     // ★판정에 넘기는 선분은 **보이는 칼 그대로가 아니다**(위 makeHitSeg 주석).
     //   리치를 조금 늘리고 정면 부채꼴 밖을 잘라 낸 선분이다. 잡몹·보스가 같은 값을 본다.
     if (bladeLive) makeHitSeg(swordA, swordB);
+    // ★한 방짜리 기술의 몸 보정 구간에는 칼끝 속도를 **판정으로 안 넘긴다**(위 CAST_SETTLE).
+    //   보이는 칼·궤적·리본은 그대로 swordFast 를 쓴다 - 가리는 건 판정 입력 하나뿐이다.
+    const settling = castSettling(now);
     enemies.update(dt, {
       a: bladeLive ? hitA : null,
       b: bladeLive ? hitB : null,
       attacking,
-      fast: bladeLive ? swordFast : 0,
+      fast: (bladeLive && !settling) ? swordFast : 0,
+      // ★이번 캐스트의 신원. 공격 클립이 새로 시작될 때만 올라가는 수라(atkStarts)
+      //   enemy.js 가 "같은 캐스트인가"를 이걸로 가린다.
+      cast: atkStarts,
+      // 한 방짜리 기술(수면참·횡일섬)인가. enemy.js 가 이 캐스트에는 스윙 번호를 하나만 준다.
+      single: attacking && isOneShotClip(),
       // ★층 돌파 뒤에는 요괴도 멈춘다. 입력만 잠그면 "층 돌파" 패널이 뜬 채로 요괴가
       //   계속 때리고, 그 넉백(enemy.js damagePlayer)이 플레이어를 조금씩 밀어낸다.
       //   판이 끝난 화면에서 움직이는 건 아무것도 없어야 한다.
