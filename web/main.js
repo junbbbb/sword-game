@@ -2514,7 +2514,8 @@ const SWORDS = [
   { key: 'eoduk', name: '어둑', el: 'dark' },
 ];
 const swordMesh = {};
-let swordIdx = 1;
+// ★시작 칼 = 1번 슬롯(오너 제공 new_sword 흑요석 대검, 2026-08-12 오너 지시)
+let swordIdx = 0;
 
 // ---------------------------------------------------------------- 자체발광 칼날
 // 레퍼런스 Red_Tessaiga 를 픽셀로 실측한 결과(칼폭 120px 가로 단면):
