@@ -30,7 +30,7 @@ DST = os.path.join(ROOT, "dist")
 #   2026-08-11 시작 캐릭터가 basic2 로 바뀌었다(main.js CHAR_LIST 맨 앞).
 KEEP_CHARS = ["basic2", "kensa", "slayer", "tank", "archer", "soldier"]
 # 캐릭터가 아니지만 반드시 필요한 glb
-KEEP_GLB = ["level1.glb", "goblin.glb", "boss.glb"]
+KEEP_GLB = ["level1.glb", "level2.glb", "goblin.glb", "boss.glb"]
 
 ALL_CHARS = ["slayer", "tank", "archer", "soldier", "basic", "basic2", "hero"]
 
