@@ -513,6 +513,135 @@ function setElement(name) {
   sprayMat.uniforms.uRise.value = e.rise || 0;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 칼 이펙트 **4벌 선택 메뉴** (12-FX-D. ?fx=a|b|c|d · 기본 a)
+//
+// 오너가 이펙트를 네 번 다시 주문했고 매번 한 가지 해석으로 구현한 것이 어긋났다.
+// ("v95 너무 큼" -> "너무 줄임" -> "별똥별로" -> "다 이상해, 다시 만들어")
+// 그래서 이번 판은 **해석을 하나 더 하지 않는다.** 뚜렷이 다른 네 벌을 같이 얹고
+// 오너가 눈으로 고른다. 고르고 나면 진 셋을 지우고 이 표를 상수로 펴면 된다.
+//
+// 네 벌이 **공통으로 지키는 것**(오너가 일관되게 말한 것):
+//   · 이펙트는 **칼이 지나간 자리**를 따라 표현된다. 화면에 붕 뜬 큰 판은 없다
+//     (모든 가닥의 발원이 칼끝 궤적 _c 이고, 리치 3.2m·부채꼴 ±75° 안에서만 그린다).
+//   · 귀멸 계열 = 먹으로 형태를 정의하고 평칠한다(그라데이션·반투명 유리 부채 금지).
+//   · 과대 금지 = BODY_R 안에는 한 화소도 안 그리고 OUT_R 밖으로도 안 나간다.
+//   · **처치 백색 패널·진홍 초승달 문법은 네 벌 공통이고 한 글자도 안 건드렸다**
+//     (그 자리는 feel.js 소유다).
+//
+// 손잡이는 전부 아래 표 한 곳에 모았다. 셰이더는 uMode 로 갈린다.
+//   mode 0 = A 혜성 정제   1 = B 귀멸 리본   2 = C v95 정박판   3 = D 샤프 잔광
+// ═══════════════════════════════════════════════════════════════════════════
+const FX_STYLE = (() => {
+  const v = (new URLSearchParams(location.search).get('fx') || 'a').toLowerCase();
+  return (v === 'b' || v === 'c' || v === 'd') ? v : 'a';
+})();
+const FX_TABLE = {};
+{
+  // ── A 혜성 정제 ── 현행(11차 혜성판)의 소폭 개선. 가장 저위험.
+  //   폭을 한 단 키우고(방의 46%) · 흰 심이 꼬리까지 관통(화소 하한 보장) ·
+  //   머리 말림(호쿠사이 갈퀴) 강화(손가락 갈래를 굵고 잦게. 셰이더 clawAmp).
+  // ★★2026-08-11. cfg 의 단위가 바뀌었다(오너 지시 "칼은 짧은데 효과가 길다").
+  //   w     = 반폭. **칼이 쓸고 간 방(칼끝 반경 - 몸 반경)의 비율**이다. 미터가 아니다.
+  //   inset = 바깥 가장자리가 칼끝에서 안쪽으로 물러난 양(같은 방 비율).
+  //           0 = 칼끝에 붙은 마루(포말·갈퀴). 클수록 몸 쪽에 눕는 겹 획.
+  //   계약: inset + 2w <= 1 이면 획이 통째로 [몸 반경 .. 칼끝 반경] 안에 든다.
+  //   ★아래 half 값은 이제 **표시용**이다(판정지에 적는 대표 폭 비율).
+  const HA = 0.46;
+  FX_TABLE.a = {
+    key: 'a', name: 'A 혜성 정제', mode: 0, half: HA, trailMax: 34,
+    ladder:  [1.00, 1.00, 1.00, 0.98, 0.94, 0.88, 0.80, 0.70, 0.60, 0.48, 0.34],
+    // ★2026-08-11 오너 지시 2항("꼬리가 칼보다 길게 남는다"). 수명(칸 수)은 그대로 두고
+    //   **폭 사다리만** 뒤에서 급히 내렸다(꼬리 끝 0.16 -> 0.06). 칸은 살아 있되 면적이 없다.
+    ladderW: [1.00, 1.00, 0.97, 0.92, 0.84, 0.74, 0.62, 0.48, 0.34, 0.18, 0.06],
+    profile: 'comet', comet: { head: 0.26, nose: 0.70, tailp: 1.45, tail: 0.04 },
+    offK: [0.30, 0.70], headSpan: 0.52, alpha: 'binary', tipK: 1.03,
+    bodyR: 0.82, outR: 3.50, sprayK: 1.0, wrapK: 1.0,
+    cfg: [
+      // 갈퀴(호쿠사이 claw) = **칼끝에 붙은 마루**. 그래서 inset 0.
+      // ★말림은 폭이 아니라 갈래(셰이더 clawAmp)에서 나온다. 1차 시도에서 폭으로
+      //   키웠더니 흰 판때기가 됐다(실측 크롭).
+      { kind: 2, at: 0.96, w: 0.09, inset: 0.00, headOnly: 1, lifeK: 0.72 },
+      // 본 획: 마루 바로 안쪽. 방의 3분의 2를 쓴다.
+      { kind: 0, at: 0.90, w: HA,   inset: 0.02, headOnly: 0, lifeK: 1.00 },
+      // 겹 획: 더 안쪽에 눕는 둘째 붓(먹 외곽선이 가닥마다 제 경계를 그어 준다).
+      { kind: 1, at: 0.84, w: 0.22, inset: 0.34, headOnly: 0, lifeK: 0.86 },
+    ],
+  };
+  // ── B 귀멸 리본 ── 애니의 "물이 흐르는 띠" 인상에 가장 근접한 판.
+  //   궤적을 따라 **두툼한 물 리본**이 지나가고 그 안에서 wave_water 질감이
+  //   길이 방향으로 흐른다(UV 스크롤. 1/24 로 끊어 흘려야 CG 가 안 된다).
+  //   바깥 가장자리에 흰 포말 점 + 전체를 먹으로 두른다.
+  // ★A 와 다른 점은 **길이 방향 단면**이다. A(혜성)는 앞쪽이 최대이고 뒤가 급히
+  //   빠지는데, 리본은 코가 두껍고(nose 0.78) 몸통이 길게 간다(tailp 1.18).
+  //   그래서 "머리만 밝은 별똥별"이 아니라 "흐르는 띠"로 읽힌다.
+  // 수명 11칸 = 0.458초(지시 0.4~0.5초).
+  // ★1차 시도 반성: 꼬리 지수를 0.72 로 두니 **꼬리까지 두툼한 넓은 깃발**이 되어
+  //   오너가 두 번 지적한 '판때기'로 읽혔다(실측 크롭 z3). 리본은 두툼하되
+  //   **흐르는 띠**여야 하므로 꼬리를 제대로 빼도록 고쳤다.
+  const HB = 0.48;
+  FX_TABLE.b = {
+    key: 'b', name: 'B 귀멸 리본', mode: 1, half: HB, trailMax: 34,
+    ladder:  [1.00, 1.00, 1.00, 1.00, 0.98, 0.95, 0.90, 0.83, 0.73, 0.58, 0.36],
+    // ★리본이라 A 보다는 늦게 빠지되(몸통이 길게 사는 것이 이 벌의 정체성) 꼬리 끝은
+    //   같이 얇힌다(0.36 -> 0.12). 오너 지시 2항.
+    ladderW: [1.00, 1.00, 1.00, 0.98, 0.94, 0.88, 0.80, 0.70, 0.56, 0.38, 0.12],
+    profile: 'comet', comet: { head: 0.32, nose: 0.78, tailp: 1.18, tail: 0.06 },
+    offK: [0.45, 0.55], headSpan: 0.55, alpha: 'binary', tipK: 1.03,
+    bodyR: 0.82, outR: 3.50, sprayK: 1.0, wrapK: 1.0,
+    cfg: [
+      // 포말 마루 = 칼끝에 붙는다. 리본 본체는 그 바로 안쪽에서 방을 넓게 쓴다.
+      { kind: 2, at: 0.95, w: 0.09, inset: 0.00, headOnly: 1, lifeK: 0.80 },
+      { kind: 0, at: 0.90, w: HB,   inset: 0.02, headOnly: 0, lifeK: 1.00 },
+    ],
+  };
+  // ── C v95 정박판 ── 오너가 "그림체 좋았다"던 9차(v95)의 **풍성한 밴드 채색**만
+  //   가져오고, v95 가 같이 갖고 있던 화면좌표 붓자국·허공 판때기는 안 가져온다.
+  //   원본 소스 = renders/history/v98_wave12/fx_restore/v95_source/main.js
+  // 가져온 것: 다섯 가닥 · 구운 손그림이 색을 통째로 담당(ct = tx.rgb) ·
+  //   나이 4단 양자화 · pow 1.18 채도 · 굵은 먹 밴드(머리 굵고 꼬리 얇게) ·
+  //   테이퍼 (1 - 0.78 un^2) · 알파 3단 계단 · 수명 여섯 칸(0.25초).
+  // 안 가져온 것: at 0.62(칼 중간) 발원 · off 1.16m 부채 · SCREEN_STROKE 화면 겹.
+  //   at 은 전부 0.86~0.98(칼끝)로 당기고 off 는 OUT_R 예산 안으로 조였다.
+  const HC = 0.28;
+  FX_TABLE.c = {
+    key: 'c', name: 'C v95 정박판', mode: 2, half: HC, trailMax: 22,
+    ladder:  [1.00, 1.00, 0.92, 0.78, 0.34, 0.18],
+    // ★C 는 원래 여섯 칸(0.25초)이라 꼬리가 짧다. 그래도 마지막 두 칸을 한 단 더 얇혔다.
+    ladderW: [1.00, 1.00, 0.92, 0.74, 0.22, 0.08],
+    profile: 'v95', comet: null,
+    offK: [0.72, 0.28], headSpan: 0.42, alpha: 'v95', tipK: 1.03,
+    bodyR: 0.82, outR: 3.50, sprayK: 1.15, wrapK: 1.0,
+    // ★v95 는 다섯 붓이 **나란히 겹쳐 그어진** 그림이다. 그 배치를 방 비율로 옮겼다 —
+    //   칼끝에서부터 마루 · 바깥 몸통 · 가는 심 · 안쪽 몸통 · 손 언저리 순으로 눕는다.
+    cfg: [
+      { kind: 1, at: 0.96, w: 0.09, inset: 0.00, headOnly: 0, lifeK: 0.80 },
+      { kind: 0, at: 0.92, w: 0.30, inset: 0.05, headOnly: 0, lifeK: 0.94 },
+      { kind: 2, at: 0.90, w: 0.05, inset: 0.32, headOnly: 0, lifeK: 0.88 },
+      { kind: 0, at: 0.88, w: HC,   inset: 0.40, headOnly: 0, lifeK: 1.00 },
+      { kind: 1, at: 0.86, w: 0.14, inset: 0.66, headOnly: 1, lifeK: 0.72 },
+    ],
+  };
+  // ── D 샤프 잔광 ── 대조군. 밝은 코어 한 획 + 짧은 잔광. 밴드도 붓결도 없다.
+  //   롤·상용 액션 게임의 문법이다(귀멸 문법이 아닌 쪽을 한 칸 놓아 봐야 오너가
+  //   "귀멸 계열이 맞다"를 눈으로 확인할 수 있다).
+  // ★네 벌 중 여기만 알파가 부드럽다(잔광이 그 자체로 목적이라). 그래도 1/24
+  //   계단은 지킨다 - 60fps 로 미끄러지면 그 순간 통째로 CG 가 된다.
+  const HD = 0.20;
+  FX_TABLE.d = {
+    key: 'd', name: 'D 샤프 잔광', mode: 3, half: HD, trailMax: 20,
+    ladder:  [1.00, 1.00, 0.90, 0.74, 0.52, 0.30],
+    ladderW: [1.00, 0.94, 0.80, 0.60, 0.36, 0.12],
+    profile: 'comet', comet: { head: 0.10, nose: 0.82, tailp: 2.10, tail: 0.03 },
+    offK: [0.30, 0.70], headSpan: 0.42, alpha: 'soft', tipK: 1.03,
+    bodyR: 0.82, outR: 3.50, sprayK: 0.40, wrapK: 0.50,
+    cfg: [
+      { kind: 0, at: 0.92, w: HD, inset: 0.03, headOnly: 0, lifeK: 1.00 },
+    ],
+  };
+}
+const FX = FX_TABLE[FX_STYLE];
+
 // ---------- 칼 궤적(물의 호흡) ----------
 // 목표는 "빛나는 띠"가 아니라 **납작하게 칠한 2D 파도 그림**이다.
 // 예전엔 AdditiveBlending 이라 겹칠수록 흰색으로 타서 번쩍였고, 정점 색 2개를
@@ -543,7 +672,8 @@ let trailHold = 0;                 // 그 뒤로 붙들고 지나간 렌더 프�
 // ★v98(11차). 22 -> 34. 수명을 다섯 칸 -> **열한 칸**(0.458초)으로 늘렸다(오너 지시
 //   "꼬리감을 위해 8~14칸"). 60fps 에서 열한 칸이면 살아 있는 샘플이 27.5개라
 //   22로는 꼬리가 버퍼 앞에서 잘려 나간다. 보관은 34(0.567초)로 여유를 둔다.
-const TRAIL_MAX = 34;              // 보관 샘플 수(원본)
+// ★12-FX-D. 벌마다 수명이 다르므로 보관 수도 표에서 온다(A/B 34 · C 22 · D 20).
+const TRAIL_MAX = FX.trailMax;     // 보관 샘플 수(원본)
 const RIBS = 140;                  // 실제로 그리는 마디 수. 원본을 곡선 보간해 늘린다.
                                    // 34개를 그대로 이으면 빠른 호에서 각이 눈에 띈다.
 // ── v96. 가닥 다섯 -> 하나 -> **셋** (오너 직접 지시가 두 번 왔다) ──
@@ -560,7 +690,9 @@ const RIBS = 140;                  // 실제로 그리는 마디 수. 원본을 
 //   · 크기는 9차와 10차의 **중간점**(아래 TRAIL_HALF 한 숫자로 조인다)
 // ★셋은 다 **같은 칼끝 궤적에서** 자란다. 9차처럼 화면 좌표로 몸 옆 허공에 띄우지
 //   않는다 - 그 문법은 원리상 "칼 근처"일 수가 없어서 1차 지시로 폐기됐다.
-const STRANDS = 3;
+// ★12-FX-D. 가닥 수도 표에서 온다(A 3 · B 2 · C 5 · D 1). 지오메트리 크기가
+//   여기서 정해지므로 벌 전환은 새로고침(?fx=..)이다 - 그래서 한 벌만 메모리에 산다.
+const STRANDS = FX.cfg.length;
 const trailBuf = [];               // {a:Vec3, b:Vec3, t:number}
 const trailGeo = new THREE.BufferGeometry();
 const segs = RIBS - 1;
@@ -595,6 +727,9 @@ const trailMat = new THREE.ShaderMaterial({
   blending: THREE.NormalBlending,
   uniforms: { uPal: { value: null }, uStyle: { value: 0 }, uT: { value: 0 },
               uTex: { value: null }, uUseTex: { value: 0 },
+              // ★12-FX-D. 네 벌의 채색 분기(0=A 혜성 · 1=B 리본 · 2=C v95 · 3=D 잔광).
+              //   기하(폭·수명·가닥)는 updateTrail 이, 그림은 여기가 가른다.
+              uMode: { value: FX.mode },
               // 1m 가 화면에서 몇 화소인가(플레이어 깊이 기준). updateTrail 이 매 칸 갱신
               uPxPerM: { value: 50 } },
   vertexShader: `
@@ -612,6 +747,7 @@ const trailMat = new THREE.ShaderMaterial({
     uniform float uT;
     uniform sampler2D uTex;
     uniform float uUseTex;
+    uniform float uMode;       // 0=A 혜성 · 1=B 리본 · 2=C v95 · 3=D 잔광
     uniform float uPxPerM;
     #define C_DK2 uPal[0]
     #define C_DK1 uPal[1]
@@ -728,7 +864,11 @@ const trailMat = new THREE.ShaderMaterial({
         // ★갈퀴(kind 2)는 **바깥 가장자리만** 굵게 갉아 손가락 3~7개로 가른다.
         //   호쿠사이 파도의 claw 다 - 마루가 말려 갈퀴가 되고 끝에서 물방울이 떨어진다.
         //   말림은 꼬리가 아니라 **진행 방향 마루(머리)**에 있다(fx_research.md 5).
-        if (kind > 1.5) cut += 0.38 * noise(vec2(u * 5.0 + sd * 3.0, 7.0)) * step(0.5, v);
+        // ★12-FX-D. A(mode 0)는 **머리 말림을 강화한다**(오너 주문). 갈래를 굵고(0.55)
+        //   잦게(u*6.5) 갉아 손가락이 5~9개로 갈라지게 한다. 나머지 벌은 현행 값.
+        float clawAmp = (uMode < 0.5) ? 0.62 : 0.38;
+        float clawFrq = (uMode < 0.5) ? 6.5 : 5.0;
+        if (kind > 1.5) cut += clawAmp * noise(vec2(u * clawFrq + sd * 3.0, 7.0)) * step(0.5, v);
         float dN = (dE - cut) / max(1.0 - cut, 1e-3);
         // ★끝을 넓게 흐리면 다시 '반투명 CG 띠'다. 1픽셀 폭만 남긴다
         //   (계단은 씬 타겟 MSAA 가 받는다. v94 에서 0.006 으로 정한 그 폭이다).
@@ -740,6 +880,121 @@ const trailMat = new THREE.ShaderMaterial({
         float halfPx = max(1.5, vHalf * uPxPerM);
         float ow = clamp(3.6 / halfPx, 0.10, 0.30);    // 먹 한 겹(화면에서 늘 3~4화소)
         float rw = ow + clamp(1.8 / halfPx, 0.050, 0.13);  // 그 바로 안쪽 밝은 갓선
+
+        // ═══════════════════════════════════════════════════════════════
+        // B 귀멸 리본 (uMode 1)
+        // 애니의 "물이 흐르는 띠". 두툼한 리본 하나가 궤적을 따라 지나가고
+        // 그 안에서 손그림 질감이 **길이 방향으로 흐른다**(UV 스크롤).
+        // ★스크롤은 1/24 로 끊는다. 60fps 로 미끄러지면 그 한 가지 때문에
+        //   판 전체가 CG 로 읽힌다(v92 가 궤적만 60fps 로 두고 겪은 일).
+        // ★질감은 색을 정하지 않고 **밴드 자리를 밀고 당긴다**. 색까지 맡기면
+        //   팔레트 계단이 텍스처 밝기에 통째로 묻힌다(v94 함정). 흐르는 인상은
+        //   경계가 움직이는 데서 나오지 밝기가 흔들리는 데서 나오지 않는다.
+        // ═══════════════════════════════════════════════════════════════
+        if (uMode > 0.5 && uMode < 1.5) {
+          float sc = floor(uT * 24.0) / 24.0;
+          vec2 tuv = vec2(u * 1.30 - sc * 0.62 + vSeed * 0.17, clamp(bt, 0.02, 0.98));
+          float tlum = 0.5, talp = 1.0;
+          if (uUseTex > 0.5) {
+            vec4 tx = texture2D(uTex, tuv);
+            tlum = dot(tx.rgb, vec3(0.30, 0.59, 0.11));
+            talp = tx.a;
+          } else {
+            tlum = noise(vec2(u * 7.0 - sc * 3.4 + sd, bt * 3.0));
+          }
+          // 찢긴 구멍은 파란 몸통에만. 바깥 흰 심·포말은 안 뚫는다(획이 토막난다).
+          if (uUseTex > 0.5 && talp < 0.30 && bt < 0.58) discard;
+          // ★질감이 밴드 자리를 얼마나 미는가. 0.30 으로는 흐르는 것이 눈에 안 보였다
+          //   (실측 크롭 z3: A 와 색만 다른 띠로 읽혔다). 0.55 면 1/24 마다 밴드
+          //   경계가 눈에 띄게 물결친다 = 이 벌의 정체성이다.
+          float bs = clamp(bt + (tlum - 0.5) * 0.55, 0.0, 1.0);
+          vec3 c;
+          if (kind > 1.5) {
+            // 마루(포말 심선)는 얇으니 두 단만
+            c = bs < 0.50 ? C_LT3 : C_WHT;
+          } else {
+            // ★1차 시도에서 밝은 단(C_LT1~C_LT3)이 폭의 절반을 먹어 **연회색 판**이
+            //   됐다(실측: 획 휘도 175 vs 배경 156 · 채도 0.36). 원작의 물은 배경보다
+            //   밝은 것이 아니라 **짙고 채도가 높다**(감청 -> 시안 -> 흰 심 한 겹).
+            //   그래서 짙은 쪽으로 무게를 옮기고 질감으로 한 번 더 눌렀다.
+            c = bs < 0.42 ? C_DK1 : bs < 0.64 ? C_MID : bs < 0.78 ? C_LT1
+              : bs < 0.90 ? C_LT2 : C_LT3;
+            // 흰 심은 바깥 **한 겹**. 화소 하한을 둬서 가는 마디에서도 안 사라진다.
+            float ws = min(0.90, 1.0 - clamp(3.4 / halfPx, 0.06, 0.18));
+            if (bs > ws) c = C_WHT;
+            // 붓결: 질감 밝기로 한 번 더 누른다(v95 의 pow 1.18 과 같은 목적).
+            c *= 0.74 + 0.44 * tlum;
+            // ── 포말 흰 점 ── 바깥 가장자리 띠에만, 크고 드물게. 덩어리마다 남색 윤곽.
+            // ★잔 점을 많이 찍으면 꼬리에서 말뚝 울타리가 된다(v92 실측 함정).
+            //   그래서 주파수를 낮게(u*13) 두고 문턱으로 크게 끊는다.
+            float fo = noise(vec2(u * 13.0 + sd * 3.0, bt * 4.0 + sd));
+            if (bt > 0.62) {
+              if (fo > 0.62) c = C_WHT;
+              else if (fo > 0.54) c = C_DK2 * 0.55;
+            }
+          }
+          if (dN < ow) c = C_DK2 * 0.42;          // 먹 테두리(화소 고정)
+          else if (dN < rw) c = C_LT3;            // 갓선
+          if (uStyle > 1.5) {                     // 불은 속이 뚫린다
+            float hl = noise(vec2(u * 26.0 + sd * 5.0, v * 14.0));
+            if (hl < 0.06 + 0.30 * u) discard;
+          }
+          // 꼬리는 감청으로 가라앉되 리본이라 혜성보다 덜 뺀다(몸통이 길게 산다).
+          float ls = min(1.0, floor(u * 4.0) / 3.0);
+          c = mix(c, C_DK1, 0.30 * ls);
+          gl_FragColor = vec4(c, vA * ea);
+          return;
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // C v95 정박판 (uMode 2)
+        // 색을 **구운 손그림에 통째로 맡긴다**(ct = tx.rgb). v95 의 풍성함은
+        // 밴드를 코드로 잘 나눠서가 아니라 그 텍스처에 이미 평칠로 그려져 있어서다
+        // (연하늘-시안-진파랑-남색-흰 포말 + 갓선 + 찢긴 가장자리).
+        // 여기서 밝기를 다시 뭉개면 그 띠 구조가 한 색으로 합쳐진다(v92 실측).
+        // ★v95 원본과 다른 유일한 점은 **자리**다 - 이 가닥들은 전부 칼끝 궤적에서
+        //   자란다. v95 는 여기에 더해 화면좌표 붓자국을 얹었고 그것이 '허공 판때기'였다.
+        // ═══════════════════════════════════════════════════════════════
+        if (uMode > 1.5 && uMode < 2.5) {
+          float aq = floor(u * 4.0) / 4.0;        // 꼬리로 갈수록 한 단씩 가라앉는다
+          vec3 c;
+          if (uUseTex > 0.5) {
+            vec2 tuv = vec2(u * 1.35 + floor(uT * 24.0) * 0.041 + vSeed * 0.13,
+                            clamp(bt, 0.02, 0.98));
+            vec4 tx = texture2D(uTex, tuv);
+            if (tx.a < 0.45) discard;             // 알파는 유/무만 가른다(v95 문법)
+            c = pow(tx.rgb * (1.0 - 0.30 * aq), vec3(1.18));
+          } else {
+            // 텍스처 없는 칼(얼음·독·흙·어둑)은 v95 의 절차 계단을 그대로 쓴다
+            c = bt < 0.12 ? C_LT3 : bt < 0.30 ? C_LT2 : bt < 0.50 ? C_LT1
+              : bt < 0.70 ? C_MID : bt < 0.88 ? C_DK1 : C_DK2;
+            c *= (1.0 - 0.30 * aq);
+          }
+          // ── 굵은 먹 밴드(v95 문법: 머리 굵고 꼬리 얇게) ──
+          // ★원본은 반폭의 44% 였는데 그러면 단면의 88% 가 먹이라 '어두운 판때기'가
+          //   된다(v96 실측 휘도 -30~-93). 여기서는 상한 0.32 와 화소 하한으로 조인다.
+          float ow2 = clamp(mix(0.30, 0.14, u), min(0.26, 3.4 / halfPx), 0.32);
+          if (dN < ow2) c = C_DK2 * 0.45;
+          gl_FragColor = vec4(c, vA * ea);
+          return;
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // D 샤프 잔광 (uMode 3)
+        // 밝은 코어 한 획 + 짧은 잔광. 밴드도 붓결도 포말도 없다(대조군).
+        // ★네 벌 중 여기만 알파가 길이 방향으로 빠진다. 그게 '잔광'의 정의다.
+        //   그래도 1/24 계단은 지킨다(vA 가 계단이고 여기서는 배수만 곱한다).
+        // ═══════════════════════════════════════════════════════════════
+        if (uMode > 2.5) {
+          float coreW = clamp(3.2 / halfPx, 0.14, 0.55);
+          vec3 c = dN > 1.0 - coreW ? C_WHT : (dN > 0.34 ? C_LT3 : C_LT1);
+          float ow3 = clamp(1.6 / halfPx, 0.04, 0.14);
+          if (dN < ow3) c = C_DK1;                // 형태선 한 겹만(먹 아님)
+          float fade = 1.0 - 0.55 * min(1.0, u * 1.2);
+          gl_FragColor = vec4(c, vA * ea * (0.40 + 0.60 * fade));
+          return;
+        }
+
         vec3 c;
         if (kind < 1.5) {
           // ── 본 획·겹 획: 일곱 단 평칠 ──
@@ -778,7 +1033,14 @@ const trailMat = new THREE.ShaderMaterial({
           //   전임이 두 번 밟은 함정으로 곧장 간다 — 짙은 단을 넓히면 획이 배경보다
           //   어두워져 **바닥 얼룩**이 되고, 원작 단면 비율(시안 62%)을 그대로 옮기면
           //   **연회색 판**이 된다. 채도는 비율이 아니라 색의 무게로 옮기는 것이 맞다.
-          float ws = mix(0.82, 0.96, min(1.0, u * 1.3));
+          // ★★12-FX-D (A 정제). 오너 주문 "흰 심 관통 또렷". 옛 값(0.82 -> 0.96)은
+          //   꼬리에서 심이 **아예 없어졌다**(0.96 이면 남는 폭이 4%. 화면 10px 획에서
+          //   0.4화소라 안티에일리어싱에 통째로 먹힌다). 두 가지를 같이 고친다:
+          //     ① 머리를 넓히고(0.82 -> 0.76) 꼬리 상한을 0.90 으로 낮춘다
+          //     ② **화소 하한**을 건다 - 어떤 마디에서도 흰 심이 3화소 아래로 안 간다.
+          //   먹선을 화소로 잡은 것과 같은 원리다(비율로 잡으면 가는 마디에서 0 이 된다).
+          float ws = min(mix(0.80, 0.92, min(1.0, u * 1.3)),
+                         1.0 - clamp(3.0 / halfPx, 0.06, 0.20));
           c = bt < 0.38 ? C_DK1
             : bt < 0.62 ? C_MID
             : bt < 0.74 ? C_LT1
@@ -791,7 +1053,10 @@ const trailMat = new THREE.ShaderMaterial({
           // 얇으니 두 단만. 여기에 다섯 단을 칠하면 한 단이 1px 라 죽이 된다.
           // ★9차의 동반 획은 화면 좌표라 몸 옆 허공에 떴다. 이 가닥들은 같은 칼끝
           //   궤적에서 자라므로 늘 획 옆에 붙는다 - 그게 이번 판의 유일한 차이다.
-          c = bt < 0.55 ? C_LT3 : C_WHT;
+          // ★12-FX-D (A 정제). 1차 시도에서 흰 끝을 0.42 로 넓혔다가 갈퀴가 통째로
+          //   흰 띠가 됐다(실측 크롭). 흰색은 **손가락 끝**에만 둔다 - 물방울이
+          //   떨어지는 자리다. 갈래 자체는 clawAmp 가 낸다.
+          c = bt < 0.68 ? C_LT3 : C_WHT;
         }
         // ── 가장자리 두 겹은 늘 먹·갓선(화소 고정) ──
         // ★색 계단보다 **뒤에** 덮어쓴다. 형태를 정의하는 선이라 어떤 밴드보다 우선한다.
@@ -1122,6 +1387,9 @@ function spawnSpray(aPt, bPt, moveDir, count, scale, ink) {
   const cx = root.position.x, cz = root.position.z;
   const cy = root.position.y + charH * 0.42;
   const SPRAY_CLEAR = 0.95;
+  // ★12-FX-D. 물보라 양도 벌의 일부다(D 는 미니멀이라 0.40, C 는 v95 라 1.15).
+  //   먹물 튐(ink)은 **처치 문법**이라 네 벌 공통 무수정이다 - 배수를 안 건다.
+  if (!ink) count = Math.max(1, Math.round(count * FX.sprayK));
   for (let i = 0; i < count && spray.length < SPRAY_MAX; i++) {
     const f = 0.35 + Math.random() * 0.85;                 // 칼날 바깥쪽에서 주로
     const p = aPt.clone().lerp(bPt, f);
@@ -1247,7 +1515,8 @@ function updateWrap(dt, aPt, bPt, active, force) {
   wrapQ = fq;
   dt = wrapDtAcc; wrapDtAcc = 0;
   // 감겨 있을 때만 보인다. 베는 순간 coil 이 떨어지면서 그대로 사라진다.
-  const want = (active && !released && curEl.wrap) ? Math.max(0, coil * 1.25 - 0.25) : 0;
+  // ★12-FX-D. 감는 리본 세기도 벌에서 온다(D 는 0.50 = 미니멀).
+  const want = (active && !released && curEl.wrap) ? Math.max(0, coil * 1.25 - 0.25) * FX.wrapK : 0;
   wrapMat.uniforms.uFade.value += (want - wrapMat.uniforms.uFade.value) * Math.min(1, dt * 14);
   // ★알파도 계단이다. 여섯 단이면 24fps 한 장마다 눈에 보이게 한 칸씩 떨어진다.
   wrapMat.uniforms.uFade.value = Math.round(wrapMat.uniforms.uFade.value * 6) / 6;
@@ -1366,7 +1635,7 @@ const _pa = new THREE.Vector3(), _pb = new THREE.Vector3(), _perp = new THREE.Ve
 // v94. 화면공간 리본 전용 임시값(물보라의 _camR/_camU 와 **따로** 둔다. 같은 프레임에
 // 둘 다 도는데 하나를 나눠 쓰면 언젠가 한쪽이 다른 쪽 값을 밟는다).
 const _tR = new THREE.Vector3(), _tU = new THREE.Vector3(), _c = new THREE.Vector3();
-const _pc = new THREE.Vector3();
+const _pc = new THREE.Vector3(), _tv = new THREE.Vector3();
 
 // ── 크기 계약 (9차 확정 판정. renders/history/v94_wave9/handoff_combat.md) ──
 // 정면 리치 3.2m · 정면 부채꼴 ±75°. 이 밖으로 **획을 뻗지 않는다.**
@@ -1402,8 +1671,10 @@ function clampReach(p, px, pz) {
 //   그래서 세기(알파)는 늦게까지 붙들고 **폭 사다리만** 뒤로 갈수록 급히 내린다.
 // ★그래도 '몸을 오래 덮는다'는 옛 FAIL 로 안 돌아가는 이유: 열한째 칸의 폭 배수가
 //   0.16 이고 거기에 혜성 테이퍼(꼬리 0.08)가 곱해져 **면적이 아니라 선**만 남는다.
-const TRAIL_LADDER   = [1.00, 1.00, 1.00, 0.98, 0.94, 0.88, 0.80, 0.70, 0.60, 0.48, 0.34];
-const TRAIL_LADDER_W = [1.00, 1.00, 0.97, 0.92, 0.85, 0.76, 0.66, 0.55, 0.44, 0.30, 0.16];
+// ★12-FX-D. 계단표도 벌마다 다르다(A/B 열한 칸 0.458초 · C 여섯 칸 0.25초 ·
+//   D 여섯 칸이되 폭이 급히 빠진다). 값은 전부 위 FX_TABLE 에 있다.
+const TRAIL_LADDER   = FX.ladder;
+const TRAIL_LADDER_W = FX.ladderW;
 // ── 가닥 배치 (v96. 한 가닥) ──
 // 가닥은 "칼날 위 어디에 중심선을 두고(at), 그 자리에서 화면 바깥으로 얼마나 밀려서(off),
 // 얼마나 굵은가(half)"로 적는다. off·half 단위는 **미터**다.
@@ -1443,30 +1714,35 @@ const TRAIL_LADDER_W = [1.00, 1.00, 0.97, 0.92, 0.85, 0.76, 0.66, 0.55, 0.44, 0.
 // ★반폭 0.72 -> 0.74. 수명이 두 배가 되면 같은 폭으로도 면적이 그만큼 늘어난다.
 //   존재감은 폭이 아니라 **길이**에서 가져온다(원작 넓은 장 실측: 점유 1.4~6.3% 인데
 //   길이는 화면 대각선의 17~40%. 순수 리본 컷은 가닥 하나가 화면폭의 1.1% 뿐이다).
-const TRAIL_HALF = 0.74;
+// ★★12-FX-D. 아래 다섯 줄이 곧 **네 벌의 기하**다. 값은 FX_TABLE 에 있고
+//   여기서는 이름만 빌린다(옛 상수 이름을 그대로 둬야 아래 200줄 주석이 안 거짓말이 된다).
+//   · TRAIL_HALF  A 0.888 · B 0.980 · C 0.820 · D 0.400
+//   · 프로파일    A/B/D 혜성(COMET_*) · C 는 v95 의 (1 - 0.78 un^2)
+//   · STRAND_CFG  A 3가닥 · B 2가닥 · C 5가닥 · D 1가닥. **전부 칼끝 궤적 발원**이다.
+const TRAIL_HALF = FX.half;
 // 혜성 프로파일 (un: 0 = 칼끝(머리) … 1 = 꼬리 끝)
-const COMET_HEAD = 0.14;   // 최대 폭이 앉는 자리. 실측 0.10~0.35 중 칼끝에 붙는 쪽
-const COMET_NOSE = 0.42;   // 코끝 폭(머리 대비). 0 으로 하면 칼끝에서 획이 떨어져 보인다
-const COMET_TAILP = 1.30;  // 꼬리 테이퍼 지수. 실측 0.5 지점 0.44 · 0.75 지점 0.20 에 맞춘 값
-const COMET_TAIL = 0.08;   // 꼬리 끝 폭(머리 대비). 실측 중앙 0.13
-const STRAND_CFG = [
-  // 본 획: 칼끝을 가운데 두고 ±half. 편측 밴드가 이 안에서 칠해진다
-  { kind: 0, at: 0.90, off: 0.00, half: TRAIL_HALF,         headOnly: 0, lifeK: 1.00 },
-  // 겹 획: 본 획 바깥에 나란히 눕는 둘째 붓.
-  // ★v98. off 1.13/half 0.62 는 본 획과 **겹쳐 있었다**(0.51H~1.75H 대 -1H~1H).
-  //   그러면 셋이 한 덩어리로 뭉쳐 넓은 깃발이 된다. 원작 넓은 장은 가닥 사이에
-  //   **검은 틈**이 있고 그 틈이 있어야 '겹쳐 그은 붓'으로 읽힌다(ref_wide_strands.png).
-  // ★★그런데 **틈을 off 로 벌리면 안 된다.** 아래 OUT_R(획 바깥 가장자리 상한 3.50m)이
-//   먼저 물린다 - 실측에서 본 획 중심선까지가 이미 2.69m 라 남는 방이 0.81m 뿐이었고,
-//   off 를 1.55H(=1.09m)로 밀자 겹 획·갈퀴가 **통째로 폭 0 으로 깎여 사라졌다**
-//   (점유 3.2% -> 0.9%, wrote 140 -> 24). 그래서 off 는 v97 자리에 두고,
-//   틈은 화소 고정 먹 외곽선이 가닥마다 제 경계를 그어 주는 것으로 낸다.
-  { kind: 1, at: 0.84, off: TRAIL_HALF * 1.18, half: TRAIL_HALF * 0.55, headOnly: 0, lifeK: 0.86 },
-  // 마루 심선 = 호쿠사이 **갈퀴**. 말림·포말은 꼬리가 아니라 **머리(진행 방향 마루)**에
-  // 있다(fx_research.md 5. 오너 해석과 다른 유일한 지점이고 원작·원전이 같은 말을 한다).
-  // 그래서 headOnly 로 머리 쪽에만 살리고 셰이더에서 바깥 가장자리를 손가락으로 가른다.
-  { kind: 2, at: 0.96, off: TRAIL_HALF * 1.70, half: TRAIL_HALF * 0.20, headOnly: 1, lifeK: 0.72 },
-];
+const COMET = FX.comet || { head: 0.14, nose: 0.42, tailp: 1.30, tail: 0.08 };
+const COMET_HEAD = COMET.head;    // 최대 폭이 앉는 자리. 실측 0.10~0.35 중 칼끝에 붙는 쪽
+const COMET_NOSE = COMET.nose;    // 코끝 폭(머리 대비). 0 으로 하면 칼끝에서 획이 떨어져 보인다
+const COMET_TAILP = COMET.tailp;  // 꼬리 테이퍼 지수. 실측 0.5 지점 0.44 · 0.75 지점 0.20 에 맞춘 값
+const COMET_TAIL = COMET.tail;    // 꼬리 끝 폭(머리 대비). 실측 중앙 0.13
+const FX_V95_TAPER = FX.profile === 'v95';   // C 만 v95 의 (1 - 0.78 un^2)
+const FX_OFF_BASE = FX.offK[0], FX_OFF_SPAN = FX.offK[1];
+const FX_HEAD_SPAN = FX.headSpan;            // headOnly 가닥이 사는 머리 구간
+const FX_ALPHA = FX.alpha;                   // 'binary' | 'v95'(3단) | 'soft'(D)
+// ★★칼끝 반경 정박 배수(2026-08-11 오너 지시 "칼은 짧은데 효과가 긴 것 같다").
+//   획의 **바깥 가장자리**가 이 마디 칼끝 반경의 몇 배까지 허용되는가. 1.03 = 3% 여유.
+//   네 벌 공통 제약이고, 이 자가 물리는 자리는 updateTrail 의 outCap 이다.
+const FX_TIP_K = FX.tipK;
+// ★off/half 의 단위는 미터다. 옛 판이 겪은 함정을 그대로 적어 둔다 —
+//   **틈을 off 로 벌리면 안 된다.** 아래 OUT_R(획 바깥 가장자리 상한 3.50m)이
+//   먼저 물린다(실측에서 본 획 중심선까지가 이미 2.69m 라 남는 방이 0.81m 뿐이다).
+//   v98 이 off 를 1.09m 로 밀었다가 겹 획·갈퀴가 **통째로 폭 0 으로 깎여 사라졌다**
+//   (점유 3.2% -> 0.9%, wrote 140 -> 24). 그래서 네 벌 다 off 를 1.3m 아래로 뒀고,
+//   가닥 사이 틈은 화소 고정 먹 외곽선이 가닥마다 제 경계를 그어 주는 것으로 낸다.
+// ★kind 는 셰이더의 채색 분기다(0 = 본 획 · 1 = 겹 획 · 2 = 마루/갈퀴).
+//   headOnly 가닥은 머리 구간에만 산다(호쿠사이 갈퀴는 꼬리가 아니라 진행 방향 마루에 있다).
+const STRAND_CFG = FX.cfg;
 // ★lifeK = 가닥별 수명 배수. 셋이 **같은 칸에 동시에 죽으면** 안 된다 -
 //   물 작화의 소멸 규칙("생길 때나 무너질 때 전부 동시면 리얼리티가 안 난다",
 //   いちあっぷ 물 작화 교재). 갈퀴가 먼저 죽고 겹 획, 본 획 순으로 남는다.
@@ -1508,6 +1784,9 @@ function updateTrail(force) {
   const g = trailGain * (curEl.tGain || 1);
   let clipped = 0;
   let maxAge = -1;                 // 이번 프레임에 그려진 가장 오래된 마디의 나이(1/24 칸)
+  // ★12-FX-D 진단 창구. "왜 획이 이만큼밖에 안 나오나"를 추측하지 말고 숫자로 본다
+  //   (칼끝 정박을 넣고 나서 폭을 올려도 점유가 안 움직였다 = 폭이 범인이 아니었다).
+  let dgRoom = 0, dgHalf = 0, dgCap = 0, dgTl = 0, dgTip = 0;
   // ── 살아 있는 창을 먼저 잰다 (v94) ──
   // ★수명이 여섯 칸으로 짧아지면서 생긴 함정이다. 마디 인덱스(age)는 여전히 버퍼
   //   **전체**에 걸쳐 0..1 인데 실제로 살아 있는 건 맨 앞 10% 뿐이다. 그러면
@@ -1627,8 +1906,13 @@ function updateTrail(force) {
       //     un < 0.14 : 코 0.42 에서 1.0 까지 올라온다(칼끝에 붙어 있어야 하므로 0 이 아니다)
       //     un > 0.14 : pow(1-s, 1.30) 으로 내려가 꼬리 끝 0.08
       //   실측 대조 - 0.5 지점 0.49(실측 0.44) · 0.75 지점 0.20(실측 0.20).
+      // ★12-FX-D. C(v95 정박판)만 원본의 단면을 그대로 쓴다: (1 - 0.78 un^2).
+      //   머리가 제일 굵고 단조 감소한다 - 혜성과 달리 코가 없어서 칼끝에서 이미
+      //   최대 폭이다. v95 의 '풍성함'은 이 한 줄에서도 나온다.
       let cf;
-      if (un < COMET_HEAD) {
+      if (FX_V95_TAPER) {
+        cf = 1.0 - 0.78 * un * un;
+      } else if (un < COMET_HEAD) {
         cf = COMET_NOSE + (1 - COMET_NOSE) * Math.pow(un / COMET_HEAD, 0.62);
       } else {
         const cs2 = (un - COMET_HEAD) / (1 - COMET_HEAD);
@@ -1636,8 +1920,12 @@ function updateTrail(force) {
       }
       const taper = cf * wob * ladW;
       // 머리 장식(캐릭터 쪽 물보라)은 갓 지나간 구간에만 산다
-      const headK = C.headOnly ? Math.max(0, 1.0 - un / 0.42) : 1.0;
+      const headK = C.headOnly ? Math.max(0, 1.0 - un / FX_HEAD_SPAN) : 1.0;
       // ── 몸을 침범하는 만큼 깎는다 (가독 계약. v97) ──
+      // ★★아래 v97/v98 설명 세 문단은 **이제 계보 기록이다**(12-FX-D 가 대체했다).
+      //   그때는 반폭이 미터 상수였고 획이 칼끝 궤적을 가운데 두고 자랐다. 지금은
+      //   반폭이 '칼이 쓸고 간 방의 비율'이고 바깥 가장자리가 칼끝에 정박한다.
+      //   BODY_R 은 그대로 살아 있다 - 몸 반경 안에는 여전히 한 화소도 안 그린다.
       // ★폭을 되돌리면서 새로 생긴 위험이다. 스윙 시작·끝(특히 칼을 머리 위로 세울 때)
       //   에는 중심선이 몸 코앞에 온다. 거기서 반폭 0.6m 를 그대로 펴면 그 한 마디가
       //   **주인공을 덮는 덩어리**가 된다(9차의 "머리 80~94% 가림"이 이 기전).
@@ -1654,21 +1942,62 @@ function updateTrail(force) {
       //   실루엣이 리치 원을 따라 **매끈하게** 닫히고 clampReach 는 거의 안 걸린다.
       // ★v98. 0.80 -> 0.95. 수명이 두 배가 되면서 획이 몸 위에 머무는 칸 수도 두 배가
       //   됐다 - 같은 반지름으로는 머리 덮임 최악이 70% 까지 올라갔다(상한 60).
-      const BODY_R = 0.95;
-      const OUT_R = 3.50;                        // 획의 바깥 가장자리 상한(clampReach 3.6 안쪽)
+      // ★12-FX-D. 네 벌이 **똑같이** 지키는 두 자다(공통 원칙: 과대 금지·몸 가림 금지).
+      // ★★2026-08-11. 0.95 -> **0.82**. 실측으로 되돌린 값이다 —
+      //   칼끝 반경(가슴 기준·카메라 평면)이 스윙 내내 **1.27~1.42m 뿐**이다
+      //   (probe_room.js. 손은 0.54~0.80m). 안쪽 벽이 0.95 면 칼이 지나간 방이
+      //   0.49m 밖에 안 남아 획이 통째로 0 으로 깎였다(실측 점유 0.16%).
+      //   0.82 는 이 값의 원래 근거(가슴 charH 0.55 -> 머리 꼭대기 charH 1.02 = 0.82m)
+      //   그대로다 - 머리 가림 계약은 유지하면서 칼이 쓸고 간 방을 되돌려 준다.
+      const BODY_R = FX.bodyR;                   // 0.82
+      const OUT_R = FX.outR;                     // 안전 상한(clampReach 3.6 안쪽). 아래 칼끝 자가 먼저 문다
+      // ══════════════════════════════════════════════════════════════════
+      // ★★칼끝 반경 정박 (2026-08-11. 오너 실시간 지시)
+      //   **"칼은 짧은데 효과가 긴 것 같다."**
+      // 원인은 폭이 아니라 **어디를 가운데 두느냐**였다. 지금까지 획은 칼끝 궤적을
+      // **가운데** 두고 ±half 로 자랐다 = 바깥 절반(최대 0.9m)이 늘 **칼끝 바깥 허공**이다.
+      // 칼(카타나) 자체가 1m 남짓인데 그 밖으로 한 자루 길이가 더 뻗으니
+      // "칼보다 효과가 길다"로 읽히는 것이 당연하다.
+      // → 이 마디의 **칼끝이 실제로 있는 반경**을 재서, 획의 바깥 가장자리를 거기에
+      //   정박시킨다(넘으면 통째로 안쪽으로 민다. 깎지 않고 밀어야 면적이 산다).
+      //   폭은 그대로 두고 **칼이 지나간 안쪽**으로 자란다 = 칼이 쓸고 간 자리다.
+      // ★tipK 1.03 = 3% 여유. 0 으로 두면 안티에일리어싱 한 겹이 칼끝에서 잘려
+      //   획이 칼끝에 안 닿아 보인다(포말·물방울은 물보라가 따로 뿌리므로 예외 허용).
+      _tv.copy(_b).sub(_pc);
+      const tipR = Math.hypot(_tv.dot(_tR), _tv.dot(_tU));
+      const outCap = Math.min(OUT_R, Math.max(BODY_R + 0.10, tipR * FX_TIP_K));
       // ★v98. 0.72 + 0.28*taper -> **0.30 + 0.70*taper**. 옛 값은 꼬리에서도 가닥이
       //   72% 벌어진 채로 남아 '나란한 바늘 셋'이 됐다. 별똥별은 꼬리가 **한 점으로
       //   수렴**해야 한다 - 꼬리로 갈수록 가닥이 중심선으로 모이게 한다.
-      let off = C.off * g * (0.30 + 0.70 * taper);
-      let half = C.half * g * taper * headK * edgeK;
-      // 안쪽이 몸을 침범하면 **6할은 밖으로 밀고 4할만 깎는다.**
-      // ★전부 깎기만 하면 수면참처럼 칼이 몸 앞뒤로 오가는 기술에서 획이 통째로
-      //   사라진다(실측: 그 기술만 점유가 다른 기술의 5분의 1). 밀어내면 면적은
-      //   지키면서 "몸에서 터져 나가는 물"이 된다 - 그림으로도 그쪽이 맞다.
-      const deficit = BODY_R - (tl + off - half);
-      if (deficit > 0) { off += deficit * 0.6; half = Math.max(0, half - deficit * 0.4); }
-      const outRoom = OUT_R - (tl + off);
-      if (half > outRoom) half = Math.max(0, outRoom);
+      // ★12-FX-D. 꼬리에서 가닥이 얼마나 모이는가. A/B/D 는 0.30+0.70(한 점으로 수렴),
+      //   C 는 v95 원본의 0.72+0.28(꼬리에서도 부채가 남는다 = 그 판의 풍성함).
+      // ══════════════════════════════════════════════════════════════════
+      // ★★폭을 **칼이 쓸고 간 방(room)의 비율**로 잡는다 (2026-08-11 오너 지시 1항)
+      // 1차 시도에서 반폭을 옛날처럼 미터로 두고 바깥만 칼끝에 정박했더니 획이
+      // **통째로 사라졌다**(실측 점유 3.3% -> 0.36%). 이유는 산수다 —
+      //   쓸 수 있는 방 = 칼끝 반경 x 1.03 - 몸 반경(BODY_R)
+      //   칼끝 반경이 2.0m 면 방이 1.24m 인데 옛 반폭 0.888m 는 폭이 1.78m 다.
+      //   들어갈 자리가 없으니 몸 침범분으로 다 깎여 0 이 된다.
+      // → 그래서 반폭·안쪽밀기를 **방의 비율**로 적는다. 칼이 멀리 뻗은 마디에서는
+      //   저절로 굵어지고 몸 앞으로 접힌 마디에서는 저절로 가늘어진다.
+      //   이 한 줄이 "이펙트는 칼이 지나간 자리"를 기하로 증명한다.
+      // ★gK: 일격기가 좀 더 굵어야 하지만(연출) 방을 넘을 수는 없으므로 배수를 조인다.
+      const room = Math.max(0, outCap - BODY_R);
+      const gK = Math.min(1.15, Math.max(0.72, g / 1.55));
+      let half = C.w * room * taper * headK * edgeK * gK;
+      if (half > room * 0.48) half = room * 0.48;
+      // C.inset = 이 가닥의 바깥 가장자리가 **칼끝에서 안쪽으로** 얼마나 물러나는가(방 비율).
+      // 0 = 칼끝에 붙은 마루(포말·갈퀴), 클수록 몸 쪽에 눕는 겹 획.
+      let inset = C.inset * room * (FX_OFF_BASE + FX_OFF_SPAN * taper);
+      const insetMax = Math.max(0, room - 2 * half);
+      if (inset > insetMax) inset = insetMax;
+      // 바깥 가장자리 = 칼끝 반경 - 물러난 양. off 는 그 자리를 만들기 위한 값이다.
+      const off = outCap - inset - half - tl;
+      if (room > dgRoom) dgRoom = room;
+      if (half > dgHalf) dgHalf = half;
+      if (outCap > dgCap) dgCap = outCap;
+      if (tl > dgTl) dgTl = tl;
+      if (tipR > dgTip) dgTip = tipR;
       _pa.copy(_c).addScaledVector(_perp, off + half);
       _pb.copy(_c).addScaledVector(_perp, off - half);
       // ★폭이 화면에서 바깥으로 자라므로 가로베기에서는 대개 공중으로 뻗지만,
@@ -1692,7 +2021,13 @@ function updateTrail(force) {
       //   그 반투명 구간에서 획이 바닥색과 섞여 **채도가 통째로 깎였다**(실측: 획 화소
       //   채도 중앙 0.20~0.24. 오너가 그림체를 칭찬한 v95 는 0.31~0.48, 원작은 0.56).
       //   불투명하게 칠하면 팔레트 색이 그대로 화면에 오른다.
-      let q = inten > 0.13 ? 1.0 : 0;
+      // ★12-FX-D. 벌마다 계단이 다르다.
+      //   'binary'(A/B) 1.0 아니면 0 · 'v95'(C) 원본 3단 · 'soft'(D) 잔광이라 넉 단.
+      //   D 만 반투명을 허용하는 이유는 그 벌의 정의가 '잔광'이기 때문이다(대조군).
+      let q;
+      if (FX_ALPHA === 'v95') q = inten > 0.46 ? 1.0 : (inten > 0.26 ? 0.92 : (inten > 0.13 ? 0.78 : 0));
+      else if (FX_ALPHA === 'soft') q = inten > 0.60 ? 1.0 : (inten > 0.40 ? 0.78 : (inten > 0.22 ? 0.52 : (inten > 0.10 ? 0.30 : 0)));
+      else q = inten > 0.13 ? 1.0 : 0;
       if (!inReach) { q = 0; if (i === 0) clipped++; }
       // ★연결성 규칙(위 broke 주석). **판정 부채꼴을 벗어난 구간이 세 마디 이상 이어지면**
       //   그보다 오래된 마디는 전부 안 그린다.
@@ -1718,6 +2053,8 @@ function updateTrail(force) {
   //   (화면에서 '이펙트가 보이는 시간'을 재면 스윙 시간까지 더해져 계약과 다른 것을 재게 된다).
   //   TRAIL_LADDER.length - 1 이 상한이므로 이 값이 3 을 넘으면 계약이 깨진 것이다.
   window.__trailDbg = { n, wrote: w, q: trailQFrame, hold: 0, clipped, aliveN,
+                        room: +dgRoom.toFixed(2), half: +dgHalf.toFixed(2),
+                        cap: +dgCap.toFixed(2), tl: +dgTl.toFixed(2), tip: +dgTip.toFixed(2),
                         oldest: maxAge, ladder: TRAIL_LADDER.length,
                         lastT: trailBuf.length ? trailBuf[trailBuf.length-1].t : -1 };
   trailGeo.attributes.position.needsUpdate = true;
@@ -3285,6 +3622,13 @@ if (DEV) {
                   //   잰다(색으로 추리면 하늘·물이 같이 걸린다). 그 목록이 이것이다.
                   //   월드 이펙트(궤적·감김·물보라) + feel.js 의 화면 겹 전부.
                   meshes: [trailMesh, wrapMesh, sprayMesh].concat(feel.fxMeshes || []),
+                  // ★12-FX-D. 촬영 하네스가 **첫 줄에 "지금 어느 벌을 보고 있는가"**를
+                  //   찍을 수 있어야 한다(LOG 12-FX 함정: A/B 가 서로 다른 파일을 읽고
+                  //   있었는데 아무도 몰랐다). 그래서 벌 이름·기하를 그대로 노출한다.
+                  style: { key: FX.key, name: FX.name, mode: FX.mode, half: FX.half,
+                           strands: STRANDS, life: FX.ladder.length, trailMax: TRAIL_MAX,
+                           profile: FX.profile, alpha: FX.alpha, tipK: FX_TIP_K,
+                           sprayK: FX.sprayK, wrapK: FX.wrapK },
                   charH: () => charH, root: () => root };
   window.__atkTime = () => (actions.Attack ? actions.Attack.time : -1);
   // 칼날 판정 선분(월드). 요괴 캡슐 판정을 숫자로 검증할 때 쓴다.
