@@ -286,10 +286,21 @@ let GW = 0, GH = 0, GX0 = 0, GZ0 = 0;
 // ---------------------------------------------------------------------------
 // search 는 index.html 이 쓰는 캐시버스팅 쿼리(?v=..)를 그대로 물려주기 위한 것이다.
 // json·glb 도 같이 물려줘야 맵만 옛것이 남는 사고가 안 난다.
+export function mapName(search) {
+  // ★13차. 맵이 둘이 됐다. 기본은 **던전(level2)** 이고 `?map=field` 로 초원(level1)이다.
+  //   초원 파일(level1.glb·json·s20_level1.py)은 한 글자도 안 바뀌었다 - 폴백이 그걸
+  //   그대로 부른다. 값은 파일 이름이 되므로 아는 이름만 받는다(경로 주입 방지).
+  const q = search === undefined ? location.search : search;
+  const m = (new URLSearchParams(q).get('map') || '').toLowerCase();
+  if (m === 'field' || m === 'level1') return 'level1';
+  return 'level2';
+}
+
 export async function loadLevel(scene, search) {
   const q = search === undefined ? location.search : search;
-  const res = await fetch('./level1.json' + q);
-  if (!res.ok) throw new Error('level1.json 을 못 읽었다: ' + res.status);
+  const base = mapName(q);
+  const res = await fetch('./' + base + '.json' + q);
+  if (!res.ok) throw new Error(base + '.json 을 못 읽었다: ' + res.status);
   LV = await res.json();
   FLOOR_Y = LV.floorY || 0;
 
@@ -298,7 +309,7 @@ export async function loadLevel(scene, search) {
   buildGrid();
 
   const glb = await new Promise((ok, bad) => {
-    new GLTFLoader().load('./level1.glb' + q, ok, undefined, bad);
+    new GLTFLoader().load('./' + base + '.glb' + q, ok, undefined, bad);
   });
   ROOT = glb.scene;
   ROOT.traverse(o => {
@@ -309,7 +320,14 @@ export async function loadLevel(scene, search) {
     o.castShadow = !isFloor;
   });
   // 바닥에만 결을 얹는다. 실패해도 맵은 그대로 뜬다.
-  DETAIL_N = await applyFloorLook(ROOT, q);
+  // ★13차. 던전(level2)은 `floorLook: false` 다. 아래 결·타일·스플랫은 전부 **초원용**
+  //   (풀·흙·마른 풀)이라 던전 바닥에 얹으면 돌바닥에 잔디가 낀다. 던전은 컨셉 아트에서
+  //   잘라 온 판석 타일과 정점색(횃불)으로 이미 완성돼 있다.
+  // ★13차B. 던전 바닥 메시 이름은 `FLOOR_DG` 다 - 즉 위 314행의 `startsWith('FLOOR')`에
+  //   걸려 **그림자를 안 던진다**(1차는 DGFLOOR 라 바닥이 자기 자신에게 그림자를 던졌다).
+  //   빛 데칼·달빛 샤프트·불꽃도 같은 이유로 FLOOR_ 로 짓는다. 이 줄이 먼저 걸러 주므로
+  //   초원용 스플랫이 얹힐 걱정은 없다.
+  DETAIL_N = (LV.floorLook === false) ? 0 : await applyFloorLook(ROOT, q);
   // 수면(WATER_STREAM)은 따로 짠다. 실패해도 v93 그림 그대로 뜬다(아래 주석).
   WATER_N = await applyWaterLook(ROOT, q);
   scene.add(ROOT);
@@ -319,13 +337,18 @@ export async function loadLevel(scene, search) {
   //   수풀만 구역별 메시(BUSH_01..16)로 심는데, 은신 연출이 그 이름을 찾기 때문이다.
   //   ★ROOT 밑에 붙인다(stealth.js 가 LV.root() 를 훑어 수풀을 찾는다).
   //   ★같은 쿼리로 부른다. 다른 URL 로 부르면 모듈 인스턴스가 갈린다.
-  try {
-    PROPS = await import('./props.js' + q);
-    await PROPS.build(ROOT, LV, q, groundY);
-  } catch (e) {
-    // 소품이 없어도 맵과 충돌은 그대로 돈다. 게임이 안 뜨는 것보다는 낫다.
-    console.error('[level] 소품을 못 심었다', e);
-    PROPS = null;
+  // ★13차. 던전(level2)은 props[] 가 비어 있다 - 모든 지오메트리가 glb 안에 있다.
+  //   빈 채로 props.js 를 부르면 "props[] 가 없다"고 경고만 찍고 돌아온다. 평상 콘솔이
+  //   비어 있어야 진짜 경고가 눈에 들어오므로, 심을 게 없으면 아예 안 부른다.
+  if ((LV.props || []).length) {
+    try {
+      PROPS = await import('./props.js' + q);
+      await PROPS.build(ROOT, LV, q, groundY);
+    } catch (e) {
+      // 소품이 없어도 맵과 충돌은 그대로 돈다. 게임이 안 뜨는 것보다는 낫다.
+      console.error('[level] 소품을 못 심었다', e);
+      PROPS = null;
+    }
   }
   return LV;
 }

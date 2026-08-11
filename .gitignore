@@ -12,3 +12,9 @@ __pycache__/
 desktop/node_modules/
 desktop/game/
 desktop/out/
+
+# 던전 타일의 **눈 검사용 png**. 블렌더가 읽는 것은 같은 이름의 jpg 다
+# (tools/dungeon_tex.py 가 두 벌을 같이 굽는다). 알파가 있는 데칼 png 는 저장소에 남는다.
+web/tex/dg_floor.png
+web/tex/dg_floor_b.png
+web/tex/dg_wall.png

@@ -11,8 +11,17 @@ import { OutputPass } from './lib/postprocessing/OutputPass.js';
 // 페이지 쿼리(?v=..)를 그대로 물려준다. 안 그러면 main.js 만 새로 받고 enemy.js 는
 // 캐시된 옛것이 돌아서 고친 게 반영 안 된 것처럼 보인다(index.html 이 쓰는 수법 그대로).
 const { createEnemySystem } = await import('./enemy.js' + location.search);
-// 보스·증표·탈출(= 한 층을 깨는 루프)도 별도 모듈이다. 쿼리를 물려주는 이유는 위와 같다.
-const { createBossSystem } = await import('./boss.js' + location.search);
+// 증표·탈출(= 한 층을 깨는 루프)도 별도 모듈이다. 쿼리를 물려주는 이유는 위와 같다.
+// ★13차. 맵이 둘이 됐고 **층 진행 모듈은 맵이 고른다.**
+//     초원(level1, ?map=field) -> boss.js   : 각귀를 잡고 떨어진 증표를 문으로 반출
+//     던전(level2, 기본)       -> level2.js : 보스가 없고 제단의 증표를 계단으로 반출
+//   두 파일은 export 이름(createBossSystem)·api 게터·HUD DOM id 가 **같다.** 그래서
+//   갈리는 곳이 이 세 줄뿐이고 ui.js·enemy.js·아래 main.js 는 어느 쪽인지 모른다.
+//   ★level.js 를 여기서 한 번 부르지만 아래 '맵' 절이 **같은 URL** 로 다시 부르므로
+//     브라우저가 같은 모듈 인스턴스를 준다(URL 이 다르면 갈린다 - 이 레포의 오랜 함정).
+const _levelMod = await import('./level.js' + location.search);
+const { createBossSystem } = await import(
+  (_levelMod.mapName() === 'level1' ? './boss.js' : './level2.js') + location.search);
 // 수풀 은신(리그 오브 레전드 규칙 + 소리). enemy.js 도 **같은 URL** 로 불러
 // 같은 인스턴스를 본다. 여기서 플레이어 상태를 넣고, 요괴 쪽에서 canSee 로 읽는다.
 const stealth = await import('./stealth.js' + location.search);
@@ -58,14 +67,29 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
-// ── 아침 산야 ──
+// ── 맵이 둘이다 ──
+// ★13차B. 던전(level2)과 초원(level1)은 **빛이 정반대**라 배경·안개·조명을 갈라야 한다.
+//   1차 던전이 "회색 상자"였던 기계적 원인의 절반이 여기였다: 어두운 팔레트를
+//   구워 놓고 **아침 햇살 조명**(반구 1.55 따뜻 + 해 2.35 + 하늘색 배경) 밑에서
+//   렌더했다. 정점색으로 아무리 어둠을 칠해도 따뜻한 해가 그 위를 덮는다.
+// ★level.js 의 mapName() 과 **같은 규칙**이다. 여기서 다시 푸는 이유는 조명이
+//   level.js import(아래 await) 보다 먼저 서기 때문이다. 규칙이 갈리면 조명만
+//   초원인 던전이 생기므로, 바꿀 일이 있으면 두 곳을 같이 고칠 것.
+const IS_DUNGEON = (() => {
+  const m = (new URLSearchParams(location.search).get('map') || '').toLowerCase();
+  return !(m === 'field' || m === 'level1');
+})();
+// ── 아침 산야 (초원) ──
 // 2026-08-10. 오너: "맵도 1층이니까 개방감 있게. 너무 답답한 느낌이야.
 //   SAO, 게임 속 바바리안의 **첫 층에 온 것 같은 느낌**."
 // 밤색(#04060c) 배경 + 파란 안개는 "깊은 던전"의 그림이다. 1층은 그러면 안 된다.
 // 배경·안개·조명을 옅은 하늘빛 아침으로 통째로 옮긴다. 배경색과 안개색은
 // **같은 값**이어야 한다(다르면 화면 끝에서 지형이 안개색으로 사라졌다가
 // 배경색으로 한 번 더 갈아타서 띠가 생긴다).
-const SKY = 0x9fc2d8;
+// ── 어둠에 잠긴 회랑 (던전) ──
+// 컨셉 아트(incoming/codex_dungeon/concept_hall.png) 실측 전체 평균이 #181e25 다.
+// 배경도 그 어둠과 같은 계열이어야 벽 위로 화면이 새지 않는다(1차의 "하늘 샘").
+const SKY = IS_DUNGEON ? 0x0b1420 : 0x9fc2d8;
 scene.background = new THREE.Color(SKY);
 // ★안개 거리는 **카메라 거리에 물려 있다.** near 가 카메라-플레이어 거리보다 멀어야
 //   플레이어 자신이 안개를 먹지 않는다. 카메라가 34m 였던 시절 값이 34~66 이었고,
@@ -153,9 +177,22 @@ for (const ev of ['keydown', 'pointerdown', 'touchstart']) {
 // 아침 햇살. 하늘은 옅은 하늘색, 바닥 반사는 마른 흙색이다.
 // ★밤 팔레트에서는 아랫빛이 0x0a1018(거의 검정)이라 그늘이 통째로 죽어 있었다.
 //   1층은 "그늘도 밝은" 곳이라 아랫빛을 흙색으로 올려야 답답함이 풀린다.
-scene.add(new THREE.HemisphereLight(0xcfe4f2, 0x5b5140, 1.55));
-const key = new THREE.DirectionalLight(0xfff0d4, 2.35);   // 따뜻한 해
-key.position.set(5, 9, 4);
+// ★★13차B 던전 분기. 세 등의 **윗면 조도 합**을 초원 실측(tools/color_contract.py 의
+//   IRRADIANCE 0.99)과 같은 자로 환산하면 이렇다.
+//       초원  E = (0.99, 0.99, 1.00)   휘도 0.99   파랑/빨강 1.01
+//       던전  E = (0.39, 0.56, 0.86)   휘도 0.55   파랑/빨강 2.21
+//   즉 **절반 밝기에 두 배 푸른** 빛이다. blender/s40_dungeon1.py 의 팔레트는
+//   이 E 로 ACES 를 역산해서 뽑은 값이라, 여기 숫자를 바꾸면 던전 색이 통째로 밀린다.
+//   ★해를 남기는 이유: 캐릭터 발밑 접지 그림자가 이 게임 손맛의 일부다(v90).
+//     대신 각도를 훨씬 세워(2.5,12,3.5) 그림자를 짧게 만든다 - 던전에서 긴 그림자가
+//     대각으로 누우면 그 순간 실외가 된다.
+scene.add(IS_DUNGEON
+  ? new THREE.HemisphereLight(0x6f9ad2, 0x161f30, 1.70)
+  : new THREE.HemisphereLight(0xcfe4f2, 0x5b5140, 1.55));
+const key = IS_DUNGEON
+  ? new THREE.DirectionalLight(0xc4d8f0, 1.70)            // 찬 달빛
+  : new THREE.DirectionalLight(0xfff0d4, 2.35);           // 따뜻한 해
+key.position.set(...(IS_DUNGEON ? [2.5, 12, 3.5] : [5, 9, 4]));
 key.castShadow = true;
 // ★그림자 맵 크기 (9차 성능 실측. handoff_perf.md 3):
 //   2048 -> 1024 는 씬 1패스 중앙값 -18.6%(18쌍 중 14쌍 개선)지만, 상자가 ±10m 라
@@ -178,7 +215,9 @@ scene.add(key);
 scene.add(key.target);       // 캐릭터를 따라가게(범위가 좁아야 그림자가 선명하다)
 // 반대쪽 하늘빛. 그림자 쪽 실루엣이 배경에 녹지 않게 잡아 주는 역할이라 남긴다.
 // 밤에는 진한 파랑(0x66aaff)이었는데 아침에는 옅게 깔아야 색이 안 튄다.
-const rim = new THREE.DirectionalLight(0x9dc8ee, 0.55);
+const rim = IS_DUNGEON
+  ? new THREE.DirectionalLight(0x3f6ea6, 0.45)
+  : new THREE.DirectionalLight(0x9dc8ee, 0.55);
 rim.position.set(-6, 4, -5);
 scene.add(rim);
 
@@ -383,8 +422,11 @@ const DIST_MIN = 18.0, DIST_MAX = 32.0;
 // 그림자 상자도 같이 넓힌다(24m 에서 ±10m 였다. 안 넓히면 부감에서 화면 가장자리
 // 그림자가 통째로 잘린다. 텍셀은 그만큼 굵어지지만 부감은 원래 세밀함이 필요 없다).
 function applyDist() {
-  scene.fog.near = dist + 2;
-  scene.fog.far = dist + 30;
+  // ★던전은 안개가 **훨씬 빨리** 닫힌다. 컨셉에서 화면 위쪽 벽은 이미 남색 어둠에
+  //   녹아 있고 그게 "깊이"의 정보다. near 는 초원과 같이 플레이어 뒤에 둔다
+  //   (여기를 당기면 캐릭터가 안개를 먹어 실루엣이 흐려진다).
+  scene.fog.near = dist + (IS_DUNGEON ? 1 : 2);
+  scene.fog.far = dist + (IS_DUNGEON ? 17 : 30);
   const half = 10 * (dist / CAM.dist);
   const sc = key.shadow.camera;
   sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half;
