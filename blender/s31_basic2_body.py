@@ -4,7 +4,8 @@
     blender -b -P blender/s31_basic2_body.py
     -> web/basic2_body.glb   (액션 없음. 모션은 이어서 s24_moveset.py 가 이식한다)
 
-전체 공정 네 줄(이 순서대로 다시 돌리면 언제든 재현된다. 2026-08-11 실행 기록)
+전체 공정 다섯 줄(이 순서대로 다시 돌리면 언제든 재현된다. 2026-08-11 실행 기록.
+1~4 는 2026-08-11 재실행에서 **바이트 단위로 같은 파일**이 다시 나왔다)
 
     # 1) 알몸 basic2 + 칼 7자루
     blender -b -P blender/s31_basic2_body.py
@@ -19,6 +20,11 @@
       OUTDIR=renders/history/v97_wave11/char_basic2/native blender -b -P blender/s27_kensa_native.py
     # 4) 이름의 .001 떼기 (안 하면 1~7 칼 교체가 죽는다)
     python3 tools/glb_rename.py web/basic2.glb
+    # 5) 오너가 준 옷(벨트+모피 치마+어깨끈) 입히기. ★4번까지는 web/basic2.glb 가
+    #    **알몸**이다. 이 줄이 같은 파일을 옷 입은 것으로 제자리 교체한다
+    #    (임시파일에 쓰고 os.replace. 이미 옷이 있으면 멈춘다)
+    BODY_GLB=web/basic2.glb OUT_GLB=web/basic2.glb \
+      OUTDIR=renders/history/v98_wave12/cloth blender -b -P blender/s33_basic2_cloth.py
 
   ★2번에서 GRIP_K 를 1.0 으로 둔 근거: s24 가 찍는 손 크기가 소스 0.0853 /
     타깃 0.0823 로 3.4% 차이뿐이다(kensa 는 36% 차이라 0.64 를 줬다).
