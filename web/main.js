@@ -533,8 +533,9 @@ function setElement(name) {
 //   mode 0 = A 혜성 정제   1 = B 귀멸 리본   2 = C v95 정박판   3 = D 샤프 잔광
 // ═══════════════════════════════════════════════════════════════════════════
 const FX_STYLE = (() => {
-  const v = (new URLSearchParams(location.search).get('fx') || 'a').toLowerCase();
-  return (v === 'b' || v === 'c' || v === 'd') ? v : 'a';
+  // ★기본값 b = 귀멸 리본 (2026-08-12 오너 확정. a/c/d 는 ?fx= 로 열람 가능)
+  const v = (new URLSearchParams(location.search).get('fx') || 'b').toLowerCase();
+  return (v === 'a' || v === 'c' || v === 'd') ? v : 'b';
 })();
 const FX_TABLE = {};
 {
