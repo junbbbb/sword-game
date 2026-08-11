@@ -1423,10 +1423,55 @@ export function createEnemySystem(opts) {
   // 밉맵은 아틀라스라 이웃 칸이 샐 위험이 있는데, 글자 폭이 칸의 절반이라
   // 좌우 여백이 27px 씩(밉 2단에서도 7텍셀) 있어 실제로는 안 닿는다.
   const DIG_CW = 112, DIG_CH = 140;      // 아틀라스 한 칸(px)
+  // ── ★줄이 둘인 이유 (2026-08-12 13차. 오너 "빨간 글자에 흰 테두리") ──
+  // 0줄 = 일반타 · 1줄 = 처치타. **처치타는 흰 테를 더 굵게 굽는다.**
+  // 처치타는 이미 1.35배로 커지지만 그건 전체가 같이 커지는 거라 테의 **몫**은 그대로다.
+  // 오너가 말한 "처치타는 테가 더 굵다"는 몫의 이야기라, 굵기를 아예 따로 구워야 한다.
+  const DIG_ROWS = 2;
+  // 겹 굵기(px). ★보이는 두께는 절반씩이다 - 속을 나중에 채우므로 안쪽 절반이 덮인다:
+  //   흰 테 = rim/2 · 바깥 어두운 키라인 = (ol - rim)/2
+  // 개선 전에는 ol 36 / rim 13 이라 **어두운 겹 11.5px · 크림 6.5px** 이었다(실측 300:242).
+  // 즉 굵은 쪽이 어두운 겹이었고, 밝은 바닥에서는 글자가 갈색 테로 읽혔다. 그래서 뒤집는다.
+  // ★13/16px 로 한 번 밟았다. 흰 테가 획 굵기를 넘어서서 글자가 **흰 덩어리**로 읽혔고
+  //   0 의 속이 메워졌다(캡처로 확인). 테는 색을 이기면 안 된다 - codex 시트에서도
+  //   흰 테는 획 굵기의 절반쯤이다. 9/12px 로 내려서 색이 주인이고 테가 두르는 그림으로.
+  const DIG_W = [{ ol: 26, rim: 18 },    // 일반타 : 흰 9px · 키라인 4px
+                 { ol: 32, rim: 24 }];   // 처치타 : 흰 12px · 키라인 4px
   let digAdv = 0.75;                     // 자리 간격 / 칸 폭. 굽는 자리에서 실측해 덮는다
+  let digInk = 0;                        // 잉크가 실제로 닿은 글자 폭(px). 자간 계약의 분모다
+  let digCanvas = null;                  // 실측 창구(api.dmgScan)가 읽는 굽힌 캔버스
+  // ── ★자간 계약 (오너 "글자도 조금씩 겹쳐져 있다") ──
+  // 전진 = 잉크 폭 × 이 값. 1 이면 딱 붙고, 낮출수록 겹친다. 개선 전은 0.906 이라
+  // 사실상 안 겹쳤다. 0.76 이면 제일 넓은 글자끼리 잉크 폭의 24% 가 겹친다.
+  const DIG_ADV_RATIO = 0.76;
+  // ── ★자리별 세로 지터 (오너 "높낮이가 조금씩 다 다르고") ──
+  // 자리마다 칸 높이의 6~12% 만큼 위나 아래로 어긋난다. ★크기까지 해시로 뽑는다 -
+  // 부호만 뽑으면 모든 자리가 같은 폭으로 튀어서 "지그재그"라는 다른 모양이 된다.
+  // 결정론적 해시라 Math.random 이 안 들어간다 = 같은 뭉치는 사는 동안 같은 높낮이를
+  // 유지한다(프레임마다 다시 뽑으면 그건 지터가 아니라 떨림이다. 실측으로 확인했다).
+  const DMG_JIT_MIN = 0.06, DMG_JIT_MAX = 0.12;
+  // 가운데 자리가 살짝 올라가는 미세 아치. 지터와 달리 **모양**이라 결정론이 아니라 규칙이다.
+  const DMG_ARCH = 0.045;
+  // 칸마다 잉크(알파)가 닿은 좌우 폭을 재서 제일 넓은 값을 돌려준다.
+  function measureInk(cv, row = 0) {
+    const g = cv.getContext('2d');
+    let best = 0;
+    for (let d = 0; d <= 9; d++) {
+      const im = g.getImageData(DIG_CW * d, DIG_CH * row, DIG_CW, DIG_CH).data;
+      let x0 = -1, x1 = -1;
+      for (let x = 0; x < DIG_CW; x++) {
+        let hit = false;
+        for (let y = 0; y < DIG_CH; y++) { if (im[(y * DIG_CW + x) * 4 + 3] >= 26) { hit = true; break; } }
+        if (!hit) continue;
+        if (x0 < 0) x0 = x; x1 = x;
+      }
+      if (x1 > x0) best = Math.max(best, x1 - x0 + 1);
+    }
+    return best;
+  }
   function makeDigitTexture() {
     const cv = document.createElement('canvas');
-    cv.width = DIG_CW * 10; cv.height = DIG_CH;
+    cv.width = DIG_CW * 10; cv.height = DIG_CH * DIG_ROWS;
     const g = cv.getContext('2d');
     g.clearRect(0, 0, cv.width, cv.height);
     g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -1436,29 +1481,37 @@ export function createEnemySystem(opts) {
     g.font = '900 96px "Arial Rounded MT Bold", "Avenir Next", ' +
              '"Helvetica Neue", "Apple SD Gothic Neo", Arial, sans-serif';
     g.lineJoin = 'round'; g.lineCap = 'round'; g.miterLimit = 2;
-    // ★굵기는 눈으로 두 번 밟고 고른 값이다.
-    //   36/17(128칸): 진한 테가 화면 2.6px 이라 회색 후광 - 진범은 굵기가 아니라
-    //                 밉맵 없는 3.6배 축소였다(위 칸 크기 주석).
-    //   50/20(128칸): 이번엔 너무 굵어 0 의 속이 메워지고 세 자리가 한 덩어리가 됐다.
-    //   36/13(112칸): 진한 테 3.6px · 크림 테 2.0px. codex 시트의 획 대비 비율에 맞는다.
-    const LW_OL = 36, LW_RIM = 13;       // 바깥 18px · 크림 테 6.5px (칸 안에 다 든다)
-    let wMax = 0;
-    for (let d = 0; d <= 9; d++) {
-      const ch = String(d);
-      const cx = DIG_CW * d + DIG_CW / 2, cy = DIG_CH / 2;
-      g.strokeStyle = '#00ff00'; g.lineWidth = LW_OL;
-      g.strokeText(ch, cx, cy);
-      g.strokeStyle = '#0000ff'; g.lineWidth = LW_RIM;
-      g.strokeText(ch, cx, cy);
-      g.fillStyle = '#ff0000';
-      g.fillText(ch, cx, cy);
-      const w = g.measureText(ch).width;
-      if (w > wMax) wMax = w;
+    // ★굵기 내력(칸 112 기준. 앞의 둘은 128칸 시절이다)
+    //   36/17: 진한 테가 화면 2.6px 이라 회색 후광 - 진범은 굵기가 아니라 밉맵 없는 축소였다.
+    //   50/20: 너무 굵어 0 의 속이 메워지고 세 자리가 한 덩어리가 됐다.
+    //   36/13: 어두운 겹 11.5px · 크림 6.5px. **굵은 쪽이 어두운 겹이라 뒤집혀 있었다.**
+    //   34/26 · 40/32(지금): 흰 테 13·16px · 어두운 키라인 4px. 오너 지시의 "흰 굵은 테".
+    // ★어두운 키라인을 0 으로 못 없앤다. 밝은 흙바닥에서 흰 테가 배경에 먹히면
+    //   글자 모양이 통째로 사라진다 - codex 시트도 흰 테 바깥에 갈색 한 줄을 두르고 있다.
+    for (let row = 0; row < DIG_ROWS; row++) {
+      const LW_OL = DIG_W[row].ol, LW_RIM = DIG_W[row].rim;
+      for (let d = 0; d <= 9; d++) {
+        const ch = String(d);
+        const cx = DIG_CW * d + DIG_CW / 2, cy = DIG_CH * row + DIG_CH / 2;
+        // 겹치는 순서가 곧 겹의 순서다: 바깥(G) -> 흰 테(B) -> 속(R).
+        // 속을 마지막에 채우므로 두 스트로크의 **안쪽 절반은 덮인다** = 테가 밖으로만 남는다.
+        g.strokeStyle = '#00ff00'; g.lineWidth = LW_OL;
+        g.strokeText(ch, cx, cy);
+        g.strokeStyle = '#0000ff'; g.lineWidth = LW_RIM;
+        g.strokeText(ch, cx, cy);
+        g.fillStyle = '#ff0000';
+        g.fillText(ch, cx, cy);
+      }
     }
-    // ★자리 간격은 **실측**한다. 폰트가 뒤 칸으로 떨어지면 글자 폭이 달라지는데
+    digCanvas = cv;
+    // ★잉크 폭 실측. 자간 계약("숫자 폭의 70~80% 만 전진한다")의 분모는 글자 폭이 아니라
+    //   **테까지 포함해 실제로 칠해진 폭**이다. 사람 눈에는 테까지가 글자다.
+    //   글리프마다 다르니 제일 넓은 칸(0·8 계열)으로 잡는다 - 그게 겹침의 최악이다.
+    //   ★일반타 줄(0)로 잰다. 처치타는 뭉치째 1.35배라 같은 비율이 그대로 따라온다.
+    digInk = measureInk(cv, 0);
+    // ★자리 간격은 **실측**에서 나온다. 폰트가 뒤 칸으로 떨어지면 글자 폭이 달라지는데
     //   간격을 상수로 박아 두면 숫자가 붙거나 벌어진다.
-    //   0.78 = 외곽선 halo 만 살짝 겹치는 간격(codex 시트도 이만큼 붙어 있다).
-    if (wMax > 4) digAdv = Math.min(0.95, (wMax + LW_OL * 0.78) / DIG_CW);
+    if (digInk > 4) digAdv = Math.min(0.95, (digInk * DIG_ADV_RATIO) / DIG_CW);
     const t = new THREE.CanvasTexture(cv);
     t.colorSpace = THREE.NoColorSpace;
     t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
@@ -1564,12 +1617,16 @@ export function createEnemySystem(opts) {
   const dmgMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, depthTest: false, fog: false,
     side: THREE.DoubleSide, blending: THREE.NormalBlending,
-    // 외곽선·크림 테 색. ★선형 HDR 이다(위 FLASH_R 주석의 파이프라인 설명 참조).
-    //   외곽선은 진한 밤색이라 밝은 흙바닥·하늘 어디에 얹혀도 글자가 안 사라지고,
-    //   크림 테는 처치타(주황-빨강)를 어두운 배경에서 떼어 놓는 겹이다.
+    // 키라인·흰 테 색. ★선형 HDR 이다(위 FLASH_R 주석의 파이프라인 설명 참조).
+    //   uOl = 제일 바깥 한 줄. 진한 밤색이고 **얇다**(4px). 밝은 흙바닥에서 흰 테가
+    //         배경에 먹히는 것만 막는 역할이라, 이게 굵으면 글자가 갈색 테로 읽힌다.
+    //   uRim = 그 안쪽 **흰 테**. 오너가 말한 "흰색 테두리"가 이 겹이다.
+    // ★1.0 이 아니라 0.86 인 이유는 아래 DMG_TINT 주석과 같다 - ACES 가 입력을 1.75배로
+    //   받으므로 1.0 은 그냥 날아가고 블룸(임계 1.02)에 걸려 글자가 번진다. 0.86 이면
+    //   화면에서 흰색으로 읽히면서 안 번진다.
     uniforms: { uTex: { value: null },
                 uOl: { value: new THREE.Vector3(0.016, 0.008, 0.007) },
-                uRim: { value: new THREE.Vector3(0.86, 0.79, 0.56) } },
+                uRim: { value: new THREE.Vector3(0.86, 0.86, 0.87) } },
     vertexShader: `
       attribute float aA; attribute vec3 aTint;
       varying vec2 vU; varying float vA; varying vec3 vT;
@@ -1607,21 +1664,25 @@ export function createEnemySystem(opts) {
   // 크림·금색을 남기려면 0.6 대에서 칠하고 채널 비율로만 색을 만들어야 한다.
   // ★블룸(임계 1.02)도 이 값으로 판정하므로 여기서 안 번지는 것이 덤으로 보장된다
   //   - 글자가 번지면 오히려 못 읽는다.
-  const DMG_TINT_HIT = [0.72, 0.65, 0.40];
-  const DMG_TINT_KILL = [0.66, 0.20, 0.05];
+  // ★13차에 채움을 더 물들였다. 흰 테를 굵게 세우고 나니 속이 크림색이면 테와 안 갈려
+  //   글자가 통째로 흰 덩어리로 읽힌다. 오너 지시대로 일반타는 노랑~주황, 처치타는 빨강.
+  //   셰이더가 vU.y 로 아래를 더 주황 쪽에 눕히므로, 여기 값은 **위쪽 색**이다.
+  const DMG_TINT_HIT = [0.82, 0.60, 0.12];    // 위 노랑 -> 아래 주황
+  const DMG_TINT_KILL = [0.70, 0.20, 0.04];   // 위 주황 -> 아래 빨강
   // 뭉치 풀. 자릿수는 별도 배열에 담는다(뭉치당 DMG_MAX_DIGITS 칸, **1의 자리부터**).
   const dmgPops = [];
   for (let i = 0; i < DMG_MAX_POP; i++) {
-    dmgPops.push({ on: false, x: 0, y: 0, z: 0, t: 0, n: 0, ox: 0, oy: 0, sc: 1, kill: false });
+    // seed = 자리별 세로 지터의 씨앗. 띄운 순번에서 받는다(결정론적. Math.random 금지)
+    dmgPops.push({ on: false, x: 0, y: 0, z: 0, t: 0, n: 0, ox: 0, oy: 0, sc: 1, kill: false, seed: 0 });
   }
   const dmgDig = new Int8Array(DMG_MAX_POP * DMG_MAX_DIGITS);
   let dmgSpawned = 0, dmgBad = 0, dmgShown = 0;
   // 마지막으로 그린 뭉치의 칸 높이 / 화면 높이. 판독성 판정의 자다(아래 dmg 창구).
   let dmgFrac = 0, dmgFracKind = 0;
   // 칸 높이 중 **눈에 보이는 글자**(속 + 외곽선)가 차지하는 몫. 굽는 값에서 나온다:
-  //   폰트 96px 의 숫자 높이는 대략 0.72*96 = 69px, 거기에 외곽선 36px 이 붙고, 칸은 DIG_CH.
+  //   폰트 96px 의 숫자 높이는 대략 0.72*96 = 69px, 거기에 테 굵기가 붙고, 칸은 DIG_CH.
   //   판독성 판정은 속만이 아니라 이 값으로 본다(사람 눈에는 테까지가 글자다).
-  const GLYPH_OF_CELL = (69 + 36) / DIG_CH;
+  const GLYPH_OF_CELL = (69 + DIG_W[0].ol) / DIG_CH;
 
   // 표식 색조. 발견은 주홍(경보), 수색·놓침은 종이색(중립), 공격은 진홍(임박).
   const MK_TINT = [
@@ -1669,7 +1730,10 @@ export function createEnemySystem(opts) {
   const _plQ = new THREE.Vector3();
   const PL_CORNER = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
   // 판 한 장을 정점 버퍼에 쓴다. hw/hh 는 반폭·반높이(m).
-  function putPlate(posArr, uvArr, o, cx, cy, cz, hw, hh, u0, u1) {
+  // ★v0/v1 은 아틀라스가 여러 줄일 때만 준다(숫자만 두 줄이다). 안 주면 예전처럼 0~1 이라
+  //   핍·표식 호출은 한 글자도 안 바뀐다.
+  function putPlate(posArr, uvArr, o, cx, cy, cz, hw, hh, u0, u1, v0, v1) {
+    const a0 = v0 === undefined ? 0 : v0, a1 = v1 === undefined ? 1 : v1;
     for (let k = 0; k < 4; k++) {
       const sx = PL_CORNER[k][0], sy = PL_CORNER[k][1];
       _plQ.set(cx, cy, cz).addScaledVector(_plR, sx * hw).addScaledVector(_plU, sy * hh);
@@ -1677,7 +1741,7 @@ export function createEnemySystem(opts) {
       posArr[(o + k) * 3 + 1] = _plQ.y;
       posArr[(o + k) * 3 + 2] = _plQ.z;
       uvArr[(o + k) * 2] = sx < 0 ? u0 : u1;
-      uvArr[(o + k) * 2 + 1] = sy < 0 ? 0 : 1;
+      uvArr[(o + k) * 2 + 1] = sy < 0 ? a0 : a1;
     }
   }
 
@@ -1801,6 +1865,9 @@ export function createEnemySystem(opts) {
     p.sc = kill ? DMG_KILL_SC : 1;
     p.ox = near === 0 ? 0 : ((near & 1) ? 1 : -1) * (0.30 + 0.24 * ((near - 1) >> 1));
     p.oy = 0.13 * near;
+    // ★자리별 세로 지터의 씨앗. 띄운 순번 + 값이라 뭉치마다 다르고, 같은 뭉치는
+    //   사는 동안 안 바뀐다. Math.random 을 쓰면 프레임마다 다시 뽑혀 글자가 떤다.
+    p.seed = (dmgSpawned * 7 + v) % 9973;
     // 자릿수 쪼개기. 1의 자리부터 담는다(그리는 쪽이 거꾸로 읽는다).
     const base = slot * DMG_MAX_DIGITS;
     let n = 0, r = v;
@@ -1876,16 +1943,33 @@ export function createEnemySystem(opts) {
         }
       }
       const c = p.kill ? DMG_TINT_KILL : DMG_TINT_HIT;
+      // 처치타는 아틀라스 아랫줄(흰 테가 더 굵게 구워진 줄)을 본다.
+      const vRow = p.kill ? 1 : 0;
+      const v0 = vRow / DIG_ROWS, v1 = (vRow + 1) / DIG_ROWS;
       const base = i * DMG_MAX_DIGITS;
-      for (let k = 0; k < p.n; k++) {
+      // ── ★오른쪽 자리부터 쓴다 (오너 "글자도 조금씩 겹쳐져 있다") ──
+      // 같은 드로우콜 안에서는 **나중에 쓴 판이 위**다(깊이검사가 꺼져 있다).
+      // 그래서 거꾸로 돌아야 왼쪽 글자가 오른쪽 글자를 덮는다. 메이플이 그렇게 겹친다 -
+      // 글을 읽는 방향과 겹치는 방향이 같아야 숫자가 한 덩어리로 읽힌다.
+      for (let k = p.n - 1; k >= 0; k--) {
         if (dn >= DMG_MAX_POP * DMG_MAX_DIGITS) break;
         const d = dmgDig[base + p.n - 1 - k];      // 1의 자리부터 담았으니 거꾸로 읽는다
         const o = dn * 4;
+        // ── ★자리마다 높이가 다르다 (오너 "높낮이가 조금씩 다 다르고") ──
+        //   지터 = 뭉치 씨앗과 자리로 만든 결정론적 해시. Math.random 을 안 쓴다 -
+        //          매 프레임 다시 뽑으면 숫자가 사는 내내 덜덜 떤다.
+        //   아치 = 가운데 자리가 살짝 올라간다. 지터가 흩는 것을 한 덩어리로 묶는 뼈대다.
+        const hSign = hash1(p.seed * 131.7 + k * 37.3);
+        const hAmp = hash1(p.seed * 57.13 + k * 91.7 + 11.0);
+        const amp = (DMG_JIT_MIN + (DMG_JIT_MAX - DMG_JIT_MIN) * hAmp) * cellH;
+        const jy = hSign < 0.5 ? -amp : amp;
+        const u = p.n > 1 ? (2 * k) / (p.n - 1) - 1 : 0;
+        const arch = DMG_ARCH * cellH * (1 - u * u);
         // 자리 이동은 **카메라 오른쪽**으로 준다. 월드 x 로 주면 시점이 돌 때 숫자가
         // 앞뒤로 늘어져 보인다(판은 이미 빌보드라 가로축이 곧 화면 가로축이다).
-        _dcen.set(p.x, cy, p.z).addScaledVector(_plR, x0 + adv * k);
+        _dcen.set(p.x, cy + jy + arch, p.z).addScaledVector(_plR, x0 + adv * k);
         putPlate(dPos, dUv, o, _dcen.x, _dcen.y, _dcen.z,
-          cellW * 0.5, cellH * 0.5, d / 10, (d + 1) / 10);
+          cellW * 0.5, cellH * 0.5, d / 10, (d + 1) / 10, v0, v1);
         for (let q = 0; q < 4; q++) {
           dgA[o + q] = a;
           dgTint[(o + q) * 3] = c[0];
@@ -3230,6 +3314,60 @@ export function createEnemySystem(opts) {
     // 머리 위 판이 실제로 몇 장 서 있나(눈 없이 회귀를 잡는 창구)
     get plates() { return { pip: plateCount.pip, mark: plateCount.mark,
                             tex: !!markMat.uniforms.uTex.value }; },
+    // ── ★숫자 아틀라스 실측 창구 (읽기 전용) ──
+    // 겹의 두께를 눈이 아니라 픽셀로 잰다. d 칸의 세로 v 자리 가로줄을 훑어
+    // 마스크 채널이 이어지는 길이를 돌려준다:
+    //   ol  = 바깥 겹(G) 이 좌우로 몇 px · rim = 그 안쪽 겹(B) · fill = 속(R) · ink = 잉크 전체 폭
+    // "흰 테가 굵은가 / 바깥 겹이 얇은 키라인인가"는 이 세 수로만 판정한다.
+    // ★지금 서 있는 숫자 판의 자리(읽기 전용, 그린 순서 그대로).
+    //   "자리마다 높이가 다른가 / 얼마나 겹치는가 / 왼쪽이 위 레이어인가"는 코드를 다시
+    //   계산할 게 아니라 **정점 버퍼**에서 읽어야 한다(다시 계산하면 자기 채점이다).
+    //   그린 순서가 곧 레이어다 - 깊이검사가 꺼져 있어 나중 것이 위다.
+    get dmgPlates() {
+      const out = [];
+      const pos = dmgMesh.geometry.attributes.position.array;
+      for (let i = 0; i < dmgShown; i++) {
+        const o = i * 4 * 3;
+        let x = 0, y = 0, z = 0, hy = 0;
+        for (let k = 0; k < 4; k++) { x += pos[o + k * 3]; y += pos[o + k * 3 + 1]; z += pos[o + k * 3 + 2]; }
+        for (let k = 0; k < 4; k++) hy = Math.max(hy, Math.abs(pos[o + k * 3 + 1] - y / 4));
+        out.push({ i, x: +(x / 4).toFixed(4), y: +(y / 4).toFixed(4), z: +(z / 4).toFixed(4),
+                   half: +hy.toFixed(4) });
+      }
+      return out;
+    },
+    // ★검증용 숫자 띄우개. 게임은 한 대에 100 만 띄우므로 다섯 자리 판독을 볼 방법이 없다.
+    //   읽기만 하는 창구가 아니라 상태를 만드는 창구라 이름에 test 를 남긴다.
+    dmgTest(amount, kill, dx = 0, dz = 0) {
+      const p = getPlayerPos();
+      spawnDmgPop(p.x + dx, p.y + 1.2, p.z + dz, amount, !!kill);
+      return dmgSpawned;
+    },
+    dmgScan(d = 0, v = 0.5, row = 0) {
+      if (!digCanvas) return null;
+      const g = digCanvas.getContext('2d');
+      const r0 = Math.max(0, Math.min(DIG_ROWS - 1, row | 0));
+      const y = DIG_CH * r0 + Math.max(0, Math.min(DIG_CH - 1, Math.round(v * DIG_CH)));
+      const im = g.getImageData(DIG_CW * (d | 0), y, DIG_CW, 1).data;
+      let ol = 0, rim = 0, fill = 0, ink = 0, x0 = -1, x1 = -1;
+      for (let x = 0; x < DIG_CW; x++) {
+        const r = im[x * 4], gg = im[x * 4 + 1], bb = im[x * 4 + 2], aa = im[x * 4 + 3];
+        if (aa < 26) continue;                       // 거의 안 덮인 자리는 잉크로 안 친다
+        ink++; if (x0 < 0) x0 = x; x1 = x;
+        if (gg >= r && gg >= bb) ol++;
+        else if (bb >= r) rim++;
+        else fill++;
+      }
+      return { d: d | 0, v, row: r0, ol, rim, fill, ink, span: x1 - x0 + 1,
+               // 굽힌 굵기(px)와 그 중 **보이는** 두께. 보이는 건 절반씩이다(속이 안쪽을 덮는다)
+               bakeOl: DIG_W[r0].ol, bakeRim: DIG_W[r0].rim,
+               seenRim: DIG_W[r0].rim / 2, seenKey: (DIG_W[r0].ol - DIG_W[r0].rim) / 2,
+               cw: DIG_CW, ch: DIG_CH, adv: +digAdv.toFixed(4),
+               advPx: +(digAdv * DIG_CW).toFixed(1),
+               // 자간 계약: 전진 / 잉크 폭. 0.70~0.80 이면 "살짝 겹친다"
+               advOverInk: digInk > 0 ? +((digAdv * DIG_CW) / digInk).toFixed(3) : null,
+               inkW: digInk };
+    },
     // ── 데미지 숫자 창구 ──
     // 950프레임 안정성 판정이 이걸 본다. bad 는 NaN·음수라 **버린** 요청 수다(0 이어야 한다).
     // nan 은 지금 떠 있는 뭉치 중 좌표·나이가 깨진 것(정의상 늘 0 이어야 한다).
