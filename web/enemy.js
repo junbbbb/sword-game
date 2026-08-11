@@ -198,6 +198,42 @@ const MARK_NONE = -1, MARK_EX = 0, MARK_Q = 1, MARK_ATK = 2;
 const MARK_FOUND = 1.4;         // 발견(!) 이 떠 있는 시간
 const MARK_LOST_FADE = 0.9;     // 포기(? 페이드)
 
+// ---------------------------------------------------------------------------
+// ★큰 데미지 숫자 (오너 지시 2026-08-12)
+//   "칼 휘두를 때 상대 흰색으로 번쩍이게 하지 말고 데미지를 보여줘.
+//    메이플스토리나 로블록스처럼 큰 글자로."
+// ---------------------------------------------------------------------------
+// 위 두 판(핍·표식)과 **같은 틀**이다 - 캔버스에 구운 아틀라스 + 월드 빌보드 판.
+// DOM 으로 하면 한 프레임에 여러 뭉치의 좌표를 투영해서 style 을 써야 하고,
+// 스프라이트로 하면 드로우콜이 자릿수만큼 늘어난다. 여기서는 자리 한 칸이 판 한 장,
+// 전부 정점 버퍼 한 벌 = **드로우콜 1**이다.
+//
+// 크기 근거(실측 산수. 현행 카메라는 fov 24 · dist 24 다 - 위 핍 주석의 fov 20/dist 34
+// 는 옛 값이라 그대로 믿으면 안 된다):
+//   대상 평면의 화면 높이 = 2 * 24 * tan(12도) = 10.20m → 720px 화면에서 **1m = 70.6px**
+//   칸 높이 0.62m = 44px, 그 안의 글자 획이 대략 0.49m = **35px**
+//   → 지시서의 "게임 거리에서 28~40px" 대역 한가운데다. 처치타는 1.35배(=47px).
+const DMG_H = 0.62;             // 숫자 한 칸의 세로 크기(m). 이 한 숫자가 크기 손잡이다
+const DMG_KILL_SC = 1.35;       // 처치타는 더 크다(메이플 크리티컬 문법)
+const DMG_ANCHOR_Y = 0.30;      // 명중 지점보다 이만큼 위에서 시작한다
+// 모션 세 마디. 톡 튀어오르고(0.10) · 잠깐 서고(0.30) · 흐려지며 오른다(0.30).
+const DMG_RISE = 0.10, DMG_HOLD = 0.30, DMG_FADE = 0.30;
+const DMG_TTL = DMG_RISE + DMG_HOLD + DMG_FADE;
+const DMG_UP1 = 0.42;           // 튀어오르는 높이(m)
+const DMG_UP2 = 0.55;           // 흐려지며 더 오르는 높이(m)
+const DMG_MAX_POP = 20;         // 동시에 떠 있는 숫자 뭉치 상한
+const DMG_MAX_DIGITS = 5;       // 한 뭉치 최대 자릿수(99999)
+// 이 반경 안에 이미 떠 있는 뭉치 수만큼 옆·위로 비킨다(다중 명중 겹침 방지)
+const DMG_NEAR = 1.6;
+// ── ★화면에 띄우는 수는 무엇인가 ──
+// 이 게임의 잡몹 체력 단위는 **핍**이다(maxHp 1~3, 한 대에 1). 화면에 "1"을 띄우면
+// 큰 글자의 값어치가 없으므로 100 배 해서 띄운다. 이건 각색이 아니라 **단위 환산**이다
+// (m → cm 와 같다). 그래서 화면의 수와 실제로 깎인 체력은 언제나 SWORD_DMG·DMG_SHOW
+// 한 곱셈으로 이어져 있다 - 나중에 무기별 피해나 소수 피해가 생기면 여기 손 안 대고
+// 숫자가 저절로 따라간다. 고블린은 화면상 100/200/300 체력을 갖는 셈이다.
+const SWORD_DMG = 1;            // 칼 한 대가 깎는 체력(핍). e.hp 는 이 단위로 산다
+const DMG_SHOW = 100;           // 화면 환산 배수. 핍 1 = 100
+
 // ── 전투 수치 ──
 const PLAYER_MAX_HP = 100;
 // ★8 -> 6 (건틀릿 1회차 손맛). 목표 체감은 "3마리 캠프를 풀피로 붙어서 이기고
@@ -419,7 +455,18 @@ const STUN_TS = 0.08;           // 경직 중 클립 재생속도(0 이면 완�
 // 그래서 색은 그대로 두고 세기만 0.36 배로 내린다. 몸의 밝은 데가 0.6 근처에
 // 머물러 무릎을 안 넘고, 초록 위에 주홍이 얹혀 "맞았다"는 그대로 읽힌다.
 // ★올릴 일이 생기면 반드시 밀착 프레임을 다시 찍어라(멀리서는 티가 안 난다).
-const FLASH_R = 0.26, FLASH_G = 0.095, FLASH_B = 0.05;
+//
+// ── ★★0 으로 내렸다 (오너 지시 2026-08-12) ──
+// "칼 휘두를 때 상대 흰색으로 번쩍이게 하지 말고 데미지를 보여줘."
+// 9A-3 이 넣고 11차가 톤다운한 이 주홍 틴트가 오너가 말한 그 "번쩍"이다. 세기를 더
+// 깎는 게 아니라 **끈다** - 이제 "맞았다"를 말하는 건 머리 위의 큰 숫자다.
+//   · 끄는 것은 몸 색 가산 한 갈래뿐이다. 경직(HIT_STUN)·넉백·스쿼시·핍·먹 튀김·
+//     참격 획·히트스톱·소리는 한 줄도 안 건드렸다.
+//   · 시체 절단 셰이더(uFlash)도 이 상수를 문자열로 박아 쓰므로 **여기 한 곳**으로
+//     같이 꺼진다. 되살리려면 이 줄만 옛 값(0.26/0.095/0.05)으로 되돌리면 된다.
+//   · e.flash 자체는 남긴다. "방금 맞았다"의 시계라 진단 창구(debug.reaction)가 읽고,
+//     되살릴 때 배선을 다시 깔 일이 없다.
+const FLASH_R = 0.0, FLASH_G = 0.0, FLASH_B = 0.0;
 const FLASH_DECAY = 6.0;        // 1 -> 0 까지 0.167초
 // 공격 예고 번득임 색(호박). 피격(주홍)과 **다른 색**이어야 둘이 안 헷갈린다.
 const WIND_R = 0.40, WIND_G = 0.19, WIND_B = 0.02;
@@ -1351,6 +1398,79 @@ export function createEnemySystem(opts) {
     return t;
   }
 
+  // -------------------------------------------------------------------------
+  // ── ★데미지 숫자 아틀라스 (0~9 열 칸) ──
+  //
+  // 표식과 같은 이유로 파일을 안 만든다(404·CSP·경로 문제가 통째로 없다).
+  // ★다른 점이 하나 있다. 이건 **색이 아니라 마스크**다. 세 겹을 세 칸에 나눠 담는다.
+  //   G = 바깥 진한 외곽선 · B = 그 안쪽 크림색 테 · R = 글자 속 · A = 덮인 정도
+  //   굽는 법: 초록(0,255,0)으로 굵게 긋고 → 파랑(0,0,255)으로 가늘게 덧긋고 →
+  //   빨강(255,0,0)으로 속을 채운다. source-over 라 겹친 자리는 뒤에 그린 것이 이기고
+  //   경계 한 겹만 둘이 섞인다 = 셰이더에서 그대로 부드러운 전환이 된다.
+  // 겹이 세 개인 이유는 codex 시트(incoming/codex_ui/damage_numbers.png) 때문이다.
+  //   크리티컬 숫자의 성격은 주황-빨강 색계단이 아니라 **그 둘레의 크림색 테**다
+  //   (테가 없으면 어두운 배경에서 빨강이 그냥 묻힌다).
+  // 왜 마스크로 굽나: **색을 프래그먼트에서 정하려고.** 그래야 일반타(흰-노랑)와
+  //   처치타(주황-빨강)가 아틀라스 한 벌을 같이 쓰고, 위-아래 색계단도 공짜다.
+  //   구운 그림에 색을 박으면 색을 바꿀 때마다 텍스처가 한 벌씩 늘어난다.
+  // ★colorSpace 는 **안 건다**(NoColorSpace). 이건 색이 아니라 곱수라 sRGB 로 읽으면
+  //   하드웨어가 선형으로 풀어서 0.5 가 0.21 이 된다(level.js 스플랫맵과 같은 함정).
+  // ── ★칸 크기를 화면 크기 가까이 굽는 이유 (첫 판이 밟은 함정) ──
+  // 처음엔 128x160 으로 구웠다. 화면에서는 칸이 44px 이라 **3.6배 축소**인데
+  // 밉맵이 없으면 이중선형은 2x2 만 읽으므로 얇은 진한 테가 표본 사이로 새서
+  // 회색 후광처럼 보이고 숫자가 움직일 때마다 지글거린다.
+  // 고친 것 둘: ① 칸을 112x140 으로 줄여 축소비를 2.5배 안으로 ② 밉맵을 켠다.
+  // 밉맵은 아틀라스라 이웃 칸이 샐 위험이 있는데, 글자 폭이 칸의 절반이라
+  // 좌우 여백이 27px 씩(밉 2단에서도 7텍셀) 있어 실제로는 안 닿는다.
+  const DIG_CW = 112, DIG_CH = 140;      // 아틀라스 한 칸(px)
+  let digAdv = 0.75;                     // 자리 간격 / 칸 폭. 굽는 자리에서 실측해 덮는다
+  function makeDigitTexture() {
+    const cv = document.createElement('canvas');
+    cv.width = DIG_CW * 10; cv.height = DIG_CH;
+    const g = cv.getContext('2d');
+    g.clearRect(0, 0, cv.width, cv.height);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    // 볼드 라운드체. 메이플·로블록스 숫자의 정체는 **두꺼운 라운드 + 굵은 외곽선**이다.
+    // macOS 는 Arial Rounded MT Bold 가 기본 탑재라 첫 칸에서 잡히고, 없는 기기에서도
+    // 뒤로 갈수록 두꺼운 산세리프로 떨어져서 "굵다"는 성질은 안 잃는다.
+    g.font = '900 96px "Arial Rounded MT Bold", "Avenir Next", ' +
+             '"Helvetica Neue", "Apple SD Gothic Neo", Arial, sans-serif';
+    g.lineJoin = 'round'; g.lineCap = 'round'; g.miterLimit = 2;
+    // ★굵기는 눈으로 두 번 밟고 고른 값이다.
+    //   36/17(128칸): 진한 테가 화면 2.6px 이라 회색 후광 - 진범은 굵기가 아니라
+    //                 밉맵 없는 3.6배 축소였다(위 칸 크기 주석).
+    //   50/20(128칸): 이번엔 너무 굵어 0 의 속이 메워지고 세 자리가 한 덩어리가 됐다.
+    //   36/13(112칸): 진한 테 3.6px · 크림 테 2.0px. codex 시트의 획 대비 비율에 맞는다.
+    const LW_OL = 36, LW_RIM = 13;       // 바깥 18px · 크림 테 6.5px (칸 안에 다 든다)
+    let wMax = 0;
+    for (let d = 0; d <= 9; d++) {
+      const ch = String(d);
+      const cx = DIG_CW * d + DIG_CW / 2, cy = DIG_CH / 2;
+      g.strokeStyle = '#00ff00'; g.lineWidth = LW_OL;
+      g.strokeText(ch, cx, cy);
+      g.strokeStyle = '#0000ff'; g.lineWidth = LW_RIM;
+      g.strokeText(ch, cx, cy);
+      g.fillStyle = '#ff0000';
+      g.fillText(ch, cx, cy);
+      const w = g.measureText(ch).width;
+      if (w > wMax) wMax = w;
+    }
+    // ★자리 간격은 **실측**한다. 폰트가 뒤 칸으로 떨어지면 글자 폭이 달라지는데
+    //   간격을 상수로 박아 두면 숫자가 붙거나 벌어진다.
+    //   0.78 = 외곽선 halo 만 살짝 겹치는 간격(codex 시트도 이만큼 붙어 있다).
+    if (wMax > 4) digAdv = Math.min(0.95, (wMax + LW_OL * 0.78) / DIG_CW);
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.NoColorSpace;
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    // ★핍·표식과 달리 **밉맵을 켠다**. 숫자는 튀어오르며 크기가 계속 변해서
+    //   축소비가 프레임마다 달라지는데, 밉맵이 없으면 그때마다 테가 지글거린다.
+    t.minFilter = THREE.LinearMipmapLinearFilter;
+    t.magFilter = THREE.LinearFilter;
+    t.generateMipmaps = true;
+    t.anisotropy = 4;
+    return t;
+  }
+
   // 판 N 장짜리 빌보드 메시 하나를 만든다(핍·표식이 같은 틀을 쓴다).
   function plateMesh(count, mat, extra) {
     const geo = new THREE.BufferGeometry();
@@ -1436,6 +1556,72 @@ export function createEnemySystem(opts) {
   try { markMat.uniforms.uTex.value = makeMarkTexture(); } catch (err) {
     if (DEV) console.warn('[enemy] 표식 텍스처를 못 구웠다. 표식 없이 돈다.', err);
   }
+
+  // ── ★데미지 숫자 판 ──
+  // 자리 한 칸 = 판 한 장. 뭉치 20개 × 다섯 자리 = 판 100장이 정점 버퍼 한 벌에 산다.
+  const dgA = new Float32Array(DMG_MAX_POP * DMG_MAX_DIGITS * 4);        // 알파
+  const dgTint = new Float32Array(DMG_MAX_POP * DMG_MAX_DIGITS * 4 * 3); // 글자 속 색(선형)
+  const dmgMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, depthTest: false, fog: false,
+    side: THREE.DoubleSide, blending: THREE.NormalBlending,
+    // 외곽선·크림 테 색. ★선형 HDR 이다(위 FLASH_R 주석의 파이프라인 설명 참조).
+    //   외곽선은 진한 밤색이라 밝은 흙바닥·하늘 어디에 얹혀도 글자가 안 사라지고,
+    //   크림 테는 처치타(주황-빨강)를 어두운 배경에서 떼어 놓는 겹이다.
+    uniforms: { uTex: { value: null },
+                uOl: { value: new THREE.Vector3(0.016, 0.008, 0.007) },
+                uRim: { value: new THREE.Vector3(0.86, 0.79, 0.56) } },
+    vertexShader: `
+      attribute float aA; attribute vec3 aTint;
+      varying vec2 vU; varying float vA; varying vec3 vT;
+      void main(){ vU = uv; vA = aA; vT = aTint;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      uniform sampler2D uTex; uniform vec3 uOl; uniform vec3 uRim;
+      varying vec2 vU; varying float vA; varying vec3 vT;
+      void main(){
+        // ★!(a > x) 꼴. a <= x 로 쓰면 NaN 이 통과해 블룸이 화면을 검게 만든다(LOG 함정).
+        if (!(vA > 0.004)) discard;
+        vec4 t = texture2D(uTex, vU);
+        float a = t.a * vA;
+        if (!(a > 0.02)) discard;
+        // R = 글자 속 · G = 외곽선 · B = 크림 테. 셋은 경계 한 겹에서만 섞이므로
+        // 그냥 더하면 그게 곧 부드러운 전환이다(합은 언제나 1 언저리다).
+        // 속은 **위가 밝고 아래가 짙다**(메이플 숫자의 세로 색계단). vU.y 는 칸 안의
+        // 세로 자리라 그대로 계단이 된다(1 = 위).
+        vec3 fill = mix(vT * vec3(1.0, 0.55, 0.14), vT, vU.y);
+        gl_FragColor = vec4(uOl * t.g + uRim * t.b + fill * t.r, a);
+      }`,
+  });
+  const dmgMesh = plateMesh(DMG_MAX_POP * DMG_MAX_DIGITS, dmgMat,
+    { aA: { arr: dgA, n: 1 }, aTint: { arr: dgTint, n: 3 } });
+  dmgMesh.renderOrder = 8;            // 핍·표식(7)보다 위. 숫자는 아무것에도 안 가린다
+  try { dmgMat.uniforms.uTex.value = makeDigitTexture(); } catch (err) {
+    if (DEV) console.warn('[enemy] 숫자 텍스처를 못 구웠다. 숫자 없이 돈다.', err);
+  }
+  // 글자 속 색(선형 HDR). 아래로 갈수록 셰이더가 주황 쪽으로 눕힌다.
+  //   일반타 = 크림-금색 / 처치타 = 주황-빨강.
+  // ── ★왜 1.0 이 아니라 0.6 대인가 (두 번 밟은 함정) ──
+  // 이 값은 톤매핑 **전**이다. three 의 ACES 는 안에서 `color *= exposure / 0.6` 을 하고
+  // (main.js exposure 1.05) 곧 **입력이 1.75배로 들어간다.** 그래서 1.0 으로 칠하면
+  // 화면에서는 그냥 흰 글자가 나온다 - 실제로 첫 두 판이 그랬다.
+  // 크림·금색을 남기려면 0.6 대에서 칠하고 채널 비율로만 색을 만들어야 한다.
+  // ★블룸(임계 1.02)도 이 값으로 판정하므로 여기서 안 번지는 것이 덤으로 보장된다
+  //   - 글자가 번지면 오히려 못 읽는다.
+  const DMG_TINT_HIT = [0.72, 0.65, 0.40];
+  const DMG_TINT_KILL = [0.66, 0.20, 0.05];
+  // 뭉치 풀. 자릿수는 별도 배열에 담는다(뭉치당 DMG_MAX_DIGITS 칸, **1의 자리부터**).
+  const dmgPops = [];
+  for (let i = 0; i < DMG_MAX_POP; i++) {
+    dmgPops.push({ on: false, x: 0, y: 0, z: 0, t: 0, n: 0, ox: 0, oy: 0, sc: 1, kill: false });
+  }
+  const dmgDig = new Int8Array(DMG_MAX_POP * DMG_MAX_DIGITS);
+  let dmgSpawned = 0, dmgBad = 0, dmgShown = 0;
+  // 마지막으로 그린 뭉치의 칸 높이 / 화면 높이. 판독성 판정의 자다(아래 dmg 창구).
+  let dmgFrac = 0, dmgFracKind = 0;
+  // 칸 높이 중 **눈에 보이는 글자**(속 + 외곽선)가 차지하는 몫. 굽는 값에서 나온다:
+  //   폰트 96px 의 숫자 높이는 대략 0.72*96 = 69px, 거기에 외곽선 36px 이 붙고, 칸은 DIG_CH.
+  //   판독성 판정은 속만이 아니라 이 값으로 본다(사람 눈에는 테까지가 글자다).
+  const GLYPH_OF_CELL = (69 + 36) / DIG_CH;
 
   // 표식 색조. 발견은 주홍(경보), 수색·놓침은 종이색(중립), 공격은 진홍(임박).
   const MK_TINT = [
@@ -1568,6 +1754,163 @@ export function createEnemySystem(opts) {
       markMesh.geometry.attributes.aTint.needsUpdate = true;
     }
     plateCount.pip = pn; plateCount.mark = mn;
+  }
+
+  // -------------------------------------------------------------------------
+  // ── ★큰 데미지 숫자 (오너 지시 2026-08-12) ──
+  //
+  // 명중한 그 지점 위에 숫자 뭉치가 톡 튀어오른다. 옛 주홍 틴트 플래시가 하던 일
+  // ("맞았다")을 이제 이 숫자가 한다 - 그런데 플래시가 못 하던 말을 하나 더 한다:
+  // **얼마나** 아팠는가. 그래서 값은 늘 실제로 가한 피해에서 나온다(SWORD_DMG·DMG_SHOW).
+  //
+  // 늙는 시계는 **게임시계**(update 가 받는 dt)다. 히트스톱이 dt 를 0 으로 눌러 두면
+  // 숫자도 같이 붙들린다 = 멈춘 화면에서 숫자만 혼자 흘러가는 그림이 안 나온다.
+  // -------------------------------------------------------------------------
+  const _dcen = new THREE.Vector3();
+
+  // 숫자 뭉치 하나 띄우기. amount = 화면에 띄울 값(이미 환산된 수), kill = 처치타인가
+  function spawnDmgPop(x, y, z, amount, kill) {
+    // ★!(a > x) 꼴로 거른다. NaN 이 들어오면 자리 좌표가 통째로 NaN 이 되어 판 하나가
+    //   화면을 가로지르는 삼각형이 된다(그리고 아무도 원인을 못 찾는다).
+    if (!(amount > 0)) { dmgBad++; return; }
+    if (!(isFinite(x) && isFinite(y) && isFinite(z))) { dmgBad++; return; }
+    let v = Math.round(amount);
+    if (!(v > 0)) v = 1;
+    if (v > 99999) v = 99999;              // 다섯 자리 상한(판 개수 계약)
+    // 빈자리 찾기. 다 찼으면 **제일 오래된 것**을 밀어낸다(최신 타격이 늘 보여야 한다).
+    let slot = 0, oldT = -1, found = false;
+    for (let i = 0; i < DMG_MAX_POP; i++) {
+      if (!dmgPops[i].on) { slot = i; found = true; break; }
+      if (dmgPops[i].t > oldT) { oldT = dmgPops[i].t; slot = i; }
+    }
+    // ── 겹침 흩뿌림 ──
+    // 광역타로 한 번에 여럿을 베면 숫자가 한 자리에 포개져 한 덩어리로 읽힌다.
+    // 지금 이 근처에 떠 있는 뭉치 수를 세서 좌·우로 번갈아 비키고 조금씩 올린다.
+    let near = 0;
+    const R2 = DMG_NEAR * DMG_NEAR;
+    for (let i = 0; i < DMG_MAX_POP; i++) {
+      const q = dmgPops[i];
+      if (!q.on || (found && i === slot)) continue;
+      const dx = q.x - x, dy = q.y - y, dz = q.z - z;
+      if (dx * dx + dy * dy + dz * dz < R2) near++;
+    }
+    const p = dmgPops[slot];
+    p.on = true; p.t = 0;
+    p.x = x; p.y = y; p.z = z;
+    p.kill = !!kill;
+    p.sc = kill ? DMG_KILL_SC : 1;
+    p.ox = near === 0 ? 0 : ((near & 1) ? 1 : -1) * (0.30 + 0.24 * ((near - 1) >> 1));
+    p.oy = 0.13 * near;
+    // 자릿수 쪼개기. 1의 자리부터 담는다(그리는 쪽이 거꾸로 읽는다).
+    const base = slot * DMG_MAX_DIGITS;
+    let n = 0, r = v;
+    while (n < DMG_MAX_DIGITS) {
+      dmgDig[base + n] = r % 10; r = (r / 10) | 0; n++;
+      if (r <= 0) break;
+    }
+    p.n = n;
+    dmgSpawned++;
+  }
+
+  // 늙히고(게임시계) 정점 버퍼에 쓴다. updatePlates 와 같은 틀이라 드로우콜은 1이다.
+  function updateDmgPops(dt) {
+    let alive = 0;
+    for (let i = 0; i < DMG_MAX_POP; i++) {
+      const p = dmgPops[i];
+      if (!p.on) continue;
+      p.t += dt;
+      // ★!(t < TTL) 꼴. NaN 이 끼면 여기서 즉시 거둬진다(영원히 떠 있는 판이 없다).
+      if (!(p.t < DMG_TTL)) { p.on = false; continue; }
+      alive++;
+    }
+    if (!camera || !dmgMat.uniforms.uTex.value || alive === 0) {
+      dmgMesh.visible = false; dmgShown = 0; return;
+    }
+    _plR.setFromMatrixColumn(camera.matrixWorld, 0);
+    _plU.setFromMatrixColumn(camera.matrixWorld, 1);
+    const dPos = dmgMesh.geometry.attributes.position.array;
+    const dUv = dmgMesh.geometry.attributes.uv.array;
+    const cx0 = camera.position.x, cz0 = camera.position.z;
+    let dn = 0;
+    for (let i = 0; i < DMG_MAX_POP; i++) {
+      const p = dmgPops[i];
+      if (!p.on) continue;
+      const ddx = p.x - cx0, ddz = p.z - cz0;
+      if (ddx * ddx + ddz * ddz > PLATE_MAX_D * PLATE_MAX_D) continue;
+      // ── 모션 세 마디 ──
+      const t = p.t;
+      let a = 1, sc, up;
+      if (t < DMG_RISE) {
+        // ① 톡 튀어오른다. 끝이 빨리 잦아드는 easeOut 이라 "튀었다"가 남는다.
+        const u = t / DMG_RISE;
+        const e = 1 - (1 - u) * (1 - u);
+        up = DMG_UP1 * e;
+        sc = 0.42 + 0.86 * e;              // 0.42 -> 1.28 (한 번 크게 부풀었다가)
+      } else if (t < DMG_RISE + DMG_HOLD) {
+        // ② 잠깐 선다. 부푼 것만 0.09초에 제 크기로 가라앉는다.
+        const u = (t - DMG_RISE) / DMG_HOLD;
+        up = DMG_UP1 + 0.05 * u;
+        sc = 1.28 - 0.28 * Math.min(1, u * 3.4);
+      } else {
+        // ③ 흐려지며 오른다.
+        const u = (t - DMG_RISE - DMG_HOLD) / DMG_FADE;
+        up = DMG_UP1 + 0.05 + DMG_UP2 * u;
+        sc = 1;
+        a = 1 - u * u;
+      }
+      const cellH = DMG_H * p.sc * sc;
+      const cellW = cellH * (DIG_CW / DIG_CH);
+      const adv = cellW * digAdv;
+      const x0 = p.ox - adv * (p.n - 1) * 0.5;
+      const cy = p.y + up + p.oy;
+      // ── ★"게임 거리에서 읽히나"를 눈이 아니라 수로 남긴다 ──
+      // 칸 높이가 화면 높이의 몇 분의 몇인가. 카메라까지의 실제 거리로 재므로
+      // fov·거리·줌이 바뀌면 이 값이 같이 움직인다(상수로 박은 산수가 아니다).
+      // 글자 획은 칸의 GLYPH_OF_CELL 배다(칸에는 외곽선 여백이 들어 있다).
+      {
+        const dcz = camera.position.y - cy;
+        const dcam = Math.sqrt(ddx * ddx + ddz * ddz + dcz * dcz);
+        if (dcam > 0.5) {
+          dmgFrac = cellH / (2 * Math.tan(camera.fov * Math.PI / 360) * dcam);
+          dmgFracKind = p.kill ? 1 : 0;
+        }
+      }
+      const c = p.kill ? DMG_TINT_KILL : DMG_TINT_HIT;
+      const base = i * DMG_MAX_DIGITS;
+      for (let k = 0; k < p.n; k++) {
+        if (dn >= DMG_MAX_POP * DMG_MAX_DIGITS) break;
+        const d = dmgDig[base + p.n - 1 - k];      // 1의 자리부터 담았으니 거꾸로 읽는다
+        const o = dn * 4;
+        // 자리 이동은 **카메라 오른쪽**으로 준다. 월드 x 로 주면 시점이 돌 때 숫자가
+        // 앞뒤로 늘어져 보인다(판은 이미 빌보드라 가로축이 곧 화면 가로축이다).
+        _dcen.set(p.x, cy, p.z).addScaledVector(_plR, x0 + adv * k);
+        putPlate(dPos, dUv, o, _dcen.x, _dcen.y, _dcen.z,
+          cellW * 0.5, cellH * 0.5, d / 10, (d + 1) / 10);
+        for (let q = 0; q < 4; q++) {
+          dgA[o + q] = a;
+          dgTint[(o + q) * 3] = c[0];
+          dgTint[(o + q) * 3 + 1] = c[1];
+          dgTint[(o + q) * 3 + 2] = c[2];
+        }
+        dn++;
+      }
+    }
+    dmgMesh.geometry.setDrawRange(0, dn * 6);
+    dmgMesh.visible = dn > 0;
+    if (dn) {
+      dmgMesh.geometry.attributes.position.needsUpdate = true;
+      dmgMesh.geometry.attributes.uv.needsUpdate = true;
+      dmgMesh.geometry.attributes.aA.needsUpdate = true;
+      dmgMesh.geometry.attributes.aTint.needsUpdate = true;
+    }
+    dmgShown = dn;
+  }
+
+  function clearDmgPops() {
+    for (let i = 0; i < DMG_MAX_POP; i++) dmgPops[i].on = false;
+    dmgMesh.geometry.setDrawRange(0, 0);
+    dmgMesh.visible = false;
+    dmgShown = 0;
   }
 
   // ── 상태 ──
@@ -1782,6 +2125,8 @@ export function createEnemySystem(opts) {
       for (const s of g.spots) spawnAt(s, g);
     }
     for (const c of corpses) if (c.on) endCorpse(c);
+    // 판을 새로 깔면 떠 있던 숫자도 같이 거둔다(없으면 이전 판의 숫자가 허공에 남는다).
+    clearDmgPops();
   }
 
   // ── HUD (CSS 는 파일 안 만들고 여기서 주입) ──
@@ -2007,7 +2352,9 @@ export function createEnemySystem(opts) {
         if (segSegDist2(_segA, _segB, _capA, _capB, _hitP) > rad * rad) continue;
         e.lastSwing = swingId;
         const hpBefore = e.hp;
-        e.hp -= 1;
+        e.hp -= SWORD_DMG;
+        // ★e.flash 는 "방금 맞았다"의 시계로만 남는다. 몸에 얹히는 색은 0 이다
+        //   (FLASH_R 선언부 - 오너가 끄라고 한 그 번쩍이다).
         e.flash = 1;
         // 체력 핍을 띄운다. 맞은 놈만 1.2초. (죽으면 아래에서 despawn 되니 안 뜬다)
         e.pipT = PIP_SHOW;
@@ -2016,6 +2363,9 @@ export function createEnemySystem(opts) {
         if (grp) aggroGroup(grp);                   // 맞으면 그 무리가 같이 온다
         const killed = e.hp <= 0;
         const hx = _hitP.x, hy = _hitP.y, hz = _hitP.z;
+        // ★큰 데미지 숫자. **칼날이 실제로 닿은 그 점** 위에 띄운다(머리 위가 아니다 -
+        //   벤 자리에 떠야 "이 한 대"와 숫자가 한 사건으로 읽힌다).
+        spawnDmgPop(hx, hy + DMG_ANCHOR_Y, hz, SWORD_DMG * DMG_SHOW, killed);
         if (killed) {
           kills++;
           // ── ★유령 킬 추적 창구 ──
@@ -2773,6 +3123,9 @@ export function createEnemySystem(opts) {
 
     updateCorpses(dt);
     updateInk(dt);
+    // ★게임시계로 늙는다. 위 update 는 ctx.paused 면 통째로 일찍 빠져나가고, 히트스톱은
+    //   main.js 가 dt 를 0 쪽으로 눌러서 넣으므로 둘 다 여기서 저절로 붙들린다.
+    updateDmgPops(dt);
     updatePlates();
 
     // ── 예열 판 거두기 (6프레임이면 확실히 한 번은 그려졌다) ──
@@ -2858,6 +3211,31 @@ export function createEnemySystem(opts) {
     // 머리 위 판이 실제로 몇 장 서 있나(눈 없이 회귀를 잡는 창구)
     get plates() { return { pip: plateCount.pip, mark: plateCount.mark,
                             tex: !!markMat.uniforms.uTex.value }; },
+    // ── 데미지 숫자 창구 ──
+    // 950프레임 안정성 판정이 이걸 본다. bad 는 NaN·음수라 **버린** 요청 수다(0 이어야 한다).
+    // nan 은 지금 떠 있는 뭉치 중 좌표·나이가 깨진 것(정의상 늘 0 이어야 한다).
+    get dmg() {
+      let alive = 0, nan = 0, digits = 0, maxT = 0;
+      for (const p of dmgPops) {
+        if (!p.on) continue;
+        alive++; digits += p.n;
+        if (!(isFinite(p.x) && isFinite(p.y) && isFinite(p.z) && p.t >= 0)) nan++;
+        if (p.t > maxT) maxT = p.t;
+      }
+      return { alive, digits, plates: dmgShown, nan,
+               spawned: dmgSpawned, bad: dmgBad,
+               maxT: +maxT.toFixed(3), ttl: DMG_TTL,
+               h: DMG_H, killSc: DMG_KILL_SC, adv: +digAdv.toFixed(3),
+               show: DMG_SHOW, per: SWORD_DMG * DMG_SHOW,
+               tex: !!dmgMat.uniforms.uTex.value,
+               // 마지막으로 그린 뭉치의 화면 크기. cellPx = 칸 · glyphPx = 글자 획
+               // (screenH 를 720 으로 잡은 값. 해상도가 달라지면 비례해 커진다)
+               cellPx: +(dmgFrac * 720).toFixed(1),
+               glyphPx: +(dmgFrac * GLYPH_OF_CELL * 720).toFixed(1),
+               fracKind: dmgFracKind,
+               // 옛 피격 플래시 세기(0 이어야 한다. 오너 지시로 껐다)
+               flash: [FLASH_R, FLASH_G, FLASH_B] };
+    },
     // 지금 살아 있는 놈들의 리액션 상태. 경직·예비 자세가 실제로 도는지 숫자로 본다.
     get react() {
       let stun = 0, wind = 0, pip = 0, flash = 0;
@@ -2917,6 +3295,10 @@ export function createEnemySystem(opts) {
     // ── 플래시 고정 창구 ──
     // 번쩍임의 꼭대기를 세워 두고 화면을 찍는다(순백 회귀를 눈이 아니라 픽셀로 잡는다).
     // 인자 없이 부르면 해제. 0~1 을 주면 살아있는 개체·시체 모두 그 값으로 고정된다.
+    // ★2026-08-12 이후로는 **화면이 안 변한다**(FLASH_R/G/B = 0, 오너 지시). 창구는
+    //   그대로 살려 둔다 - 플래시를 되살리는 날 이게 A/B 를 재는 유일한 자다.
+    //   실제로 이번 제거를 증명한 것도 이 창구다(12쌍 켬/끔 평균: 옛 판 R +18.2 ->
+    //   새 판 -1.1, 잡음 안. renders/history/v98_wave12/dmgnum/flash/).
     setFlashHold(v) {
       flashHold = (v === undefined || v === null || v < 0) ? -1 : Math.min(1, +v);
       return flashHold;
