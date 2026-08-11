@@ -38,10 +38,33 @@
   상사변환을 풀고, 변환 뒤 실제로 가장 먼 정점이 칼끝이 아니면 그 정점을 새 기준으로
   삼아 다시 푼다(반복 조임). 그러면 방향각 오차와 리치(pmax)가 동시에 0 으로 간다.
 
-★길이(리치)는 기본값에서 안 변한다
+★★2026-08-12 오너 지시: "칼 크기 좀 키워, 손잡이에 손 오게 하고. 거의 1.5배."
+  그래서 정합이 **두 판**이 됐다. [4] 는 예전 그대로(구 카타나 자리에 얹는다)를 풀고,
+  [4b] 가 그 결과를 다시 옮긴다. 두 판으로 나눈 이유는 [4] 가 만들어 주는 **칼날 평면
+  (roll)** 이 그대로 필요하기 때문이다 — 자루로 다시 앉힐 때 축은 3도쯤 돌지만 roll 은
+  안 건드려야 한다.
+
+  [4b] 가 푸는 것 (SCALE_K / GRIP_T)
+    (1) 크기를 SCALE_K 배 한다(정점에 굳힌다. 오브젝트 스케일은 계속 1).
+    (2) **자루(gr_ 구간)의 한 점을 주먹 중심에 앉힌다.** 여기가 오너가 말한 곳이다.
+        받은 칼은 자루가 짧아(전체의 6.2%) 예전 정합에서는 주먹이 자루보다 **13.65단위
+        = 16.6cm 칼끝 쪽**에 있었다. 즉 손이 자루가 아니라 **코등이를 쥐고** 있었고
+        자루·자루끝은 주먹 아래에 통째로 떠 있었다(probe 로 실측한 값이다).
+    (3) 그러면서 **손목원점->칼끝 방향(dir)은 그대로 둔다.** 이게 궤적·판정의 축이라
+        여기가 돌면 12차에서 맞춰 둔 것이 전부 어긋난다. 그래서 칼끝을 U_O 반직선 위의
+        어디에 놓을지(P)를 **풀어서** 정한다:
+            |U_O*P - FC| = L1     (L1 = 자루앵커~칼끝 거리 x SCALE_K)
+            P = FC·U_O + sqrt((FC·U_O)^2 - |FC|^2 + L1^2)
+        회전은 (자루앵커->칼끝) 을 (FC->U_O*P) 로 보내는 **최소회전**이라 roll 이 안 샌다.
+
+★길이(리치)는 SCALE_K 를 주면 **커진다**. 그게 이번 지시다
   bladeA = dir*pmax*0.18(코등이) / bladeB = dir*pmax*0.98(칼끝) 이 그대로 히트 세그먼트와
-  궤적 발원점이다. 칼끝을 구 칼과 **같은 자리**에 얹으므로 pmax 가 소수점까지 같다.
-  일부러 길이를 바꾸고 싶으면 LEN_K 를 준다(1.0 이 아니면 리치가 그만큼 변한다).
+  궤적 발원점이다. SCALE_K=1 · GRIP_T<0 이면 칼끝을 구 칼과 **같은 자리**에 얹으므로
+  pmax 가 소수점까지 같다(2026-08-11 판. md5 a6461e89025a3791930888782d55f08a).
+  SCALE_K=1.5 · GRIP_T=0.5 면 칼이 1.5배가 되는 동시에 자루가 주먹까지 올라오므로
+  pmax 는 73.87 -> 132 쯤으로 **1.79배**가 된다(칼이 1.5배 + 손이 자루끝 쪽으로 내려감).
+  궤적은 dir·pmax 를 그대로 따라가니 저절로 커진 칼끝에서 발원한다.
+  일부러 길이만 바꾸고 싶으면 LEN_K 를 준다([4] 판에서 먹는다).
 
 ★함정 (하나라도 밟으면 조용히 망가진다)
   1) fps: 임포트 **전에** 30 고정
@@ -64,7 +87,11 @@
   SWORD_GLB  새 칼         기본 incoming/new_sword.glb
   OUT_GLB    결과          기본 web/basic2.glb  (임시파일에 쓰고 os.replace)
   SLOT       바꿀 칼 키     기본 nokseun (1번)
-  LEN_K      칼끝 거리 배율 기본 1.0 (구 칼과 같은 리치)
+  LEN_K      칼끝 거리 배율 기본 1.0 (구 칼과 같은 리치. [4] 판에서 먹는다)
+  SCALE_K    칼 전체 배율   기본 1.5 (오너 지시. 1.0 이면 2026-08-11 판 그대로)
+  GRIP_T     주먹이 자루의 어디를 쥐나  기본 0.5
+             0=자루의 코등이쪽 끝 · 0.5=자루 한가운데 · 1=자루끝쪽.
+             **음수면 [4b] 를 통째로 끈다**(자루 재정렬도 확대도 안 한다)
   ROLL       칼날 평면 추가 회전(도)  기본 0
   ROLL_FLIP  칼날 평면 180도 뒤집기   기본 0
   SW_TEX     칼 텍스처 최대 변  기본 1024 (게임 거리에서 2048 과 구분 불가)
@@ -98,6 +125,8 @@ SWORD_GLB = _p(os.environ.get("SWORD_GLB")) or os.path.join(INC, "new_sword.glb"
 OUT_GLB = _p(os.environ.get("OUT_GLB")) or os.path.join(WEB, "basic2.glb")
 SLOT = os.environ.get("SLOT", "nokseun")
 LEN_K = float(os.environ.get("LEN_K", "1.0"))
+SCALE_K = float(os.environ.get("SCALE_K", "1.5"))
+GRIP_T = float(os.environ.get("GRIP_T", "0.5"))
 ROLL = math.radians(float(os.environ.get("ROLL", "0")))
 ROLL_FLIP = os.environ.get("ROLL_FLIP", "0") == "1"
 SW_TEX = int(os.environ.get("SW_TEX", "1024"))
@@ -402,6 +431,120 @@ print("  그 5개의 방향 벌어짐 %s도"
       % [round(math.degrees(math.acos(max(-1, min(1, p.normalized() @ U_O)))), 4) for p in srt])
 assert ANG < 0.02, "칼끝방향이 %.4f도 어긋났다" % ANG
 assert abs(PMAX_N - PMAX_O * LEN_K) < 1e-3, "리치가 틀어졌다"
+
+# ================================================ 4b) 확대 + 자루 파지 재정렬
+# 오너 지시("칼 1.5배 · 손잡이에 손 오게"). 위 [4] 는 손대지 않았다 — 저기서 나온
+# roll(칼날 평면)을 그대로 쓰려고 두 판으로 나눈 것이다. 여기서 하는 일은 딱 둘:
+#   · 크기 x SCALE_K
+#   · **자루(gr_) 위의 한 점**을 주먹 중심 FC 로 옮긴다
+# 그러면서 손목원점->칼끝 방향(U_O)은 건드리지 않는다. 그래서 칼끝을 U_O 반직선
+# 위 어디에 놓을지는 고르는 게 아니라 **푸는 것**이다(헤더 ★★ 절 공식).
+
+
+def rot_between(a, b):
+    """a 를 b 로 보내는 최소회전. 축 밖으로 도는 성분이 없어 roll 이 안 샌다."""
+    a = a.normalized()
+    b = b.normalized()
+    c = a.cross(b)
+    d = max(-1.0, min(1.0, a @ b))
+    if c.length < 1e-12:                              # 같은 방향(또는 정반대)
+        return Matrix.Identity(3) if d > 0 else Matrix.Rotation(math.pi, 3, a.orthogonal())
+    return Matrix.Rotation(math.acos(d), 3, c.normalized())
+
+
+def axial(pts, ax):
+    t = [p @ ax for p in pts]
+    return min(t), max(t)
+
+
+if GRIP_T >= 0.0:
+    print("=" * 78)
+    print("[4b] 확대 x%.3f + 자루 파지 재정렬 (GRIP_T %.2f)" % (SCALE_K, GRIP_T))
+    # 자루 정점 = **면 기준**으로 고른다([6] 의 gr_ 배분과 글자 그대로 같은 식이라
+    # "빨간색으로 칠해지는 곳" 과 앵커가 어긋나지 않는다)
+    GSET = set()
+    for poly in new.data.polygons:
+        x = sum(TT[vi] for vi in poly.vertices) / len(poly.vertices)
+        if CUT_GRIP <= x < CUT_POMMEL:
+            GSET.update(poly.vertices)
+    assert len(GSET) > 30, "자루 정점이 너무 적다(%d)" % len(GSET)
+    AXW = (R @ (-AX)).normalized()                    # 칼 제 몸의 긴 축(칼끝 쪽 +)
+    GP = [NL[i] for i in sorted(GSET)]
+    CG = Vector((0, 0, 0))
+    for p in GP:
+        CG += p
+    CG /= len(GP)
+    g0, g1 = axial(GP, AXW)                           # 자루의 축 범위(제 몸 축 기준)
+    # GRIP_T 0=코등이쪽 끝(g1) · 1=자루끝쪽(g0)
+    ANCHOR = CG + AXW * ((g1 - GRIP_T * (g1 - g0)) - CG @ AXW)
+    print("  자루 정점 %d  중심 %s  축범위 %.3f..%.3f  앵커 %s"
+          % (len(GP), tuple(round(x, 3) for x in CG), g0, g1,
+             tuple(round(x, 3) for x in ANCHOR)))
+    print("  주먹중심 FC %s  (손목원점에서 %.3f)"
+          % (tuple(round(x, 3) for x in FC), FC.length))
+
+    # ★반복 조임. [4] 와 같은 뜻인데 **칼끝 후보를 한 정점으로 잡으면 안 된다.**
+    #   [4] 는 0.000000도까지 갔지만 그건 그 배치에서 최원점이 **같은 자리에 겹친
+    #   이음매 복제 정점 두 개**였기 때문이다. 1.78배로 다시 앉히면 최원점이 칼끝
+    #   좌우로 갈린 **다른 두 정점**(2060/2063, 0.0385단위 떨어져 있다)으로 바뀐다.
+    #   이 둘은 칼 중심선에 대해 대칭이라 **어떤 강체 배치로도 둘을 동시에 U_O 위에
+    #   못 올린다** — 0.0168도가 이 메시의 바닥이다(반지름 131.5에서 0.5mm).
+    #   한 정점만 앵커로 쓰면 매 회차 둘이 자리를 바꿔 12회를 다 돌고도 안 멈춘다.
+    #   그래서 **동률 칼끝들의 무게중심**을 앵커로 쓴다. 그 자리가 고정점이라 두 번에
+    #   멈추고, 남는 0.0168도는 계약(0.02도)을 지킨다.
+    FCU = FC @ U_O
+    FC2 = FC.length_squared
+    A = NL[NL.index(far)]                             # [4] 가 찾아 놓은 칼끝에서 출발
+    NL2, prev = NL, None
+    for it in range(16):
+        d0 = A - ANCHOR                               # 앵커 -> 칼끝 (재정렬 전)
+        L1 = d0.length * SCALE_K                      # 재정렬 뒤 앵커 -> 칼끝
+        disc = FCU * FCU - FC2 + L1 * L1
+        assert disc > 0, "칼끝을 U_O 위에 놓을 수 없다(자루가 너무 짧다)"
+        P = FCU + math.sqrt(disc)
+        R2 = rot_between(d0, U_O * P - FC)
+        NL2 = [FC + (R2 @ (p - ANCHOR)) * SCALE_K for p in NL]
+        m2 = max(p.length_squared for p in NL2)
+        tie = [i for i, p in enumerate(NL2) if p.length_squared > m2 * (1 - 2e-5)]
+        a2 = max(math.degrees(math.acos(max(-1, min(1, NL2[i].normalized() @ U_O))))
+                 for i in tie)
+        print("   조임 %d  pmax %.5f  칼끝방향 오차 %.6f도  (축 %.3f도 · 동률 칼끝 %d개)"
+              % (it, math.sqrt(m2), a2,
+                 math.degrees(math.acos(max(-1, min(1, d0.normalized()
+                                                    @ (U_O * P - FC).normalized())))),
+                 len(tie)))
+        if a2 < 1e-4 or (prev is not None and abs(prev - a2) < 1e-9):
+            break
+        prev = a2
+        A = Vector((0, 0, 0))
+        for i in tie:
+            A += NL[i]
+        A /= len(tie)
+    NL = NL2
+    S = S * SCALE_K
+    far = max(NL, key=lambda p: p.length_squared)
+    PMAX_N = far.length
+    ANG = math.degrees(math.acos(max(-1, min(1, far.normalized() @ U_O))))
+    print("  pmax  %.5f -> %.5f  (x%.4f)   칼끝방향 오차 %.6f도"
+          % (PMAX_O, PMAX_N, PMAX_N / PMAX_O, ANG))
+    print("  게임 좌표 손목~칼끝  %.4f m -> %.4f m"
+          % (PMAX_O * A2W.to_scale().x * 1.75 / 1.4371,
+             PMAX_N * A2W.to_scale().x * 1.75 / 1.4371))
+    assert ANG < 0.02, "칼끝방향이 %.4f도 어긋났다" % ANG
+
+    # ---- 파지 검산: 자루가 주먹 안에 들어왔나 (오너 지시의 합격선) ----
+    CMU = A2W.to_scale().x * 1.75 / 1.4371 * 100.0    # 1단위 -> 게임 cm
+    GP2 = [NL[i] for i in sorted(GSET)]
+    ga, gb = axial(GP2, U_O)
+    fa, fb = axial(fist, U_O)
+    ov = max(0.0, min(gb, fb) - max(ga, fa))
+    print("  [파지] 주먹 축 %7.2f..%7.2f (폭 %.1fcm) / 자루 축 %7.2f..%7.2f (길이 %.1fcm)"
+          % (fa, fb, (fb - fa) * CMU, ga, gb, (gb - ga) * CMU))
+    print("         겹침 %.2f단위 = 자루의 %.0f%% (주먹의 %.0f%%)"
+          % (ov, 100.0 * ov / (gb - ga), 100.0 * ov / (fb - fa)))
+    dcen = ((ga + gb) * 0.5 - (fa + fb) * 0.5) * CMU
+    print("         자루중심 - 주먹중심 = %+.1fcm (0 에 가까울수록 한가운데를 쥔다)" % dcen)
+    assert ov > 0.6 * (gb - ga), "주먹이 자루를 %.0f%% 밖에 안 덮는다" % (100 * ov / (gb - ga))
 
 # 새 자루축이 주먹을 지나는지
 gn = [p for p, x in zip(NL, TT) if x >= CUT_GRIP]
