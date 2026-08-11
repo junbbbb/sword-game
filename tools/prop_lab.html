@@ -1,0 +1,173 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>소품 실험대 — 변수 하나만 갈아 끼운다</title>
+<!--
+  왜 필요한가
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  게임 화면에서 소품을 재면 요괴·보스·바닥·안개가 같이 찍혀서 무엇이 무엇 때문인지
+  안 갈린다(첫 판 실측이 그랬다 — 보스가 프레임에 들어와 붉은 빛이 섞였다).
+  여기는 **소품 하나만** 놓고 web/main.js 의 조명·톤매핑을 글자 그대로 옮긴 실험대다.
+
+  ★main.js 를 고치면 이 파일도 거짓이 된다. 조명 세 줄·노출·색공간을 같이 옮겨라.
+
+  손잡이 (쿼리)
+    kind=rock          web/props/<kind>.glb
+    lod=hi|low         저폴리는 web/props/low/. ★게임은 수풀 말고 전부 low 를 쓴다
+    tex=now|orig|none  orig 는 incoming 의 Meshy 원본 base_color (tools/ 가 구워 둔 것)
+    ramp=2|3|4|lambert 2 = three 기본(gradientMap 없음, 0.7/1.0 두 단)
+    nrm=1              Meshy 원본 노멀맵을 물린다(지금 glb 에는 아예 없다)
+    ink=1              소품만 먹으로 — 실루엣 자체를 본다
+    yaw=..&pitch=..&dist=..   기본 yaw 0.6 pitch 0.30 dist 4.2 (물체 크기에 맞춰 자동)
+    grid=1             1m 격자(크기 감각용)
+  창구: window.__cap() (JPEG dataURL) · window.__ready
+-->
+<style>html,body{margin:0;height:100%;background:#9fc2d8}canvas{display:block}</style>
+<canvas id=cv></canvas>
+<script type="module">
+import * as THREE from '../web/lib/three.module.js';
+import { GLTFLoader } from '../web/lib/GLTFLoader.js';
+
+const Q = new URLSearchParams(location.search);
+const kind  = Q.get('kind') || 'rock';
+const lod   = Q.get('lod') || 'low';        // ★게임 평시값이 low 다(props.js)
+const texM  = Q.get('tex') || 'now';
+const rampM = Q.get('ramp') || '2';
+const useN  = Q.get('nrm') === '1';
+const ink   = Q.get('ink') === '1';
+const W = +(Q.get('w') || 900), H = +(Q.get('h') || 900);
+
+// ── main.js 그대로 ──
+const cv = document.getElementById('cv');
+const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+renderer.setPixelRatio(2);
+renderer.setSize(W, H);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const SKY = 0x9fc2d8;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(ink ? 0xffffff : SKY);
+scene.add(new THREE.HemisphereLight(0xcfe4f2, 0x5b5140, 1.55));
+const key = new THREE.DirectionalLight(0xfff0d4, 2.35);
+key.position.set(5, 9, 4);
+key.castShadow = true;
+key.shadow.mapSize.set(1536, 1536);
+key.shadow.camera.near = 1; key.shadow.camera.far = 44;
+key.shadow.camera.left = -6; key.shadow.camera.right = 6;
+key.shadow.camera.top = 6; key.shadow.camera.bottom = -6;
+key.shadow.bias = -0.0012; key.shadow.normalBias = 0.02;
+scene.add(key, key.target);
+const rim = new THREE.DirectionalLight(0x9dc8ee, 0.55);
+rim.position.set(-6, 4, -5);
+scene.add(rim);
+
+// 바닥 — 게임 잔디의 화면 평균색(자 v96 실측 근처)으로 둔 무지 판.
+// ★질감을 안 넣는 이유: 소품을 재는 자리라 바닥이 시끄러우면 크롭이 오염된다.
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 40),
+  new THREE.MeshToonMaterial({ color: ink ? 0xffffff : 0x5d7038 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+if (Q.get('grid') === '1') scene.add(new THREE.GridHelper(20, 20, 0x334422, 0x334422));
+
+// ── 램프 ──
+// three r160 은 texture2D(gradientMap, dotNL*0.5+0.5).r 로 읽는다. 칸 i 의 dotNL 은
+// 2*(i+0.5)/n - 1 이다. NearestFilter 여야 단이 딱 떨어진다.
+function rampTex(fn, n, smooth) {
+  const d = new Uint8Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const v = Math.round(fn(2 * (i + 0.5) / n - 1) * 255);
+    d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255;
+  }
+  const t = new THREE.DataTexture(d, n, 1, THREE.RGBAFormat);
+  t.minFilter = t.magFilter = smooth ? THREE.LinearFilter : THREE.NearestFilter;
+  t.generateMipmaps = false; t.needsUpdate = true;
+  return t;
+}
+const RAMPS = {
+  '2': null,                                                   // three 기본
+  '3': rampTex(d => d <= 0.10 ? 0.40 : (d <= 0.50 ? 0.72 : 1.0), 16, false),
+  '4': rampTex(d => d <= 0.0 ? 0.32 : (d <= 0.35 ? 0.55 : (d <= 0.70 ? 0.80 : 1.0)), 16, false),
+  'lambert': rampTex(d => Math.max(0, d), 64, true),
+};
+// ★후보 램프를 쓸어보려면 값을 그대로 넘긴다: &ramp=stops&stops=0.55,0.55,...,1.0
+//   칸 개수는 넘긴 만큼이고 칸 i 의 dotNL = 2*(i+0.5)/n - 1 이다.
+if (Q.get('stops')) {
+  const s = Q.get('stops').split(',').map(Number);
+  const d = new Uint8Array(s.length * 4);
+  for (let i = 0; i < s.length; i++) {
+    d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = Math.round(s[i] * 255); d[i * 4 + 3] = 255;
+  }
+  const t = new THREE.DataTexture(d, s.length, 1, THREE.RGBAFormat);
+  t.minFilter = t.magFilter = Q.get('smooth') === '1' ? THREE.LinearFilter : THREE.NearestFilter;
+  t.generateMipmaps = false; t.needsUpdate = true;
+  RAMPS['stops'] = t;
+}
+
+const loader = new GLTFLoader();
+const load = u => new Promise((ok, bad) => loader.load(u, ok, undefined, bad));
+const texLoad = u => new Promise(ok => new THREE.TextureLoader().load(u, t => {
+  t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; ok(t);
+}, undefined, () => ok(null)));
+const texLoadRaw = u => new Promise(ok => new THREE.TextureLoader().load(u, t => {
+  t.flipY = false; ok(t);
+}, undefined, () => ok(null)));
+
+// ★★함정: `map` 이 null 이면 three r160 은 **gradientMap 을 통째로 무시한다.**
+//   (실측 2026-08-11: tex=none 으로 램프를 바꿔 가며 찍은 그림이 바이트째로 같았다.
+//    재질에는 mat.gradientMap 이 분명히 붙어 있는데도 그렇다.)
+//   그래서 "텍스처 없음" 은 null 이 아니라 **1x1 흰 텍스처**로 만든다. 그래야
+//   '순수 조명만' 을 재는 실험이 성립한다.
+const WHITE1 = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat);
+WHITE1.needsUpdate = true;
+
+const g = await load(`../web/props/${lod === 'low' ? 'low/' : ''}${kind}.glb`);
+let src = null; g.scene.traverse(o => { if (!src && o.isMesh) src = o; });
+// ★props.js 관례: LOD 단계와 무관하게 **고폴리 텍스처**를 쓴다. 여기도 같게 맞춘다.
+let map = null;
+if (texM === 'orig') map = await texLoad(`./labtex/${kind}.jpg`);
+else if (texM === 'now') {
+  const hi = lod === 'low' ? await load(`../web/props/${kind}.glb`) : g;
+  let m = null; hi.scene.traverse(o => { if (!m && o.isMesh) m = o; });
+  map = m.material.map;
+}
+const mat = new THREE.MeshToonMaterial({
+  map: ink ? null : (map || WHITE1),
+  color: ink ? 0x050508 : (map ? 0xffffff : 0x8a9199),
+});
+if (!ink && RAMPS[rampM]) mat.gradientMap = RAMPS[rampM];
+if (!ink && useN) {
+  const n = await texLoadRaw(`./labtex/${kind}_n.jpg`);
+  // ★TANGENT 가 없어도 three 는 화면 미분으로 접선을 만든다(정확도만 조금 떨어진다).
+  if (n) { mat.normalMap = n; mat.normalScale.set(1, 1); }
+}
+const mesh = new THREE.Mesh(src.geometry, mat);
+mesh.castShadow = mesh.receiveShadow = true;
+scene.add(mesh);
+
+// 물체를 원점에 앉히고 크기에 맞춰 카메라를 잡는다
+src.geometry.computeBoundingBox();
+const bb = src.geometry.boundingBox, c = bb.getCenter(new THREE.Vector3()), sz = bb.getSize(new THREE.Vector3());
+mesh.position.set(-c.x, -bb.min.y, -c.z);
+const R = Math.max(sz.x, sz.z, sz.y * 0.85);
+const cam = new THREE.PerspectiveCamera(+(Q.get('fov') || 30), W / H, 0.1, 200);
+const yaw = +(Q.get('yaw') ?? 0.6), pitch = +(Q.get('pitch') ?? 0.30);
+const dist = +(Q.get('dist') || R * 2.35);
+const cy = sz.y * 0.45;
+cam.position.set(Math.sin(yaw) * Math.cos(pitch) * dist, cy + Math.sin(pitch) * dist,
+                 Math.cos(yaw) * Math.cos(pitch) * dist);
+cam.lookAt(0, cy, 0);
+
+renderer.render(scene, cam);
+window.__cap = () => { renderer.render(scene, cam); return cv.toDataURL('image/jpeg', 0.92); };
+window.__mat = mat;
+window.__info = { kind, lod, texM, rampM, useN, ink,
+                  hasMap: !!mat.map, hasGrad: !!mat.gradientMap,
+                  gradN: mat.gradientMap ? mat.gradientMap.image.width : 0,
+                  tri: src.geometry.index.count / 3, size: sz.toArray().map(v => +v.toFixed(2)) };
+window.__ready = true;
+</script>

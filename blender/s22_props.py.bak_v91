@@ -1,0 +1,653 @@
+# -*- coding: utf-8 -*-
+"""Meshy 소품 5종(incoming/meshy_props/*.glb)을 게임용으로 다듬어
+web/props/<종류>.glb 로 굽는다.
+
+실행: blender -b -P blender/s22_props.py
+      RENDER=0 blender -b -P blender/s22_props.py     (검증 렌더 생략)
+      LOD=low RENDER=0 blender -b -P blender/s22_props.py
+        -> web/props/low/ 에 **같은 공정의 저해상도 한 벌**을 굽는다(아래 ★LOD1)
+
+★LOD1 — 저폴리는 "다른 모델" 이 아니라 "같은 모델의 성긴 판" 이어야 한다
+  props.js 가 크기 상위 30% 만 고폴리로 심고 나머지는 web/props/low/ 를 쓴다.
+  이때 두 벌을 **다른 설정으로 구우면 안 된다.** 처음엔 예전 배포본(복셀 0.090
+  수풀, 디스플레이스 없는 절벽)을 저폴리로 그냥 갖다 썼는데, 한 덤불 무리 안에서
+  잎이 살아 있는 수풀 하나만 튀어 보였다(다른 식물처럼 읽힌다).
+  그래서 복셀·색보정·디스플레이스·정규화를 **전부 똑같이** 하고 삼각형 목표만
+  낮춰 굽는다. 그러면 두 단계 차이가 "성긴 정도" 뿐이라 섞여 있어도 안 보인다.
+  텍스처도 고폴리 것 한 장을 게임이 두 단계에 같이 물린다(props.js).
+  그래서 여기서는 저해상도로 구워도 된다(로딩만 빨라진다).
+
+★2026-08-10 방향 전환 — 다운로드 용량 기준을 버렸다
+  최종 목표가 **스팀 설치형**으로 굳었다. 웹 배포 용량(종류당 0.3MB)에 맞추느라
+  삼각형을 800~1,400 까지 깎고 텍스처를 1024 로 줄이던 기준을 폐기한다.
+  이제 기준은 "롤처럼 보이는가" 하나다. 예산이 4~8배로 올라갔다.
+      rock 800->4,500 / tree 1,193->6,500 / bush 599->2,500 / thicket 800->3,500
+      crag 1,400->7,424 (아래 ★디스플레이스 참고. 원본 1,856 에서 세분한 값이다)
+      텍스처 1024 -> 2048 JPEG q90
+  파일 크기는 이제 판단 근거가 아니다. 삼각형 총량만 성능으로 검증한다
+  (643개 배치 x 예산. 화면 안 삼각형은 props.js 의 인스턴스 단위 컬링이 줄인다).
+
+왜 맵 glb 에 안 굽는가
+  이 5종은 맵에 643개가 깔린다(s20_level1.py 의 배치 테이블 PROPS).
+  **종류당 한 벌만** 굽고 게임(web/props.js)이 InstancedMesh 로 심는다.
+  = 파일은 5개, 드로우콜은 종류당 1. 예산을 올려도 이 구조는 그대로다.
+
+여기서 하는 일
+  1) 삼각형을 목표치로 맞춘다. ★모델 종류에 따라 방법이 다르다(아래 함정 1)
+  2) 텍스처를 **베이스컬러 1장만** 남기고 2048 로 맞춘다.
+     ★게임이 재질을 MeshToonMaterial 로 갈아끼우기 때문에 노멀·러프니스·이미시브는
+       읽히지도 않는다. 4장을 다 들고 다녀도 셋은 안 쓰인다.
+       ★★그래서 crag 의 요철이 사라졌다. 아래 ★디스플레이스가 그 대응이다.
+  3) 원점을 **바닥 중심**으로 옮긴다(최저점 z=0, 발자국 중심이 xy 원점).
+     안 맞추면 게임에서 소품이 공중에 뜨거나 땅에 묻힌다.
+  4) 크기를 s20 의 배치 규격에 맞춘다. 눈대중이 아니라 **기존 절차적 소품의
+     치수**에 맞춘다(아래 NORM 주석). 배치 테이블의 scale 이 그대로 통해야
+     콜라이더와 보이는 것이 안 어긋난다.
+
+★디스플레이스 — crag 표면이 평평했던 이유
+  Meshy 가 준 crag 는 삼각형이 1,856 개뿐이고, 바위의 요철은 전부 **노멀맵**에만
+  있었다. 게임은 MeshToonMaterial 이라 노멀맵을 안 읽는다. 그래서 절벽바위가
+  매끈한 판때기로 보였다.
+  대응: 면을 한 번 쪼개(1,856 -> 7,424) 베이스컬러 **휘도**를 실제 높낮이로 새긴다.
+  - 밝은 곳 = 튀어나온 데, 어두운 곳 = 파인 데 (바위 텍스처는 대체로 그렇다)
+  - 텍셀 노이즈를 그대로 밀면 사포처럼 되므로 **메시 위에서** 라플라시안으로
+    몇 번 문질러 손바닥 크기(0.2~0.3m) 굴곡만 남긴다. UV 섬 경계를 안 타는 방식이다.
+  - 진폭은 0.06m 로 묶는다. 콜라이더는 배치 좌표의 원기둥이라 실루엣이 그보다
+    많이 부풀면 "보이는데 안 막히는" 자리가 생긴다.
+  - 밀고 나서 **다시 정규화**한다. 안 그러면 반너비가 1.25 -> 1.31 이 돼
+    콜라이더 반지름과 5% 어긋난다.
+
+★함정 1 — 잎사귀 뭉치는 데시메이트로 못 줄인다
+  bush·thicket 은 **낱장 잎 1,900여 개가 따로 노는 덩어리**다(연결 안 된 섬).
+  COLLAPSE 데시메이트를 걸면 잎이 하나씩 삼각형 파편으로 찌그러져서
+  "초록 가시가 흩뿌려진 것" 이 된다(첫 시도 렌더가 그랬다).
+  그래서 이 둘만 **복셀 리메시로 겉껍질을 새로 뜨고** 그걸 줄인다.
+  실루엣이 통짜로 남고, 텍스처는 어차피 잎 노이즈라 UV 를 새로 펴도 잎으로 읽힌다.
+  rock·crag·tree 는 닫힌 표면이라 데시메이트가 잘 듣는다(단, 아래 함정 2).
+
+★함정 2 — glTF 임포트 직후 정점이 겹쳐 있다
+  UV·노멀이 갈리는 자리마다 정점이 쪼개져 들어온다(rock 은 17,868 tri 에 11,290 v.
+  닫힌 메시라면 8,936 이어야 한다). 그대로 데시메이트하면 붙어 있어야 할 면이
+  따로 무너져서 껍질이 조각조각 갈라진다. **먼저 거리로 병합**한다.
+
+★함정 3 — 이미지 픽셀을 고치면 익스포트에서 원본이 되살아난다
+  Image.scale() 만 하면 살아남는데, colorspace 를 바꿔 pixels 를 쓰면 익스포터가
+  팩된 원본(2048, 원래 색)을 도로 내보낸다(실제로 그렇게 나갔다).
+  그래서 **numpy 로 계산한 결과를 새 이미지 데이터블록에 넣어 PNG 로 저장하고,
+  그 파일을 다시 읽어서** 재질에 물린다. 원본 데이터블록은 손대지 않는다.
+  Image.pixels 는 컬러스페이스를 거쳐 선형으로 준다. sRGB 바이트 그대로 만지려면
+  읽기 전에 Non-Color 로 바꿔야 한다. 아래 로그의 [읽기검사] 가 그 증거다
+  (crag 가 0.91/0.87/0.78 이면 바이트, 0.82/0.73/0.58 이면 선형으로 읽힌 것이다).
+
+★색 보정 (픽셀 연산. Meshy 크레딧을 쓰는 재생성이 아니다)
+  - crag: 받은 텍스처가 크림색(#e9ddc7)이다. 맵의 바위는 회청색 화강암이라
+    그대로 쓰면 절벽만 사막 바위처럼 튄다. 회색 화강암(#535960)으로 재칠한다.
+  - bush: 받은 텍스처가 누런 연둣빛(#a0b503, 파랑이 거의 0)이다. 은신 수풀은
+    맵에서 제일 밝은 초록(#6fd143) 하나뿐이어야 "저기가 숨는 곳"이 읽힌다.
+"""
+
+import bpy
+import bmesh
+import os
+import math
+import numpy as np
+
+ROOT = "/Users/lbj/Documents/gameproject"
+SRC = os.path.join(ROOT, "incoming", "meshy_props")
+LOD = os.environ.get("LOD", "hi")               # "hi" | "low"
+OUTDIR = os.path.join(ROOT, "web", "props")
+if LOD == "low":
+    OUTDIR = os.path.join(OUTDIR, "low")
+RENDER = os.environ.get("RENDER", "1") != "0"
+RENDER_DIR = os.environ.get("RENDER_DIR") or os.path.join(
+    ROOT, "renders", "history", "v73_props_hq")
+TMP = os.environ.get("TMPDIR_PROPS") or "/tmp"
+# ★저해상도 판의 텍스처는 게임에서 안 쓰인다(props.js 가 고폴리 것을 물린다).
+#   그릇으로만 필요하니 512 로 굽는다.
+TEX_SIZE = int(os.environ.get("TEX_SIZE", "512" if LOD == "low" else "2048"))
+TEX_QUALITY = int(os.environ.get("TEX_QUALITY", "90"))
+
+os.makedirs(OUTDIR, exist_ok=True)
+if RENDER:
+    os.makedirs(RENDER_DIR, exist_ok=True)
+
+# ─────────────────────────────────────────────────────────────
+# 종류별 규격
+# ─────────────────────────────────────────────────────────────
+# tri   : 목표 삼각형 수. None 이면 안 깎는다(crag: 세분한 그대로 내보낸다)
+# lowtri: LOD=low 로 구울 때의 목표(대략 1/5). 나머지 공정은 고폴리와 완전히 같다
+# how   : "dec" = 병합 후 데시메이트 / "remesh" = 복셀로 껍질을 새로 뜬 뒤 데시메이트
+# voxel : remesh 일 때 복셀 한 변(원본 단위. 모델이 대략 2단위 크기다).
+#         작게 잡으면 잎 하나하나를 따라가서 다시 파편이 되고, 크게 잡으면 감자가 된다
+# subdiv: 면 쪼개기 횟수(삼각형 x4/회). 디스플레이스에 필요한 밀도를 만드는 데만 쓴다
+# disp  : 휘도 디스플레이스. amp=최대 진폭(m, 정규화 후 기준),
+#         smooth=메시 위 라플라시안 반복 횟수(굴곡 파장을 키운다)
+# norm  : 크기 정규화 기준. ("xy", r) = 가로 반지름(x·y 반너비 평균)을 r 로,
+#                           ("z", h)  = 높이를 h 로 맞춘다
+#         ★숫자의 출처는 s20_level1.py 의 절차적 소품이다. 그 소품이 scale 1.0 에서
+#           갖던 치수와 같게 맞춰야 배치 테이블의 scale 이 그대로 통한다.
+#             rock    add_dome(rx=0.95*s)          + 콜라이더 circle r=0.95*s
+#             crag    add_dome(rx=1.25*s)
+#             thicket add_dome(rx=1.30*s)
+#             bush    add_dome(rx=0.98*s)
+#             tree    hh=5.4*s (높이가 주인공)     + 콜라이더 circle r=0.42*s
+# recolor : 픽셀 재칠. target=목표 평균색, std=목표 밝기 표준편차(None 이면 대비 유지),
+#           keep=원본 색편차를 얼마나 남기나(0=완전 단색조, 1=원본 색차 유지),
+#           mask="green"=초록이 우세한 픽셀만 (나무는 껍질과 잎이 한 장에 있어서
+#           통째로 칠하면 껍질까지 초록이 된다)
+KINDS = [
+    # 원본 17,868 을 4,500 까지만 내린다(1/4). 800 일 때 뭉개졌던 모서리가 산다
+    dict(name="rock", tri=4500, lowtri=900, how="dec", norm=("xy", 0.95),
+         recolor=None),
+    # ★crag 만 깎지 않고 **쪼갠다**. 원본이 1,856 뿐이고 요철이 노멀맵에만 있어서
+    #   툰 셰이딩에서 판때기로 보였다(위 ★디스플레이스). 1,856 x4 = 7,424.
+    #   한 번만 쪼개는 이유: 정규화하면 삼각형 한 변이 0.07m 쯤 된다. 진폭 상한이
+    #   0.06m 이라 그보다 잘게 쪼개 봐야 담을 수 있는 굴곡이 없다.
+    dict(name="crag", tri=None, lowtri=1600, how="dec", subdiv=1, norm=("xy", 1.25),
+         disp=dict(amp=0.060, smooth=4),
+         recolor=dict(target="535960", std=None, keep=0.12)),
+    # ★thicket 은 원본이 **가운데가 빈 가시덤불 고리**다. 복셀을 잘게 잡으면 그 구멍이
+    #   그대로 남아 위에서 보면 도넛이 된다(0.075 에서 실제로 그랬다. 0.11 이면 메워진다).
+    #   설치형으로 가면서 실루엣 우선으로 뒤집었다. 0.06 이면 가시가 하나씩 서고
+    #   가운데도 뚫리지만, 위에서 내려다보는 쿼터뷰라 구멍은 가시에 가려 안 읽힌다.
+    dict(name="thicket", tri=3500, lowtri=800, how="remesh", voxel=0.06,
+         norm=("xy", 1.30),
+         recolor=None),
+    # ★잎만 어둡게 내린다. 받은 텍스처의 잎이 누런 연둣빛(#aad635, 휘도 0.76)이라
+    #   **은신 수풀(#6fd143, 휘도 0.69)보다 밝다.** 맵의 색 규칙은 "제일 밝은 초록 =
+    #   숨는 곳" 하나뿐이라 그대로 두면 나무와 수풀이 같은 신호가 된다.
+    #   맵이 원래 쓰던 가지 색 M_CANOPY(#4a8232, s20_level1.py)로 맞춘다.
+    dict(name="tree", tri=6500, lowtri=1300, how="dec", norm=("z", 5.40),
+         recolor=dict(target="4a8232", std=None, keep=0.35, mask="green")),
+    # 복셀 0.090 -> 0.050. 잎 덩어리 하나하나가 껍질에 잡혀 수풀 실루엣이 산다
+    dict(name="bush", tri=2500, lowtri=650, how="remesh", voxel=0.050,
+         norm=("xy", 0.98),
+         recolor=dict(target="6fd143", std=None, keep=0.30)),
+]
+
+LUM = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+
+
+def hex_rgb(h):
+    return np.array([int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4)],
+                    dtype=np.float32)
+
+
+def drop_importer_junk():
+    """★glTF 임포터가 'glTF_not_exported' 컬렉션에 Icosphere 를 만든다.
+    glb 안에는 없는 물건이라 안 지우면 렌더와 치수 측정이 오염된다."""
+    n = 0
+    for o in list(bpy.context.scene.objects):
+        if any(c.name == "glTF_not_exported" for c in o.users_collection):
+            bpy.data.objects.remove(o, do_unlink=True)
+            n += 1
+    return n
+
+
+def find_basecolor_image(ob):
+    """임포트된 재질에서 베이스컬러 이미지 하나만 집어낸다."""
+    for slot in ob.material_slots:
+        m = slot.material
+        if not m or not m.node_tree:
+            continue
+        bsdf = next((n for n in m.node_tree.nodes
+                     if n.type == "BSDF_PRINCIPLED"), None)
+        if bsdf:
+            li = bsdf.inputs.get("Base Color")
+            if li and li.is_linked:
+                src = li.links[0].from_node
+                if src.type == "TEX_IMAGE" and src.image:
+                    return src.image
+        for n in m.node_tree.nodes:      # Meshy 는 이미지 이름을 base_color 로 준다
+            if n.type == "TEX_IMAGE" and n.image and "base_color" in n.image.name:
+                return n.image
+    return None
+
+
+# ─────────────────────────────────────────────────────────────
+# 텍스처
+# ─────────────────────────────────────────────────────────────
+def prep_texture(img, spec, name):
+    """축소 + (필요하면) 재칠. 결과를 PNG 로 저장하고 다시 읽어서 돌려준다.
+    ★원본 데이터블록은 안 건드린다(함정 3)."""
+    prev = img.colorspace_settings.name
+    img.colorspace_settings.name = "Non-Color"     # sRGB 바이트 그대로 읽는다
+    w, h = img.size[0], img.size[1]
+    buf = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(buf)
+    img.colorspace_settings.name = prev
+    a = buf.reshape(h, w, 4)
+    print("      [읽기검사] 평균 %.3f %.3f %.3f" % tuple(a[:, :, :3].reshape(-1, 3).mean(0)))
+
+    # 축소. 2048 -> 1024 는 2x2 상자 평균이면 충분하다(밉맵과 같은 계산)
+    tw = th = TEX_SIZE
+    if w > tw and w % tw == 0 and h % th == 0:
+        ky, kx = h // th, w // tw
+        a = a.reshape(th, ky, tw, kx, 4).mean(axis=(1, 3))
+        print("      [축소] %dx%d -> %dx%d" % (w, h, tw, th))
+    else:
+        tw, th = w, h
+
+    if spec["recolor"]:
+        rs = spec["recolor"]
+        tgt = hex_rgb(rs["target"])
+        tl = float((tgt * LUM).sum())
+        tint = tgt / tl
+        rgb = a[:, :, :3].reshape(-1, 3)
+        # 마스크. 초록이 우세한 픽셀(잎)만 고른다. 경계를 0.10 폭으로 부드럽게 넘긴다
+        if rs.get("mask") == "green":
+            g = rgb[:, 1]
+            other = np.maximum(rgb[:, 0], rgb[:, 2])
+            w = np.clip((g - other) / 0.10, 0.0, 1.0)[:, None]
+        else:
+            w = None
+        sel = rgb if w is None else rgb[(w[:, 0] > 0.5)]
+        if not len(sel):
+            sel = rgb
+        m0 = sel.mean(axis=0) * 255
+        L = (rgb * LUM).sum(axis=1, keepdims=True)
+        Ls = (sel * LUM).sum(axis=1)
+        lm, ls = float(Ls.mean()), float(Ls.std())
+        k = 1.0 if not rs.get("std") else min(8.0, max(0.5, rs["std"] / max(ls, 1e-5)))
+        out = ((L - lm) * k + tl) * tint + (rgb - L) * rs.get("keep", 0.2) * tint
+        np.clip(out, 0.0, 1.0, out=out)
+        if w is not None:
+            out = rgb * (1.0 - w) + out * w
+        m1 = (out if w is None else out[(w[:, 0] > 0.5)]).mean(axis=0) * 255
+        a[:, :, :3] = out.reshape(th, tw, 3)
+        print("      [색보정%s] #%02x%02x%02x -> #%02x%02x%02x  대비 x%.2f (대상 σ %.4f)"
+              % ("(초록만)" if w is not None else "",
+                 int(m0[0]), int(m0[1]), int(m0[2]),
+                 int(m1[0]), int(m1[1]), int(m1[2]), k, ls))
+    a[:, :, 3] = 1.0
+
+    path = os.path.join(TMP, "prop_%s_basecolor.png" % name)
+    ni = bpy.data.images.new("TEX_" + name, tw, th, alpha=False, float_buffer=False)
+    ni.colorspace_settings.name = "Non-Color"      # 쓸 때도 바이트 그대로
+    ni.pixels.foreach_set(a.reshape(-1))
+    ni.filepath_raw = path
+    ni.file_format = "PNG"
+    ni.save()
+    bpy.data.images.remove(ni)
+    fin = bpy.data.images.load(path)               # 저장된 파일을 새로 읽는다
+    fin.colorspace_settings.name = "sRGB"
+    # ★배열도 같이 돌려준다. crag 디스플레이스가 **최종 색**의 휘도를 읽어야
+    #   보이는 명암과 실제 요철의 방향이 일치한다(밝은 데가 튀어나와 보인다).
+    return fin, a
+
+
+def clean_material(ob, img, name):
+    """베이스컬러 1장만 쓰는 새 재질로 갈아끼운다.
+    ★게임은 MeshToonMaterial({map}) 로 다시 만든다. 여기 재질은 '텍스처를 glb 에
+      담아 보내는 그릇'이고, 블렌더 검증 렌더에서 눈으로 볼 대상이기도 하다."""
+    m = bpy.data.materials.new("MAT_" + name.upper())
+    nt = m.node_tree
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.inputs["Roughness"].default_value = 0.95
+    bsdf.inputs["Metallic"].default_value = 0.0
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = img
+    tex.location = (-380, 0)
+    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    nt.links.new(bsdf.outputs[0], out.inputs[0])
+    ob.data.materials.clear()
+    ob.data.materials.append(m)
+    return m
+
+
+# ─────────────────────────────────────────────────────────────
+# 메시
+# ─────────────────────────────────────────────────────────────
+def weld(ob, dist=1e-4):
+    """겹친 정점을 병합한다(함정 2)."""
+    me = ob.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    n0 = len(bm.verts)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=dist)
+    n1 = len(bm.verts)
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+    return n0, n1
+
+
+def decimate(ob, target):
+    tri0 = tri_count(ob)
+    if tri0 <= target:
+        return
+    md = ob.modifiers.new("DEC", "DECIMATE")
+    md.decimate_type = "COLLAPSE"
+    md.ratio = target / float(tri0)
+    md.use_collapse_triangulate = True
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.modifier_apply(modifier=md.name)
+
+
+def subdivide(ob, cuts_iter):
+    """삼각형을 4개로 쪼갠다(cuts_iter 회). 모양은 안 변한다(smooth=0).
+    ★디스플레이스에 쓸 밀도를 만드는 용도다. 서브서프(Catmull-Clark)를 쓰면
+      바위가 둥글게 오므라들어 실루엣이 죽으므로 단순 분할만 한다."""
+    me = ob.data
+    for _ in range(cuts_iter):
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=1,
+                                  use_grid_fill=True, smooth=0.0)
+        bm.to_mesh(me)
+        bm.free()
+    me.update()
+
+
+def displace_by_luma(ob, tex_arr, amp, smooth_iter):
+    """베이스컬러 휘도를 정점 법선 방향 높낮이로 새긴다.
+
+    ★왜 텍스처를 흐리지 않고 메시 위에서 문지르나
+      UV 섬이 여기저기 흩어져 있어서 텍스처 공간에서 블러를 걸면 섬 경계를
+      넘어 엉뚱한 픽셀이 섞인다. 메시 위 라플라시안은 실제로 붙어 있는
+      이웃끼리만 섞이고, 한 번 문지를 때 삼각형 한 변만큼 퍼지므로
+      "굴곡 파장 = 변 길이 x 반복수" 로 손에 잡히게 조절된다.
+    ★진폭은 정규화된 크기(m) 기준이다. 이 함수는 정규화 **뒤에** 부른다."""
+    me = ob.data
+    uvl = me.uv_layers.active
+    if uvl is None:
+        print("      [디스플레이스] UV 가 없다. 건너뛴다")
+        return None
+    h, w = tex_arr.shape[0], tex_arr.shape[1]
+    lum = (tex_arr[:, :, :3] * LUM).sum(axis=2)          # (h, w)
+
+    # 정점별 UV = 그 정점을 쓰는 루프들의 평균. 텍셀 노이즈를 줄이려고
+    # 주변 3x3 텍셀 상자평균으로 읽는다
+    nv = len(me.vertices)
+    acc = np.zeros((nv, 2), dtype=np.float64)
+    cnt = np.zeros(nv, dtype=np.int32)
+    uvs = np.empty(len(me.loops) * 2, dtype=np.float32)
+    uvl.data.foreach_get("uv", uvs)
+    uvs = uvs.reshape(-1, 2)
+    vidx = np.empty(len(me.loops), dtype=np.int32)
+    me.loops.foreach_get("vertex_index", vidx)
+    np.add.at(acc, vidx, uvs)
+    np.add.at(cnt, vidx, 1)
+    cnt = np.maximum(cnt, 1)
+    uv = acc / cnt[:, None]
+
+    px = np.clip((uv[:, 0] % 1.0) * (w - 1), 0, w - 1).astype(np.int32)
+    py = np.clip((1.0 - (uv[:, 1] % 1.0)) * (h - 1), 0, h - 1).astype(np.int32)
+    val = np.zeros(nv, dtype=np.float64)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            val += lum[np.clip(py + dy, 0, h - 1), np.clip(px + dx, 0, w - 1)]
+    val /= 9.0
+
+    # ── 메시 위 라플라시안 ──
+    # 변 목록으로 이웃 평균을 반복해 낸다. 반복할수록 파장이 길어진다
+    ed = np.empty(len(me.edges) * 2, dtype=np.int32)
+    me.edges.foreach_get("vertices", ed)
+    ea, eb = ed[0::2], ed[1::2]
+    deg = np.zeros(nv, dtype=np.float64)
+    np.add.at(deg, ea, 1.0)
+    np.add.at(deg, eb, 1.0)
+    deg = np.maximum(deg, 1.0)
+    for _ in range(smooth_iter):
+        s = np.zeros(nv, dtype=np.float64)
+        np.add.at(s, ea, val[eb])
+        np.add.at(s, eb, val[ea])
+        val = 0.5 * val + 0.5 * (s / deg)
+
+    # 평균 0 / 표준편차 1 로 세우고 ±2σ 에서 자른 뒤 진폭에 맞춘다.
+    # ★자르지 않으면 텍스처의 밝은 점 하나가 뿔로 튀어나온다
+    m, sd = float(val.mean()), float(val.std())
+    z = np.clip((val - m) / max(sd, 1e-6), -2.0, 2.0) / 2.0
+    d = z * amp
+
+    nor = np.empty(nv * 3, dtype=np.float32)
+    me.vertices.foreach_get("normal", nor)
+    nor = nor.reshape(-1, 3)
+    co = np.empty(nv * 3, dtype=np.float32)
+    me.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3) + nor * d[:, None]
+    me.vertices.foreach_set("co", co.reshape(-1).astype(np.float32))
+    me.update()
+    return dict(amp=amp, smooth=smooth_iter, sigma=sd,
+                lo=float(d.min()), hi=float(d.max()),
+                rms=float(np.sqrt((d ** 2).mean())))
+
+
+def remesh(ob, voxel):
+    md = ob.modifiers.new("RMS", "REMESH")
+    md.mode = "VOXEL"
+    md.voxel_size = voxel
+    md.adaptivity = 0.0
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.modifier_apply(modifier=md.name)
+
+
+def unwrap(ob):
+    """복셀 리메시는 UV 를 안 남긴다. 새로 편다.
+    ★bush·thicket 텍스처는 잎 노이즈라 어디를 떠도 잎으로 읽힌다(아틀라스가 아니다).
+      섬 여백은 좁게 둔다. 넓으면 텍셀 밀도가 떨어져 잎이 커진다."""
+    bpy.ops.object.select_all(action="DESELECT")
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.006)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def world_verts(ob):
+    mw = ob.matrix_world
+    return np.array([(mw @ v.co)[:] for v in ob.data.vertices], dtype=np.float64)
+
+
+def recentre_ground(ob):
+    """원점을 바닥 중심으로. 최저점 z=0, 발자국 중심이 xy 원점.
+    ★xy 중심은 **발자국 중심**이다. 전체 bbox 중심으로 잡으면 나무처럼 수관이
+      한쪽으로 뻗은 모델에서 줄기가 배치 좌표에서 벗어난다(콜라이더는 배치
+      좌표에 붙으므로 그러면 보이는 줄기와 막히는 자리가 어긋난다)."""
+    vs = world_verts(ob)
+    z0, z1 = vs[:, 2].min(), vs[:, 2].max()
+    H = z1 - z0
+    foot = vs[vs[:, 2] <= z0 + H * 0.30]
+    if len(foot) < 20:
+        foot = vs
+    cx = (foot[:, 0].min() + foot[:, 0].max()) / 2.0
+    cy = (foot[:, 1].min() + foot[:, 1].max()) / 2.0
+    for v in ob.data.vertices:
+        v.co.x -= cx
+        v.co.y -= cy
+        v.co.z -= z0
+    ob.data.update()
+
+
+def normalize_size(ob, mode, target):
+    """배치 테이블의 scale 이 그대로 통하도록 치수를 맞춘다. 배율을 돌려준다."""
+    vs = world_verts(ob)
+    rh = (max(abs(vs[:, 0]).max(), 1e-6) + max(abs(vs[:, 1]).max(), 1e-6)) / 2.0
+    hh = max(vs[:, 2].max(), 1e-6)
+    f = target / rh if mode == "xy" else target / hh
+    for v in ob.data.vertices:
+        v.co *= f
+    ob.data.update()
+    return f
+
+
+def tri_count(ob):
+    return sum(len(p.vertices) - 2 for p in ob.data.polygons)
+
+
+# ── 렌더 준비(검증용) ────────────────────────────────────────
+def setup_render_scene():
+    sc = bpy.context.scene
+    ids = [i.identifier for i in sc.render.bl_rna.properties["engine"].enum_items]
+    sc.render.engine = ("BLENDER_EEVEE_NEXT" if "BLENDER_EEVEE_NEXT" in ids
+                        else "BLENDER_EEVEE")
+    sc.view_settings.view_transform = "Standard"
+    w = bpy.data.worlds.new("W") if sc.world is None else sc.world
+    sc.world = w
+    w.node_tree.nodes["Background"].inputs[0].default_value = (0.42, 0.47, 0.52, 1)
+    for nm, en, rot in (("SUN", 3.0, (44, 0, -40)), ("FILL", 1.2, (-50, 0, 150))):
+        li = bpy.data.lights.new(nm, "SUN")
+        li.energy = en
+        so = bpy.data.objects.new(nm, li)
+        so.rotation_euler = tuple(math.radians(a) for a in rot)
+        sc.collection.objects.link(so)
+    cd = bpy.data.cameras.new("C")
+    cam = bpy.data.objects.new("C", cd)
+    sc.collection.objects.link(cam)
+    sc.camera = cam
+    return cam, cd
+
+
+def shot(cam, cd, ob, path, px=560):
+    """모델을 딱 맞게 담는 정사영 한 컷(비스듬히 위에서)."""
+    from mathutils import Vector
+    vs = world_verts(ob)
+    lo, hi = vs.min(axis=0), vs.max(axis=0)
+    ctr = Vector(((lo + hi) / 2.0).tolist())
+    rad = float(np.linalg.norm(hi - lo)) * 0.5
+    sc = bpy.context.scene
+    sc.render.resolution_x = px * 2
+    sc.render.resolution_y = px
+    cd.type = "ORTHO"
+    cd.ortho_scale = rad * 2.35
+    d = Vector((math.cos(math.radians(-28)) * math.cos(math.radians(22)),
+                math.sin(math.radians(-28)) * math.cos(math.radians(22)),
+                math.sin(math.radians(22))))
+    cam.location = ctr + d * (rad * 4.0)
+    cam.rotation_euler = (-d).to_track_quat("-Z", "Y").to_euler()
+    sc.render.filepath = path
+    bpy.ops.render.render(write_still=True)
+
+
+# ─────────────────────────────────────────────────────────────
+# 본작업
+# ─────────────────────────────────────────────────────────────
+REPORT = []
+for spec in KINDS:
+    name = spec["name"]
+    print("\n===== %s =====" % name)
+    bpy.ops.wm.read_homefile(use_empty=True)
+    cam, cd = setup_render_scene() if RENDER else (None, None)
+
+    src = os.path.join(SRC, name + ".glb")
+    src_mb = os.path.getsize(src) / 1024.0 / 1024.0
+    bpy.ops.import_scene.gltf(filepath=src)
+    drop_importer_junk()
+    meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    if len(meshes) != 1:
+        raise RuntimeError("%s: 메시가 %d개다(1개를 기대했다)" % (name, len(meshes)))
+    ob = meshes[0]
+    ob.name = name.upper()
+    tri0 = tri_count(ob)
+
+    img = find_basecolor_image(ob)
+    if img is None:
+        raise RuntimeError("%s: 베이스컬러 이미지를 못 찾았다" % name)
+    print("  원본 삼각형 %d / 이미지 %s %s / 파일 %.2fMB"
+          % (tri0, img.name, tuple(img.size), src_mb))
+
+    tex, tex_arr = prep_texture(img, spec, name)
+    if RENDER:
+        clean_material(ob, tex, name + "_pre")
+        shot(cam, cd, ob, os.path.join(RENDER_DIR, "tex_%s_before.png" % name))
+
+    # ── 1) 감축 / 세분 ───────────────────────────────────────
+    # ★LOD=low 는 **삼각형 목표만** 다르다. 복셀·색보정·디스플레이스·정규화는
+    #   고폴리와 완전히 같아야 두 단계가 한 화면에 섞여도 안 들킨다(위 ★LOD1).
+    tgt = spec.get("lowtri") if LOD == "low" else spec.get("tri")
+    n0, n1 = weld(ob)
+    print("  정점 병합 %d -> %d" % (n0, n1))
+    if spec["how"] == "remesh":
+        remesh(ob, spec["voxel"])
+        print("  복셀 리메시 %.3f -> 삼각형 %d" % (spec["voxel"], tri_count(ob)))
+        decimate(ob, tgt)
+        unwrap(ob)
+    else:
+        if spec.get("subdiv"):
+            subdivide(ob, spec["subdiv"])
+            print("  면 쪼개기 x%d -> 삼각형 %d" % (spec["subdiv"], tri_count(ob)))
+        if tgt:
+            decimate(ob, tgt)
+    ob.data.validate(verbose=False)
+    for p in ob.data.polygons:
+        p.use_smooth = True        # 각지게 두면 삼각형 경계가 그대로 각으로 보인다
+    ob.data.update()
+    tri1 = tri_count(ob)
+    print("  삼각형 %d -> %d" % (tri0, tri1))
+
+    clean_material(ob, tex, name)
+
+    # ── 2) 원점을 바닥 중심으로 ──────────────────────────────
+    bpy.ops.object.select_all(action="DESELECT")
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    recentre_ground(ob)
+
+    # ── 3) 크기 정규화 ───────────────────────────────────────
+    mode, target = spec["norm"]
+    f = normalize_size(ob, mode, target)
+
+    # ── 3.5) 휘도 디스플레이스(crag) ─────────────────────────
+    # ★정규화 뒤에 민다. 진폭 0.06 이 곧 게임 안 0.06m 가 된다.
+    #   밀고 나면 반너비가 진폭만큼 부풀므로 **다시** 정규화·접지해서
+    #   콜라이더 반지름(배치 scale x 1.25)과 정확히 맞춰 놓는다.
+    if spec.get("disp"):
+        di = displace_by_luma(ob, tex_arr, spec["disp"]["amp"],
+                              spec["disp"]["smooth"])
+        if di:
+            print("  디스플레이스 진폭 ±%.3f (라플라시안 %d회) "
+                  "실제 %.3f ~ %.3f, rms %.4f"
+                  % (di["amp"], di["smooth"], di["lo"], di["hi"], di["rms"]))
+        recentre_ground(ob)
+        f2 = normalize_size(ob, mode, target)
+        print("  디스플레이스 후 재정규화 x%.4f" % f2)
+
+    vs = world_verts(ob)
+    fx, fy, fz = abs(vs[:, 0]).max(), abs(vs[:, 1]).max(), vs[:, 2].max()
+    print("  정규화 x%.4f (%s %.2f 기준) -> 반너비 %.3f x %.3f / 높이 %.3f"
+          % (f, mode, target, fx, fy, fz))
+    print("  접지 최저점 z=%.5f (0 이어야 한다)" % vs[:, 2].min())
+
+    if RENDER:
+        shot(cam, cd, ob, os.path.join(RENDER_DIR, "tex_%s_after.png" % name))
+
+    # ── 4) 내보내기 ──────────────────────────────────────────
+    dst = os.path.join(OUTDIR, name + ".glb")
+    tmp = os.path.join(OUTDIR, "_tmp_" + name + ".glb")
+    bpy.ops.object.select_all(action="DESELECT")
+    ob.select_set(True)
+    bpy.ops.export_scene.gltf(
+        filepath=tmp, export_format="GLB", use_selection=True,
+        export_animations=False, export_yup=True, export_apply=True,
+        export_image_format="JPEG", export_image_quality=TEX_QUALITY,
+        export_jpeg_quality=TEX_QUALITY)
+    os.replace(tmp, dst)
+    mb = os.path.getsize(dst) / 1024.0 / 1024.0
+    print("  -> %s  %.3f MB  (텍스처 %d JPEG q%d)" % (dst, mb, TEX_SIZE, TEX_QUALITY))
+    # ★파일 크기 경고는 없앴다. 설치형이라 판단 근거가 아니다.
+    #   성능은 파일이 아니라 **화면 안 삼각형 총량**으로 본다(web/props.js 컬링).
+    REPORT.append((name, tri0, tri1, src_mb, mb, fx, fy, fz))
+
+print("\n" + "=" * 74)
+print("%-9s %7s %7s %8s %8s   %s" % ("종류", "원본tri", "결과tri", "원본MB", "결과MB",
+                                     "반너비x / y / 높이"))
+for (n, t0, t1, s0, s1, fx, fy, fz) in REPORT:
+    print("%-9s %7d %7d %8.2f %8.3f   %.2f / %.2f / %.2f"
+          % (n, t0, t1, s0, s1, fx, fy, fz))
+print("합계 결과 %.3f MB" % sum(r[4] for r in REPORT))
+
+# 맵에 깔리는 개수를 곱해 **씬 전체 삼각형**을 낸다. 설치형에서 유일하게 남은 예산이다
+# (화면 안 삼각형은 이것의 1/4 남짓. props.js 가 인스턴스 단위로 걸러낸다)
+PLACED = dict(rock=235, bush=256, tree=82, crag=50, thicket=20)
+tot = 0
+for (n, t0, t1, s0, s1, fx, fy, fz) in REPORT:
+    c = PLACED.get(n, 0)
+    tot += t1 * c
+    print("  %-9s %5d개 x %6d = %9s" % (n, c, t1, format(t1 * c, ",")))
+print("씬 전체 소품 삼각형 %s" % format(tot, ","))
+print("DONE")

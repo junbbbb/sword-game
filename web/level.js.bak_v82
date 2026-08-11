@@ -1,0 +1,455 @@
+// ---------------------------------------------------------------------------
+// web/level.js — 맵(level1.glb) 을 씬에 올리고, 2D 충돌과 지면 높이를 담당한다.
+//
+// main.js 는 이미 2천 줄이라 맵 관련은 전부 여기로 뺐다. main.js 가 하는 일은
+// loadLevel() 한 번과 slide()/groundY() 호출 몇 줄이 전부다.
+//
+// 설계 원칙
+//  1. 충돌은 **메시를 파싱하지 않는다.** level1.json 의 colliders[] 에 축정렬 박스와
+//     원 102개가 이미 들어 있다(블렌더 s20_level1.py 가 렌더 메시와 같은 부피로 뽑아준다).
+//     레이캐스트·BVH 는 이 규모에서 전부 과잉이다.
+//  2. 판정은 **평면 2D(XZ)** 다. 높이를 안 본다. 맵에서 넘어다닐 수 있는 건 20cm 짜리
+//     대웅전 단 하나뿐이라 3D 로 만들 이유가 없다(높이는 groundY 가 따로 본다).
+//  3. ★벽에 닿으면 멈추는 게 아니라 **미끄러진다.** 원하는 자리로 일단 옮긴 뒤
+//     파고든 만큼만 되밀어낸다(depenetration). 되밀리는 방향이 벽의 법선이라
+//     벽 방향 성분만 사라지고 접선 성분은 그대로 남는다 = 벽을 타고 흐른다.
+//     "벽에 부딪히면 이동 취소"로 만들면 대각선으로 걸을 때마다 딱딱 멈춰서
+//     조작이 답답해진다.
+//  4. 플레이어와 요괴가 **같은 함수**를 쓴다. 따로 만들면 서로 다른 벽을 보게 된다.
+//
+// 좌표계: level1.json 은 이미 three.js 좌표다(X=동, Y=위, Z=남). 변환하지 않는다.
+// ---------------------------------------------------------------------------
+import * as THREE from './lib/three.module.js';
+import { GLTFLoader } from './lib/GLTFLoader.js';
+
+// ── 반경 기준값 ──
+// 몸통 반경이다. 칼을 휘두르는 폭이 아니다. 캐릭터 어깨폭이 0.5m 정도라 0.35 면
+// 어깨가 벽에 살짝 닿는 자리에서 멈춘다. 통로가 3.2m(=1칸)라 0.35 로도 둘이 스쳐
+// 지나갈 수 있고, 문 기둥 사이 3.33m 도 넉넉히 통과한다.
+export const PLAYER_RADIUS = 0.35;
+// 요괴 반경은 enemy.js 가 자기 몸집(scale)에 물려서 따로 정한다(ENEMY_R).
+
+// 격자에 넣을 때 넉넉히 부풀리는 값. 이보다 큰 반경으로 질의하면 옆 칸 벽을 놓친다.
+const AGENT_MAX_R = 0.75;
+const GCELL = 4.0;               // 충돌 격자 한 칸(m). 96m 맵이 24x24 = 576칸이 된다
+
+// ── 지면 디테일 ──
+// 문제(실측): level1.glb 의 바닥 텍스처는 2048px 한 장으로 96m 를 덮는다. 1m 가
+// 21px 이라 카메라가 가까이 붙으면 흙바닥이 그냥 뿌옇게 뭉갠 얼룩으로 보인다.
+//
+// 고치는 법: 텍스처를 키우는 게 아니다(96m 를 100px/m 로 덮으려면 9600px 이다).
+// **작은 이어붙는 노이즈 한 장을 곱한다.** 색·그림자는 원래 텍스처가 그대로 정하고
+// 이 한 장은 밝기만 ±10% 흔든다. 그래서 톤이 안 변하고 결만 생긴다.
+//
+// ★두 주기를 겹친다. 한 주기만 쓰면 그 간격마다 같은 얼룩이 도는 게 눈에 띈다.
+//   1.7m 와 4.3m 는 서로 나누어떨어지지 않아서 둘이 다시 맞물리기까지 아주 멀다.
+//   텍스처도 채널을 갈라 담았다(tools/bake_fx_tex.py): G = 잔결, R = 넓은 얼룩.
+//   거기에 넓은 쪽은 좌표를 37도 돌려 읽어서 두 격자가 아예 나란해지지 않게 했다.
+const DETAIL_TEX = './tex/ground_detail.png';
+const DETAIL_FINE = 1 / 1.7;     // 잔결 주기의 역수(1/m)
+const DETAIL_WIDE = 1 / 4.3;     // 넓은 얼룩 주기의 역수(1/m)
+const DETAIL_WIDE_W = 0.72;      // 넓은 얼룩을 섞는 비율
+// 곱수 폭. 아래 자르는 값과 짝이다. 0.26 · 0.55 · 1.0 을 실제 화면에서 재봤다:
+// 0.26 은 있는 듯 없는 듯하고 1.0 은 흙이 지저분해 보인다. 0.55 에서 결이 또렷하면서
+// 아직 흙으로 읽힌다(renders/history/v71_polish/00_gain_ladder.png).
+const DETAIL_GAIN = 0.55;
+const DETAIL_MIN = 0.90, DETAIL_MAX = 1.10;
+const DETAIL_FADE0 = 30.0;       // 이 거리부터 서서히 빼고
+const DETAIL_FADE1 = 55.0;       // 여기서 완전히 끈다(먼 바닥이 반짝이는 걸 막는다)
+let DETAIL_N = 0;                // 실제로 결이 붙은 재질 수(검증용)
+
+let LV = null;                   // level1.json 원본
+let ROOT = null;                 // 씬에 붙은 맵 그룹
+let PROPS = null;                // web/props.js 모듈(소품 인스턴싱). 없으면 null
+let FLOOR_Y = 0;                 // 맵 바닥 높이(0.02). 맵이 없으면 0
+
+const BOXES = [];                // {x, z, hx, hz}
+const CIRCLES = [];              // {x, z, r}
+const PLATFORMS = [];            // 올라설 수 있는 낮은 단 {box|circle, top}
+let CELLS = null;                // 격자 버킷: 각 칸이 [{...collider}, ...]
+let GW = 0, GH = 0, GX0 = 0, GZ0 = 0;
+
+// ---------------------------------------------------------------------------
+// 로드
+// ---------------------------------------------------------------------------
+// search 는 index.html 이 쓰는 캐시버스팅 쿼리(?v=..)를 그대로 물려주기 위한 것이다.
+// json·glb 도 같이 물려줘야 맵만 옛것이 남는 사고가 안 난다.
+export async function loadLevel(scene, search) {
+  const q = search === undefined ? location.search : search;
+  const res = await fetch('./level1.json' + q);
+  if (!res.ok) throw new Error('level1.json 을 못 읽었다: ' + res.status);
+  LV = await res.json();
+  FLOOR_Y = LV.floorY || 0;
+
+  buildColliders();
+  buildPlatforms();
+  buildGrid();
+
+  const glb = await new Promise((ok, bad) => {
+    new GLTFLoader().load('./level1.glb' + q, ok, undefined, bad);
+  });
+  ROOT = glb.scene;
+  ROOT.traverse(o => {
+    if (!o.isMesh) return;
+    // 바닥은 그림자를 받기만 한다. 던지게 두면 자기 자신에게 얼룩이 생긴다.
+    const isFloor = o.name.startsWith('FLOOR');
+    o.receiveShadow = true;
+    o.castShadow = !isFloor;
+  });
+  // 바닥에만 디테일 결을 얹는다. 실패해도 맵은 그대로 뜬다.
+  DETAIL_N = await applyFloorDetail(ROOT, q);
+  scene.add(ROOT);
+
+  // ★소품 5종(바위·절벽바위·덤불·나무·수풀)은 이 glb 에 없다.
+  //   web/props/<종류>.glb 를 한 벌씩 읽어 props.js 가 InstancedMesh 로 심는다.
+  //   수풀만 구역별 메시(BUSH_01..16)로 심는데, 은신 연출이 그 이름을 찾기 때문이다.
+  //   ★ROOT 밑에 붙인다(stealth.js 가 LV.root() 를 훑어 수풀을 찾는다).
+  //   ★같은 쿼리로 부른다. 다른 URL 로 부르면 모듈 인스턴스가 갈린다.
+  try {
+    PROPS = await import('./props.js' + q);
+    await PROPS.build(ROOT, LV, q, groundY);
+  } catch (e) {
+    // 소품이 없어도 맵과 충돌은 그대로 돈다. 게임이 안 뜨는 것보다는 낫다.
+    console.error('[level] 소품을 못 심었다', e);
+    PROPS = null;
+  }
+  return LV;
+}
+
+// ---------------------------------------------------------------------------
+// 지면 디테일 얹기
+// ---------------------------------------------------------------------------
+// ★바닥 메시만 골라야 한다. level1.glb 의 메시 이름은 FLOOR / COL_CLIFF / COL_ROCK /
+//   DECO_MOSS / WATER_STREAM 식이다. 재질을 통으로 훑어 얹으면 절벽·바위·이끼까지
+//   얼룩덜룩해진다. 이름으로 정확히 FLOOR 만 집는다(재질 이름은 MAT_FLOOR 하나뿐).
+async function applyFloorDetail(root, q) {
+  const floors = [];
+  root.traverse(o => { if (o.isMesh && o.name.startsWith('FLOOR')) floors.push(o); });
+  if (!floors.length) { console.warn('[level] 바닥 메시(FLOOR)를 못 찾았다'); return 0; }
+
+  // 실패해도 게임은 그대로 돈다(결만 없다). 그래서 reject 없이 null 로 받는다.
+  const tex = await new Promise(ok => {
+    new THREE.TextureLoader().load(DETAIL_TEX + q, t => ok(t), undefined, () => ok(null));
+  });
+  if (!tex) { console.warn('[level] 지면 디테일 텍스처를 못 읽었다. 결 없이 간다'); return 0; }
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  // ★colorSpace 를 건드리지 않는다. 이건 색이 아니라 곱수다. sRGB 로 읽으면
+  //   0.5 가 0.21 로 내려앉아 바닥이 통째로 새까매진다.
+  tex.anisotropy = 8;            // 기기 상한은 three 가 알아서 자른다
+  tex.needsUpdate = true;
+
+  let n = 0;
+  for (const m of floors) {
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    for (const mat of mats) if (patchFloorMaterial(mat, tex)) n++;
+  }
+  return n;
+}
+
+function patchFloorMaterial(mat, tex) {
+  if (!mat || mat.userData.groundDetail) return false;
+  mat.userData.groundDetail = true;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uGD = { value: tex };
+    shader.uniforms.uGDFreq = { value: new THREE.Vector2(DETAIL_FINE, DETAIL_WIDE) };
+    shader.uniforms.uGDGain = { value: DETAIL_GAIN };
+    shader.uniforms.uGDWide = { value: DETAIL_WIDE_W };
+    shader.uniforms.uGDClamp = { value: new THREE.Vector2(DETAIL_MIN, DETAIL_MAX) };
+    shader.uniforms.uGDFade = { value: new THREE.Vector2(DETAIL_FADE0, DETAIL_FADE1) };
+    // 전후 비교용 손잡이. gain 을 0 으로 내리면 결이 붙기 전 그림이 그대로 나온다
+    // (재컴파일이 없으니 같은 프레임·같은 카메라로 두 장을 찍을 수 있다)
+    mat.userData.gdShader = shader;
+    // ★UV 를 안 쓴다. 바닥 UV 는 96m 한 장에 0..1 로 깔려 있어서 거기 곱하면
+    //   주기가 미터가 아니라 맵 크기에 묶인다. **월드 좌표**로 재야 1.7m 가 1.7m 다.
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vGDW;')
+      // project_vertex 다음이어야 한다. transformed(최종 정점 위치)가 그 앞에서 정해진다
+      .replace('#include <project_vertex>',
+               '#include <project_vertex>\n\tvGDW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', [
+        '#include <common>',
+        'varying vec3 vGDW;',
+        'uniform sampler2D uGD;',
+        'uniform vec2 uGDFreq;',
+        'uniform float uGDGain;',
+        'uniform float uGDWide;',
+        'uniform vec2 uGDClamp;',
+        'uniform vec2 uGDFade;'].join('\n'))
+      // ★map_fragment **다음**이어야 한다. 그 앞에서는 diffuseColor 가 아직 바닥
+      //   텍스처를 안 먹은 흰색이라 곱해봐야 결이 안 생긴다.
+      .replace('#include <map_fragment>', [
+        '#include <map_fragment>',
+        '{',
+        '  vec2 gdP = vGDW.xz;',
+        '  vec2 gdQ = vec2( gdP.x * 0.80 - gdP.y * 0.60, gdP.x * 0.60 + gdP.y * 0.80 );',
+        '  float gdF = texture2D( uGD, gdP * uGDFreq.x ).g - 0.5;',
+        '  float gdW = texture2D( uGD, gdQ * uGDFreq.y + vec2( 0.37, 0.61 ) ).r - 0.5;',
+        // cameraPosition 은 three 가 모든 재질에 기본으로 넣어주는 유니폼이다
+        '  float gdFade = 1.0 - smoothstep( uGDFade.x, uGDFade.y, length( vGDW - cameraPosition ) );',
+        '  float gdM = 1.0 + ( gdF + gdW * uGDWide ) * uGDGain * gdFade;',
+        '  diffuseColor.rgb *= clamp( gdM, uGDClamp.x, uGDClamp.y );',
+        '}'].join('\n'));
+  };
+  // ★onBeforeCompile 만으로는 안 먹는다. three 는 재질 **파라미터**로 프로그램을
+  //   캐시하는데, 그 키에 onBeforeCompile 이 안 들어간다. 같은 파라미터의 다른
+  //   MeshStandardMaterial 이 먼저 컴파일해 둔 프로그램을 그대로 받아 쓰면 이 코드가
+  //   통째로 무시된다(three 의 오래된 함정). 키를 손으로 갈라준다.
+  mat.customProgramCacheKey = () => 'groundDetail1';
+  mat.needsUpdate = true;
+  return true;
+}
+
+export function data() { return LV; }
+export function ready() { return !!LV; }
+export function root() { return ROOT; }
+export function props() { return PROPS; }
+export function floorY() { return FLOOR_Y; }
+
+// ---------------------------------------------------------------------------
+// 충돌 자료 만들기
+// ---------------------------------------------------------------------------
+function buildColliders() {
+  BOXES.length = 0;
+  CIRCLES.length = 0;
+  for (const c of (LV.colliders || [])) {
+    if (c.type === 'circle') CIRCLES.push({ x: c.x, z: c.z, r: c.r, tag: c.tag });
+    else BOXES.push({ x: c.x, z: c.z, hx: c.hx, hz: c.hz, tag: c.tag });
+  }
+}
+
+// 올라설 수 있는 낮은 단.
+// ★colliders[] 에는 안 들어 있다. 무릎(0.6m)보다 낮은 건 "막지 않는다"가 맵 규칙이라
+//   기단·제단·탈출 계단은 충돌에서 빠졌는데, 그러면 발이 그 두께만큼 묻힌다.
+//   그래서 **높이 전용 목록**을 따로 둔다. 숫자는 level1.json 의 platforms[] 에서
+//   읽고(블렌더 s20_level1.py 가 같은 값을 뽑아 넣는다), 없으면 그냥 평지로 본다.
+function buildPlatforms() {
+  PLATFORMS.length = 0;
+  for (const p of (LV.platforms || [])) {
+    if (p.type === 'circle') PLATFORMS.push({ circle: true, x: p.x, z: p.z, r: p.r, top: p.top });
+    else PLATFORMS.push({ circle: false, x: p.x, z: p.z, hx: p.hx, hz: p.hz, top: p.top });
+  }
+}
+
+// 균일 격자. 102개면 전부 훑어도 되지만, 요괴 40마리가 매 프레임 질의하면
+// 4천 번이 된다. 칸을 나누면 한 번에 보통 0~4개만 본다.
+function buildGrid() {
+  const b = LV.bounds;
+  GX0 = b.minX; GZ0 = b.minZ;
+  GW = Math.ceil((b.maxX - b.minX) / GCELL);
+  GH = Math.ceil((b.maxZ - b.minZ) / GCELL);
+  CELLS = new Array(GW * GH);
+  const put = (c, minX, minZ, maxX, maxZ) => {
+    // ★AABB 를 에이전트 최대 반경만큼 부풀려 넣는다. 이렇게 해 두면 "점이 든 칸"만
+    //   봐도 그 점 반경 안에 걸리는 벽을 하나도 안 놓친다(경계 칸 누락 방지).
+    const c0 = clampi(Math.floor((minX - AGENT_MAX_R - GX0) / GCELL), 0, GW - 1);
+    const c1 = clampi(Math.floor((maxX + AGENT_MAX_R - GX0) / GCELL), 0, GW - 1);
+    const r0 = clampi(Math.floor((minZ - AGENT_MAX_R - GZ0) / GCELL), 0, GH - 1);
+    const r1 = clampi(Math.floor((maxZ + AGENT_MAX_R - GZ0) / GCELL), 0, GH - 1);
+    for (let r = r0; r <= r1; r++) {
+      for (let cc = c0; cc <= c1; cc++) {
+        const k = r * GW + cc;
+        (CELLS[k] || (CELLS[k] = [])).push(c);
+      }
+    }
+  };
+  for (const c of BOXES) put(c, c.x - c.hx, c.z - c.hz, c.x + c.hx, c.z + c.hz);
+  for (const c of CIRCLES) { c.isCircle = true; put(c, c.x - c.r, c.z - c.r, c.x + c.r, c.z + c.r); }
+}
+
+const clampi = (v, a, b) => (v < a ? a : (v > b ? b : v));
+
+function bucket(x, z) {
+  if (!CELLS) return null;
+  const c = Math.floor((x - GX0) / GCELL), r = Math.floor((z - GZ0) / GCELL);
+  if (c < 0 || r < 0 || c >= GW || r >= GH) return null;
+  return CELLS[r * GW + c] || null;
+}
+
+// ---------------------------------------------------------------------------
+// 한 개짜리 밀어내기
+// ---------------------------------------------------------------------------
+const _hit = { x: 0, z: 0 };
+
+// 원(p, r) 대 축정렬 박스. 모서리에서는 원 대 점으로, 면에서는 최소 축으로 민다.
+// 면에서 축으로 미는 게 곧 '미끄러짐'이다: 밀려나는 방향이 벽 법선이라
+// 벽과 나란한 성분은 하나도 안 깎인다.
+function pushBox(c, px, pz, r) {
+  const dx = px - c.x, dz = pz - c.z;
+  const ax = Math.abs(dx) - c.hx;     // 면까지 남은 거리. 음수면 그 축으로는 안쪽
+  const az = Math.abs(dz) - c.hz;
+  if (ax >= r || az >= r) return false;
+  const sx = dx < 0 ? -1 : 1, sz = dz < 0 ? -1 : 1;
+  if (ax > 0 && az > 0) {
+    const d = Math.sqrt(ax * ax + az * az);
+    if (d >= r) return false;                     // 모서리 바깥의 둥근 여백
+    const k = (r - d) / (d || 1e-6);
+    _hit.x = px + sx * ax * k;
+    _hit.z = pz + sz * az * k;
+  } else if (r - ax < r - az) {                   // 파고든 깊이가 얕은 축으로 뺀다
+    _hit.x = px + sx * (r - ax);
+    _hit.z = pz;
+  } else {
+    _hit.x = px;
+    _hit.z = pz + sz * (r - az);
+  }
+  return true;
+}
+
+function pushCircle(c, px, pz, r) {
+  const dx = px - c.x, dz = pz - c.z;
+  const rr = c.r + r;
+  const d2 = dx * dx + dz * dz;
+  if (d2 >= rr * rr) return false;
+  const d = Math.sqrt(d2);
+  if (d < 1e-6) { _hit.x = px + rr; _hit.z = pz; return true; }   // 정확히 중심일 때
+  const k = rr / d;
+  _hit.x = c.x + dx * k;
+  _hit.z = c.z + dz * k;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// 밖으로 밀어내기 / 미끄러지며 이동
+// ---------------------------------------------------------------------------
+const _out = { x: 0, z: 0, hit: false };
+
+// 지금 자리가 벽 속이면 가장 가까운 밖으로 뺀다. 스폰 자리 보정에 쓴다.
+export function pushOut(x, z, r, out) {
+  const o = out || _out;
+  o.x = x; o.z = z; o.hit = false;
+  if (!LV) return o;
+  resolve(o, r);
+  clampBounds(o, r);
+  return o;
+}
+
+// (x,z) 에서 (dx,dz) 만큼 가려다 벽을 만나면 미끄러진다.
+// out 을 재사용하므로 반환값을 보관하지 말고 바로 읽을 것(매 프레임 객체 생성 금지).
+export function slide(x, z, dx, dz, r, out) {
+  const o = out || _out;
+  o.x = x + dx; o.z = z + dz; o.hit = false;
+  if (!LV) return o;
+  resolve(o, r);
+  clampBounds(o, r);
+  return o;
+}
+
+// 벽을 하나 빠져나오면 다른 벽에 걸릴 수 있다(모서리·문 기둥 사이). 몇 번만 반복한다.
+// ★무한 반복 금지. 두 벽 사이에 끼면 영원히 진동한다. 3회면 실사용에서 남는 침범이
+//   밀리미터 단위고, 남아도 다음 프레임에 마저 빠져나온다.
+function resolve(o, r) {
+  const rr = r > AGENT_MAX_R ? AGENT_MAX_R : r;
+  for (let it = 0; it < 3; it++) {
+    const list = bucket(o.x, o.z);
+    if (!list) return;
+    let moved = false;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      const got = c.isCircle ? pushCircle(c, o.x, o.z, rr) : pushBox(c, o.x, o.z, rr);
+      if (got) { o.x = _hit.x; o.z = _hit.z; moved = true; o.hit = true; }
+    }
+    if (!moved) return;
+  }
+}
+
+// 성벽이 맵을 둘러싸고 있어서 보통은 여기까지 안 온다. 문틈으로 새는 걸 막는 최후의 벽.
+function clampBounds(o, r) {
+  const b = LV.bounds;
+  if (o.x < b.minX + r) o.x = b.minX + r; else if (o.x > b.maxX - r) o.x = b.maxX - r;
+  if (o.z < b.minZ + r) o.z = b.minZ + r; else if (o.z > b.maxZ - r) o.z = b.maxZ - r;
+}
+
+// 이 자리에 반경 r 로 설 수 있는가(검증·배치용).
+export function blocked(x, z, r) {
+  if (!LV) return false;
+  const list = bucket(x, z);
+  if (!list) return false;
+  const rr = r > AGENT_MAX_R ? AGENT_MAX_R : r;
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i];
+    if (c.isCircle ? pushCircle(c, x, z, rr) : pushBox(c, x, z, rr)) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// 지면 높이
+// ---------------------------------------------------------------------------
+// ★완전한 지형 추종이 아니다. 맵에서 올라설 수 있는 건 20cm 대웅전 단, 24cm 보스
+//   제단, 22cm 탈출 계단 셋뿐이라 그 셋만 목록으로 본다. 그 외는 전부 평지(0.02)다.
+//   비탈·2층이 생기면 그때 제대로 만든다.
+export function groundY(x, z) {
+  if (!LV) return 0;
+  let y = FLOOR_Y;
+  for (let i = 0; i < PLATFORMS.length; i++) {
+    const p = PLATFORMS[i];
+    if (p.top <= y) continue;
+    if (p.circle) {
+      const dx = x - p.x, dz = z - p.z;
+      if (dx * dx + dz * dz > p.r * p.r) continue;
+    } else if (Math.abs(x - p.x) > p.hx || Math.abs(z - p.z) > p.hz) continue;
+    y = p.top;
+  }
+  return y;
+}
+
+// ---------------------------------------------------------------------------
+// 지점 (스폰·무리·탈출)
+// ---------------------------------------------------------------------------
+export function spawns() { return (LV && LV.spawns) || []; }
+export function mobs() { return (LV && LV.mobs) || []; }
+export function exits() { return (LV && LV.exits) || []; }
+
+// n 번째 스폰 지점. 없으면 원점.
+export function spawnPoint(i) {
+  const s = spawns();
+  if (!s.length) return { x: 0, y: 0, z: 0, yaw: 0 };
+  const p = s[((i | 0) % s.length + s.length) % s.length];
+  return { x: p.x, y: groundY(p.x, p.z), z: p.z, yaw: p.yaw || 0 };
+}
+
+// 검증용. 콘솔에서 충돌·지면을 바로 찍어볼 수 있게 열어둔다.
+export const debug = {
+  counts: () => ({ box: BOXES.length, circle: CIRCLES.length, platform: PLATFORMS.length }),
+  // 한 점에서 여러 방향으로 밀어 보고 어디에 막히는지 본다
+  probe(x, z, dx, dz, r = PLAYER_RADIUS) {
+    const o = slide(x, z, dx, dz, r, { x: 0, z: 0, hit: false });
+    return { to: [+o.x.toFixed(3), +o.z.toFixed(3)], hit: o.hit,
+             moved: +Math.hypot(o.x - x, o.z - z).toFixed(3) };
+  },
+  groundY,
+  blocked,
+  props: () => (PROPS ? PROPS.debug : null),
+  // 지면 디테일이 실제로 붙었는지. 붙은 재질 수와 셰이더에 문구가 박혔는지 본다
+  detail() {
+    const out = { patched: DETAIL_N, meshes: [], injected: 0, tex: null };
+    if (!ROOT) return out;
+    ROOT.traverse(o => {
+      if (!o.isMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (!m || !m.userData.groundDetail) continue;
+        out.meshes.push(o.name);
+        // gdShader 가 있다 = onBeforeCompile 이 실제로 돌았다(캐시 키 함정을 통과했다)
+        const sh = m.userData.gdShader;
+        if (!sh) continue;
+        if (sh.fragmentShader.indexOf('uGDGain') >= 0 && sh.vertexShader.indexOf('vGDW') >= 0) out.injected++;
+        out.gain = sh.uniforms.uGDGain.value;
+        out.tex = !!sh.uniforms.uGD.value;
+      }
+    });
+    return out;
+  },
+  // 전후 비교용. 인자 없이 부르면 원래 값으로 되돌린다
+  detailGain(v) {
+    const g = v === undefined ? DETAIL_GAIN : v;
+    if (!ROOT) return null;
+    ROOT.traverse(o => {
+      if (!o.isMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) if (m && m.userData.gdShader) m.userData.gdShader.uniforms.uGDGain.value = g;
+    });
+    return g;
+  },
+};

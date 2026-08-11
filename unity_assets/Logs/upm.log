@@ -1,0 +1,858 @@
+[2026-07-30T18:16:36.473Z][INFO] Command-line: /Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Helpers/PackageManager/Server/UnityPackageManager server -s 79386 --ipc-path /tmp/Unity-Upm-79386.sock -l 2 --log-file /Users/lbj/Documents/gameproject/unity_assets/Logs/upm.log
+[2026-07-30T18:16:36.509Z][INFO] IPC server started (IPC path=/tmp/Unity-Upm-79386.sock).
+[2026-07-30T18:16:36.509Z][INFO] Hint: To connect to this UPM instance, launch Unity with the command-line parameter -upmIpcPath Upm-79386.
+[2026-07-30T18:16:38.711Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T18:16:38.825Z][INFO] project:list-packages --> 200 (115 ms)
+[2026-07-30T18:16:38.859Z][INFO] config:project:get-registries <-- Request received
+params: {}
+[2026-07-30T18:16:38.864Z][INFO] config:project:get-registries --> 200 (5 ms)
+[2026-07-30T18:16:38.885Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T18:16:38.927Z][INFO] project:list-packages --> 200 (43 ms)
+[2026-07-30T18:16:40.977Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T18:16:41.015Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T18:16:41.028Z][INFO] project:list-packages --> 200 (51 ms)
+[2026-07-30T18:16:41.070Z][INFO] project:list-packages --> 200 (55 ms)
+[2026-07-30T18:16:41.073Z][INFO] config:project:get-registries <-- Request received
+params: {}
+[2026-07-30T18:16:41.076Z][INFO] config:project:get-registries --> 200 (3 ms)
+[2026-07-30T18:16:42.930Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T18:16:43.031Z][INFO] project:list-packages --> 200 (102 ms)
+[2026-07-30T18:16:46.604Z][INFO] packages:get-all-packageinfo <-- Request received
+params: {}
+[2026-07-30T18:16:46.619Z][INFO] packages:get-all-packageinfo <-- Request received
+params: {}
+[2026-07-30T18:16:48.082Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T18:16:49.351Z][INFO] project:list-packages --> 200 (1269 ms)
+[2026-07-30T18:16:56.209Z][INFO] packages:get-all-packageinfo --> 200 (9590 ms)
+[2026-07-30T18:16:56.546Z][INFO] packages:get-all-packageinfo --> 200 (9946 ms)
+[2026-07-30T18:16:56.639Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.learn.iet-framework@5.0.4"
+}
+[2026-07-30T18:16:56.662Z][INFO] packages:get-packageinfo --> 200 (23 ms)
+[2026-07-30T18:16:57.090Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.addressables@2.9.1"
+}
+[2026-07-30T18:16:57.103Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.ads.ios-support@1.0.1"
+}
+[2026-07-30T18:16:57.114Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.learn.iet-framework.authoring@1.5.4"
+}
+[2026-07-30T18:16:57.124Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.polyspatial.extensions@3.1.5"
+}
+[2026-07-30T18:16:57.136Z][INFO] packages:get-packageinfo --> 200 (46 ms)
+[2026-07-30T18:16:57.136Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.polyspatial.visionos@3.1.5"
+}
+[2026-07-30T18:16:57.147Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.scriptablebuildpipeline@2.6.1"
+}
+[2026-07-30T18:16:57.154Z][INFO] packages:get-packageinfo --> 200 (51 ms)
+[2026-07-30T18:16:57.158Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.xr.arcore@6.5.0"
+}
+[2026-07-30T18:16:57.164Z][INFO] packages:get-packageinfo --> 200 (50 ms)
+[2026-07-30T18:16:57.168Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.xr.arfoundation@6.5.0"
+}
+[2026-07-30T18:16:57.178Z][INFO] packages:get-packageinfo --> 200 (42 ms)
+[2026-07-30T18:16:57.178Z][INFO] packages:get-packageinfo --> 200 (54 ms)
+[2026-07-30T18:16:57.179Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.xr.arkit@6.5.0"
+}
+[2026-07-30T18:16:57.190Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.xr.management@4.5.4"
+}
+[2026-07-30T18:16:57.204Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.xr.visionos@3.1.5"
+}
+[2026-07-30T18:16:57.214Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.services.friends@1.1.1"
+}
+[2026-07-30T18:16:57.223Z][INFO] packages:get-packageinfo --> 200 (76 ms)
+[2026-07-30T18:16:57.224Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.services.moderation@1.0.2"
+}
+[2026-07-30T18:16:57.234Z][INFO] packages:get-packageinfo <-- Request received
+params: {
+  "packageId": "com.unity.services.multiplayer@2.2.4"
+}
+[2026-07-30T18:16:57.249Z][INFO] packages:get-packageinfo --> 200 (91 ms)
+[2026-07-30T18:16:57.266Z][INFO] packages:get-packageinfo --> 200 (98 ms)
+[2026-07-30T18:16:57.275Z][INFO] packages:get-packageinfo --> 200 (96 ms)
+[2026-07-30T18:16:57.276Z][INFO] packages:get-packageinfo --> 200 (62 ms)
+[2026-07-30T18:16:57.279Z][INFO] packages:get-packageinfo --> 200 (75 ms)
+[2026-07-30T18:16:57.281Z][INFO] packages:get-packageinfo --> 200 (91 ms)
+[2026-07-30T18:16:57.282Z][INFO] packages:get-packageinfo --> 200 (59 ms)
+[2026-07-30T18:16:57.283Z][INFO] packages:get-packageinfo --> 200 (49 ms)
+[2026-07-30T18:27:31.679Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T18:27:32.155Z][INFO] project:list-packages --> 200 (477 ms)
+[2026-07-30T19:25:40.379Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T19:25:40.911Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T19:25:41.339Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-30T19:25:43.205Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T19:25:44.004Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T19:25:44.555Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-30T19:25:45.321Z][INFO] project:list-packages --> 200 (4410 ms)
+[2026-07-30T19:25:45.321Z][INFO] project:list-packages --> 200 (2116 ms)
+[2026-07-30T19:25:45.322Z][INFO] project:list-packages --> 200 (4953 ms)
+[2026-07-30T19:25:45.322Z][INFO] project:list-packages --> 200 (1318 ms)
+[2026-07-30T21:24:57.483Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T21:24:58.053Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T21:24:58.541Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-30T21:25:00.741Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T21:25:01.303Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T21:25:02.180Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-30T21:25:03.221Z][INFO] project:list-packages --> 200 (5167 ms)
+[2026-07-30T21:25:03.223Z][INFO] project:list-packages --> 200 (5750 ms)
+[2026-07-30T21:25:03.223Z][INFO] project:list-packages --> 200 (1920 ms)
+[2026-07-30T21:25:03.223Z][INFO] project:list-packages --> 200 (2484 ms)
+[2026-07-30T23:24:27.081Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T23:24:27.452Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T23:24:28.068Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-30T23:24:31.238Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-30T23:24:32.225Z][INFO] project:list-packages --> 200 (4773 ms)
+[2026-07-30T23:24:32.226Z][INFO] project:list-packages --> 200 (5152 ms)
+[2026-07-30T23:24:32.254Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T23:24:32.746Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-30T23:24:32.893Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T23:24:33.339Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T23:24:33.881Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-30T23:24:35.805Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-30T23:24:36.142Z][INFO] project:list-packages --> 200 (3888 ms)
+[2026-07-30T23:24:36.142Z][INFO] project:list-packages --> 200 (2803 ms)
+[2026-07-30T23:24:36.143Z][INFO] project:list-packages --> 200 (3251 ms)
+[2026-07-30T23:24:36.143Z][INFO] project:list-packages --> 200 (2262 ms)
+[2026-07-31T01:24:06.965Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T01:24:07.478Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T01:24:08.002Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T01:24:11.305Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T01:24:12.107Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T01:24:16.868Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T01:24:17.837Z][INFO] project:list-packages --> 200 (10358 ms)
+[2026-07-31T01:24:17.839Z][INFO] project:list-packages --> 200 (10884 ms)
+[2026-07-31T01:24:17.839Z][INFO] project:list-packages --> 200 (6535 ms)
+[2026-07-31T01:24:17.839Z][INFO] project:list-packages --> 200 (5732 ms)
+[2026-07-31T03:23:45.052Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T03:23:45.527Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T03:23:46.058Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T03:23:49.714Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T03:23:49.830Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T03:23:50.118Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T03:23:50.169Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T03:23:50.718Z][INFO] project:list-packages --> 200 (5676 ms)
+[2026-07-31T03:23:50.718Z][INFO] project:list-packages --> 200 (5191 ms)
+[2026-07-31T03:23:53.764Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T03:23:53.961Z][INFO] project:list-packages --> 200 (3843 ms)
+[2026-07-31T03:23:53.961Z][INFO] project:list-packages --> 200 (4247 ms)
+[2026-07-31T05:22:53.344Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T05:22:53.962Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T05:22:54.395Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T05:22:56.594Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T05:22:57.120Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T05:22:58.242Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T05:22:59.647Z][INFO] project:list-packages --> 200 (3052 ms)
+[2026-07-31T05:22:59.649Z][INFO] project:list-packages --> 200 (6316 ms)
+[2026-07-31T05:22:59.649Z][INFO] project:list-packages --> 200 (5687 ms)
+[2026-07-31T05:22:59.649Z][INFO] project:list-packages --> 200 (2529 ms)
+[2026-07-31T07:22:29.244Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T07:22:29.910Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T07:22:30.308Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T07:22:31.347Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T07:22:31.890Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T07:22:33.959Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T07:22:35.215Z][INFO] project:list-packages --> 200 (3870 ms)
+[2026-07-31T07:22:35.217Z][INFO] project:list-packages --> 200 (5307 ms)
+[2026-07-31T07:22:35.217Z][INFO] project:list-packages --> 200 (3327 ms)
+[2026-07-31T07:22:35.217Z][INFO] project:list-packages --> 200 (5982 ms)
+[2026-07-31T09:22:20.463Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T09:22:21.294Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T09:22:21.533Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T09:22:21.603Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T09:22:22.300Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T09:22:24.520Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T09:22:25.461Z][INFO] project:list-packages --> 200 (4168 ms)
+[2026-07-31T09:22:25.464Z][INFO] project:list-packages --> 200 (5016 ms)
+[2026-07-31T09:22:25.464Z][INFO] project:list-packages --> 200 (3164 ms)
+[2026-07-31T09:22:25.464Z][INFO] project:list-packages --> 200 (3861 ms)
+[2026-07-31T11:22:00.569Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T11:22:01.055Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T11:22:01.565Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T11:22:04.857Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T11:22:05.841Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T11:22:06.306Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T11:22:06.333Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T11:22:06.386Z][INFO] project:list-packages --> 200 (5825 ms)
+[2026-07-31T11:22:06.387Z][INFO] project:list-packages --> 200 (5332 ms)
+[2026-07-31T11:22:07.302Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T11:22:07.795Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T11:22:09.417Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T11:22:09.785Z][INFO] project:list-packages --> 200 (3944 ms)
+[2026-07-31T11:22:09.785Z][INFO] project:list-packages --> 200 (1990 ms)
+[2026-07-31T11:22:09.786Z][INFO] project:list-packages --> 200 (3480 ms)
+[2026-07-31T11:22:09.787Z][INFO] project:list-packages --> 200 (2485 ms)
+[2026-07-31T13:21:50.048Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T13:21:51.060Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T13:21:51.164Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T13:21:54.776Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T13:21:55.618Z][INFO] project:list-packages --> 200 (4454 ms)
+[2026-07-31T13:21:55.619Z][INFO] project:list-packages --> 200 (5579 ms)
+[2026-07-31T15:21:28.083Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T15:21:28.675Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T15:21:29.126Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T15:21:32.327Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T15:21:32.669Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T15:21:33.160Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T15:21:33.164Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T15:21:33.205Z][INFO] project:list-packages --> 200 (5130 ms)
+[2026-07-31T15:21:33.206Z][INFO] project:list-packages --> 200 (4531 ms)
+[2026-07-31T15:21:34.672Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T15:21:35.371Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T15:21:36.119Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T15:21:36.440Z][INFO] project:list-packages --> 200 (1070 ms)
+[2026-07-31T15:21:36.441Z][INFO] project:list-packages --> 200 (1770 ms)
+[2026-07-31T15:21:36.442Z][INFO] project:list-packages --> 200 (3773 ms)
+[2026-07-31T15:21:36.442Z][INFO] project:list-packages --> 200 (3278 ms)
+[2026-07-31T17:21:21.491Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T17:21:22.050Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T17:21:22.674Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T17:21:26.128Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T17:21:26.150Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T17:21:26.611Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T17:21:26.796Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T17:21:27.285Z][INFO] project:list-packages --> 200 (5808 ms)
+[2026-07-31T17:21:27.285Z][INFO] project:list-packages --> 200 (5235 ms)
+[2026-07-31T17:21:29.630Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T17:21:30.018Z][INFO] project:list-packages --> 200 (3222 ms)
+[2026-07-31T17:21:30.021Z][INFO] project:list-packages --> 200 (3895 ms)
+[2026-07-31T19:21:00.176Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T19:21:00.852Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T19:21:01.359Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T19:21:02.910Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T19:21:03.499Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T19:21:04.956Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T19:21:06.433Z][INFO] project:list-packages --> 200 (6270 ms)
+[2026-07-31T19:21:06.433Z][INFO] project:list-packages --> 200 (3525 ms)
+[2026-07-31T19:21:06.434Z][INFO] project:list-packages --> 200 (5582 ms)
+[2026-07-31T19:21:06.434Z][INFO] project:list-packages --> 200 (2935 ms)
+[2026-07-31T21:20:01.869Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T21:20:02.484Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T21:20:02.888Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T21:20:06.796Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T21:20:06.991Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T21:20:07.386Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T21:20:07.452Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T21:20:07.823Z][INFO] project:list-packages --> 200 (5971 ms)
+[2026-07-31T21:20:07.823Z][INFO] project:list-packages --> 200 (5339 ms)
+[2026-07-31T21:20:08.207Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T21:20:08.578Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T21:20:10.769Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T21:20:11.122Z][INFO] project:list-packages --> 200 (2544 ms)
+[2026-07-31T21:20:11.123Z][INFO] project:list-packages --> 200 (2916 ms)
+[2026-07-31T21:20:11.123Z][INFO] project:list-packages --> 200 (3737 ms)
+[2026-07-31T21:20:11.126Z][INFO] project:list-packages --> 200 (4330 ms)
+[2026-07-31T23:19:32.728Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T23:19:33.221Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T23:19:33.904Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-07-31T23:19:36.232Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T23:19:36.601Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-07-31T23:19:37.785Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-07-31T23:19:38.896Z][INFO] project:list-packages --> 200 (5675 ms)
+[2026-07-31T23:19:38.898Z][INFO] project:list-packages --> 200 (2297 ms)
+[2026-07-31T23:19:38.898Z][INFO] project:list-packages --> 200 (6180 ms)
+[2026-07-31T23:19:38.898Z][INFO] project:list-packages --> 200 (2668 ms)
+[2026-08-01T01:19:32.011Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T01:19:32.540Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T01:19:32.895Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-08-01T01:19:34.641Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T01:19:35.249Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T01:19:36.117Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-08-01T01:19:36.930Z][INFO] project:list-packages --> 200 (4929 ms)
+[2026-08-01T01:19:36.931Z][INFO] project:list-packages --> 200 (2290 ms)
+[2026-08-01T01:19:36.931Z][INFO] project:list-packages --> 200 (4391 ms)
+[2026-08-01T01:19:36.931Z][INFO] project:list-packages --> 200 (1683 ms)
+[2026-08-01T03:18:53.874Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T03:18:54.365Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T03:18:56.088Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-08-01T03:18:57.256Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T03:18:57.959Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T03:18:59.653Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-08-01T03:19:00.615Z][INFO] project:list-packages --> 200 (2656 ms)
+[2026-08-01T03:19:00.617Z][INFO] project:list-packages --> 200 (6252 ms)
+[2026-08-01T03:19:00.617Z][INFO] project:list-packages --> 200 (3361 ms)
+[2026-08-01T03:19:00.617Z][INFO] project:list-packages --> 200 (6749 ms)
+[2026-08-01T05:18:05.668Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T05:18:06.188Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T05:18:06.786Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-08-01T05:18:10.711Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-08-01T05:18:10.876Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T05:18:11.368Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-08-01T05:18:11.475Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T05:18:12.152Z][INFO] project:list-packages --> 200 (5964 ms)
+[2026-08-01T05:18:12.153Z][INFO] project:list-packages --> 200 (6494 ms)
+[2026-08-01T05:18:14.841Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-08-01T05:18:15.220Z][INFO] project:list-packages --> 200 (3746 ms)
+[2026-08-01T05:18:15.222Z][INFO] project:list-packages --> 200 (4347 ms)
+[2026-08-01T07:17:29.052Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T07:17:29.695Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T07:17:30.058Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-08-01T07:17:30.123Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T07:17:30.805Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T07:17:33.158Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-08-01T07:17:34.017Z][INFO] project:list-packages --> 200 (4322 ms)
+[2026-08-01T07:17:34.019Z][INFO] project:list-packages --> 200 (3214 ms)
+[2026-08-01T07:17:34.019Z][INFO] project:list-packages --> 200 (3896 ms)
+[2026-08-01T07:17:34.019Z][INFO] project:list-packages --> 200 (4978 ms)
+[2026-08-01T09:17:25.476Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T09:17:25.982Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T09:17:26.444Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-08-01T09:17:30.063Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-08-01T09:17:30.355Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T09:17:30.831Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-08-01T09:17:30.969Z][INFO] project:list-packages --> 200 (4987 ms)
+[2026-08-01T09:17:30.970Z][INFO] project:list-packages --> 200 (5501 ms)
+[2026-08-01T09:17:31.077Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T09:17:34.240Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-08-01T09:17:34.505Z][INFO] project:list-packages --> 200 (3428 ms)
+[2026-08-01T09:17:34.506Z][INFO] project:list-packages --> 200 (4151 ms)
+[2026-08-01T11:17:09.932Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T11:17:10.518Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T11:17:10.901Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-08-01T11:17:11.301Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T11:17:11.915Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T11:17:14.160Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-08-01T11:17:15.137Z][INFO] project:list-packages --> 200 (5215 ms)
+[2026-08-01T11:17:15.138Z][INFO] project:list-packages --> 200 (4620 ms)
+[2026-08-01T11:17:15.138Z][INFO] project:list-packages --> 200 (3223 ms)
+[2026-08-01T11:17:15.138Z][INFO] project:list-packages --> 200 (3837 ms)
+[2026-08-01T13:16:27.983Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T13:16:28.607Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T13:16:28.928Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-08-01T13:16:30.907Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T13:16:31.564Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T13:16:31.914Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-08-01T13:16:32.714Z][INFO] project:list-packages --> 200 (4107 ms)
+[2026-08-01T13:16:32.716Z][INFO] project:list-packages --> 200 (1810 ms)
+[2026-08-01T13:16:32.716Z][INFO] project:list-packages --> 200 (1152 ms)
+[2026-08-01T13:16:32.716Z][INFO] project:list-packages --> 200 (4742 ms)
+[2026-08-01T15:15:49.523Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T15:15:50.372Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T15:15:50.558Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-08-01T15:15:53.756Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-08-01T15:15:54.545Z][INFO] project:list-packages --> 200 (5030 ms)
+[2026-08-01T15:15:54.546Z][INFO] project:list-packages --> 200 (4174 ms)
+[2026-08-01T16:57:08.401Z][INFO] project:resolve-packages <-- Request received
+params: {}
+[2026-08-01T16:57:09.931Z][INFO] Cloning git package:
+  Repository: 'https://github.com/CoplayDev/unity-mcp.git'
+  Package location in repository: 'MCPForUnity'
+  Commit-ish: 'v10.1.0'
+  Destination: '/Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache'
+[2026-08-01T16:57:13.865Z][ERROR] Error when executing Git command:
+  git lfs pull --include MCPForUnity
+  - message: `/usr/bin/git lfs pull --include MCPForUnity` failed with code 1
+  
+  - stderr: git: 'lfs' is not a git command. See 'git --help'.
+
+The most similar command is
+	refs
+
+[2026-08-01T16:57:19.144Z][WARN] Requested version [3.0.2] for package [com.unity.nuget.newtonsoft-json] overridden by minimum version [3.2.2].
+[2026-08-01T16:57:19.145Z][INFO] project:resolve-packages --> 200 (10753 ms)
+[2026-08-01T16:57:19.790Z][INFO] config:project:get-registries <-- Request received
+params: {}
+[2026-08-01T16:57:19.802Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-08-01T16:57:19.826Z][INFO] config:project:get-registries --> 200 (37 ms)
+[2026-08-01T16:57:20.223Z][INFO] project:list-packages --> 200 (417 ms)
+[2026-08-01T16:58:11.982Z][INFO] Shutting down UnityPackageManager: parent process [79386] is no longer running.

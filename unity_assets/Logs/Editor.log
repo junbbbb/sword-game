@@ -1,0 +1,778 @@
+Unity Editor version:    6000.5.6f1 (0e0577a1a2ac)
+Branch:                  6000.5/staging
+Build type:              Release
+Batch mode:              NO
+macOS version:           Version 15.7.3 (Build 24G419)
+Darwin version:          24.6.0
+Architecture:            arm64
+Running under Rosetta:   NO
+Available memory:        8192 MB
+Date:                    2026-07-30T18:16:35Z
+[Licensing::Module] Trying to connect to existing licensing client channel...
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-lbj" at "2026-07-30T18:16:35.639477Z"
+
+COMMAND LINE ARGUMENTS:
+/Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/MacOS/Unity
+-projectPath
+/Users/lbj/Documents/gameproject/unity_assets
+Successfully changed project path to: /Users/lbj/Documents/gameproject/unity_assets
+/Users/lbj/Documents/gameproject/unity_assets
+[UnityMemory] Configuration Parameters - Can be set up in boot.config
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-nav-mesh-worker=65536"
+    "memorysetup-temp-allocator-size-audio-worker=65536"
+    "memorysetup-temp-allocator-size-cloud-worker=32768"
+    "memorysetup-allocator-temp-initial-block-size-main=262144"
+    "memorysetup-allocator-temp-initial-block-size-worker=262144"
+    "memorysetup-temp-allocator-size-preload-manager=33554432"
+    "memorysetup-temp-allocator-size-gfx=262144"
+    "memorysetup-temp-allocator-size-background-worker=32768"
+    "memorysetup-temp-allocator-size-job-worker=262144"
+    "memorysetup-bucket-allocator-granularity=16"
+    "memorysetup-bucket-allocator-bucket-count=8"
+    "memorysetup-bucket-allocator-block-size=33554432"
+    "memorysetup-bucket-allocator-block-count=8"
+    "memorysetup-main-allocator-block-size=16777216"
+    "memorysetup-thread-allocator-block-size=16777216"
+    "memorysetup-main-allocator-mimalloc-enabled=0"
+    "memorysetup-gfx-main-allocator-block-size=16777216"
+    "memorysetup-gfx-thread-allocator-block-size=16777216"
+    "memorysetup-cache-allocator-block-size=4194304"
+    "memorysetup-typetree-allocator-block-size=2097152"
+    "memorysetup-profiler-bucket-allocator-granularity=16"
+    "memorysetup-profiler-bucket-allocator-bucket-count=8"
+    "memorysetup-profiler-bucket-allocator-block-size=33554432"
+    "memorysetup-profiler-bucket-allocator-block-count=8"
+    "memorysetup-profiler-allocator-block-size=16777216"
+    "memorysetup-profiler-editor-allocator-block-size=1048576"
+    "memorysetup-temp-allocator-size-main=16777216"
+    "memorysetup-job-temp-allocator-block-size=2097152"
+    "memorysetup-job-temp-allocator-block-size-background=1048576"
+    "memorysetup-job-temp-allocator-reduction-small-platforms=262144"
+Player connection [8637047360]  Target information:
+
+Player connection [8637047360]  * "[IP] 192.168.0.63 [Port] 55504 [Flags] 2 [Guid] 1002251887 [EditorId] 1002251887 [Version] 1048832 [Id] OSXEditor(0,lbjui-MacBookPro.local) [Debug] 1 [PackageName] OSXEditor [ProjectName] Editor" 
+
+Player connection [8637047360] Host joined multi-casting on [225.0.0.222:54997]...
+Player connection [8637047360] Host joined alternative multi-casting on [225.0.0.222:34997]...
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+[Licensing::Client] Error: HandshakeResponse reported an error:
+	ResponseCode: 505
+	ResponseStatus: Unsupported protocol version '1.18.1'.
+[Licensing::Module] Error: Failed to handshake to channel: "LicenseClient-lbj"
+[Licensing::IpcConnector] LicenseClient-lbj channel disconnected successfully.
+[Licensing::IpcConnector] Channel LicenseClient-lbj-6000.5.6 doesn't exist
+Launching external process: /Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Helpers/UnityLicensingClient.app/Contents/MacOS/Unity.Licensing.Client
+[Licensing::Module] Successfully launched the LicensingClient (PId: 79390)
+[Package Manager] Connected to IPC stream "Upm-79386" after 0.4 seconds.
+[Licensing::Module] Licensing is not yet initialized.
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-lbj-6000.5.6" at "2026-07-30T18:16:36.72341Z"
+[Licensing::Client] Handshaking with LicensingClient:
+  Version:                 1.18.1+9fbee8e
+  Session Id:              e4c820d02cbf452bae36676470e77961
+  Correlation Id:          60f81325806f1872e4346bd0f3858bf0
+  External correlation Id: 7889111768448057083
+  Machine Id:              VfhLVAjGwbFy6V10+xyhYZsUCpY=
+[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-lbj-6000.5.6" (connect: 0.58s, validation: 0.05s, handshake: 0.36s)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-lbj-6000.5.6-notifications" at "2026-07-30T18:16:37.133273Z"
+[Licensing::Module] Connected to LicensingClient (PId: 79390, launch time: 0.00, total connection time: 0.99s)
+[Licensing::Module] Error: Access token is unavailable; failed to update
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] License group:
+  Id: 14569784059088-UnityPersXXXX
+  Product: Unity Personal
+  Type: Assigned
+  Expiration: Unlimited
+[Licensing::Client] Successfully updated license, isAsync: True, time: 0.01
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] Licensing Background thread has ended after 1.53s
+[Licensing::Module] Licensing is initialized (took 0.64s).
+[Licensing::Client] Successfully resolved entitlement details
+Library Redirect Path: Library/
+[Physics::Module] Selected backend.
+[Physics::Module] Name: PhysX
+[Physics::Module] Id: 0xf2b8ea05
+[Physics::Module] SDK Version: 4.1.2
+[Physics::Module] Integration Version: 1.0.0
+[Physics::Module] Threading Mode: Multi-Threaded
+Artifact Garbage Collection - Removed 55 unused hashed content files
+Initialize engine version: 6000.5.6f1 (0e0577a1a2ac)
+[Subsystems] Discovering subsystems at path /Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/UnitySubsystems
+[Subsystems] Discovering subsystems at path /Users/lbj/Documents/gameproject/unity_assets/Assets
+GfxDevice: creating device client; kGfxThreadingModeThreaded
+ preferred device: Apple M1 (high power)
+Metal devices available: 1
+0: Apple M1 (high power)
+Using device Apple M1 (high power)
+Initializing Metal device caps: Apple M1
+Mac GPU Family: 2
+Apple GPU Family: 7
+MSL Version: 3.0
+Has Float MSAA: 1
+Has Float Filtering: 1
+ReadWrite Texture Tier: 2
+Initialize mono
+Mono path[0] = '/Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/Scripting/Managed'
+Mono path[1] = '/Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/runtime/netstandard2.1'
+Mono path[2] = '/Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/Scripting/MonoBleedingEdge/lib/mono/unityjit-macos'
+Mono config path = '/Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/Scripting/MonoBleedingEdge/etc'
+Using monoOptions --debugger-agent=transport=dt_socket,embedding=1,server=y,suspend=n,address=127.0.0.1:56386
+CodeReloadManager initialized
+ImportWorker Server TCP listen port: 0
+AcceleratorClientConnectionCallback - disconnected - :0
+Begin MonoManager ReloadAssembly
+Registering precompiled unity dll's ...
+Register platform support module: /Applications/Unity/Hub/Editor/6000.5.6f1/PlaybackEngines/WebGLSupport/UnityEditor.WebGL.Extensions.dll
+Register platform support module: /Applications/Unity/Hub/Editor/6000.5.6f1/PlaybackEngines/MacStandaloneSupport/UnityEditor.OSXStandalone.Extensions.dll
+Registered in 0.001787 seconds.
+Native extension for OSXStandalone target not found
+Native extension for WebGL target not found
+Package Manager log level set to [2]
+ScheduleIndexationOnStartup MainProcess:False IndexOnStartup:False
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  0.451 seconds
+Domain Reload Profiling: 1033ms
+	BeginReloadAssembly (156ms)
+		CreateAndSetChildDomain (6ms)
+	RebuildCommonClasses (5ms)
+	RebuildNativeTypeToScriptingClass (28ms)
+	initialDomainReloadingComplete (68ms)
+	LoadAllAssembliesAndSetupDomain (323ms)
+		LoadAssemblies (151ms)
+		AnalyzeDomain (242ms)
+			TypeCache.Refresh (241ms)
+				TypeCache.ScanAssembly (220ms)
+	FinalizeReload (453ms)
+		SetupLoadedEditorAssemblies (0ms)
+			InitializePlatformSupportModulesInManaged (3ms)
+			BeforeProcessingInitializeOnLoad (92ms)
+			ProcessInitializeOnLoadAttributes (106ms)
+			ProcessInitializeOnLoadMethodAttributes (165ms)
+[Licensing::Client] Successfully resolved entitlement details
+Application.AssetDatabase Initial Refresh Start
+[Package Manager] Restoring resolved packages state from cache
+[Licensing::Client] Successfully resolved entitlement details
+[Package Manager] Registered 37 packages:
+  Built-in packages:
+    com.unity.multiplayer.center@1.0.1 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.multiplayer.center@b860850997d0)
+    com.unity.modules.accessibility@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.accessibility)
+    com.unity.modules.adaptiveperformance@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.adaptiveperformance)
+    com.unity.modules.ai@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.ai)
+    com.unity.modules.androidjni@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.androidjni)
+    com.unity.modules.animation@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.animation)
+    com.unity.modules.assetbundle@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.assetbundle)
+    com.unity.modules.audio@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.audio)
+    com.unity.modules.cloth@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.cloth)
+    com.unity.modules.director@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.director)
+    com.unity.modules.imageconversion@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.imageconversion)
+    com.unity.modules.imgui@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.imgui)
+    com.unity.modules.jsonserialize@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.jsonserialize)
+    com.unity.modules.particlesystem@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.particlesystem)
+    com.unity.modules.physics@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.physics)
+    com.unity.modules.physics2d@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.physics2d)
+    com.unity.modules.physicscore2d@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.physicscore2d)
+    com.unity.modules.screencapture@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.screencapture)
+    com.unity.modules.terrain@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.terrain)
+    com.unity.modules.terrainphysics@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.terrainphysics)
+    com.unity.modules.tilemap@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.tilemap)
+    com.unity.modules.ui@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.ui)
+    com.unity.modules.uielements@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.uielements)
+    com.unity.modules.umbra@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.umbra)
+    com.unity.modules.unityanalytics@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unityanalytics)
+    com.unity.modules.unitywebrequest@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unitywebrequest)
+    com.unity.modules.unitywebrequestassetbundle@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unitywebrequestassetbundle)
+    com.unity.modules.unitywebrequestaudio@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unitywebrequestaudio)
+    com.unity.modules.unitywebrequesttexture@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unitywebrequesttexture)
+    com.unity.modules.unitywebrequestwww@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unitywebrequestwww)
+    com.unity.modules.vectorgraphics@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.vectorgraphics)
+    com.unity.modules.vehicles@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.vehicles)
+    com.unity.modules.video@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.video)
+    com.unity.modules.wind@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.wind)
+    com.unity.modules.xr@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.xr)
+    com.unity.modules.subsystems@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.subsystems)
+    com.unity.modules.hierarchycore@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.hierarchycore)
+[Subsystems] No new subsystems found in resolved package list.
+[Package Manager] Done registering packages in 0.01 seconds
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://unix:/tmp/ilpp.sock-a0ba95e3e10416abd1e7afc2c4ba474a
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Production
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: /Users/lbj/Documents/gameproject/unity_assets
+info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+      Request starting HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/Ping - application/grpc -
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+      Executing endpoint 'gRPC - /UnityILPP.PostProcessing/Ping'
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+      Executed endpoint 'gRPC - /UnityILPP.PostProcessing/Ping'
+info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+      Request finished HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/Ping - 200 - application/grpc 39.2876ms
+Starting: /Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/BuildPipeline/bee_backend --ipc --defer-dag-verification --dagfile="Library/Bee/200b0aE.dag" --continue-on-failure --profile="Library/Bee/backend1.traceevents" ScriptAssemblies
+WorkingDir: /Users/lbj/Documents/gameproject/unity_assets
+ExitCode: 4 Duration: 0s61ms
+Rebuilding DAG because FileSignature timestamp changed: Library/Bee/200b0aE-inputdata.json
+*** Tundra requires additional run (0.04 seconds), 0 items updated, 170 evaluated
+Starting: /Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/Scripting/netcorerun/netcorerun "/Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/BuildPipeline/ScriptCompilationBuildProgram.exe" "Library/Bee/200b0aE.dag.json" "Library/Bee/200b0aE-inputdata.json" "Library/Bee/buildprogram0.traceevents"
+WorkingDir: /Users/lbj/Documents/gameproject/unity_assets
+ExitCode: 0 Duration: 0s530ms
+Starting: /Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/BuildPipeline/bee_backend --ipc --defer-dag-verification --dagfile="Library/Bee/200b0aE.dag" --continue-on-failure --dagfilejson="Library/Bee/200b0aE.dag.json" --profile="Library/Bee/backend2.traceevents" ScriptAssemblies
+WorkingDir: /Users/lbj/Documents/gameproject/unity_assets
+ExitCode: 0 Duration: 0s37ms
+Finished compiling graph: 173 nodes, 662 flattened edges (650 ToBuild, 4 ToUse), maximum node priority 24
+*** Tundra build success (0.02 seconds), 0 items updated, 170 evaluated
+AssetDatabase: script compilation time: 1.266910s
+Total cache size 25263660
+Total cache size after purge 25263660, took 00:00:00.0278302
+Begin MonoManager ReloadAssembly
+Native extension for OSXStandalone target not found
+Native extension for WebGL target not found
+ScheduleIndexationOnStartup MainProcess:True IndexOnStartup:True
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  0.482 seconds
+Domain Reload Profiling: 792ms
+	BeginReloadAssembly (158ms)
+		DisableScriptedObjects (17ms)
+		CreateAndSetChildDomain (40ms)
+	RebuildCommonClasses (8ms)
+	RebuildNativeTypeToScriptingClass (19ms)
+	initialDomainReloadingComplete (26ms)
+	LoadAllAssembliesAndSetupDomain (96ms)
+		LoadAssemblies (63ms)
+		AnalyzeDomain (15ms)
+			TypeCache.Refresh (10ms)
+				TypeCache.ScanAssembly (3ms)
+			BuildScriptInfoCaches (4ms)
+	FinalizeReload (483ms)
+		SetupLoadedEditorAssemblies (0ms)
+			BeforeProcessingInitializeOnLoad (80ms)
+			ProcessInitializeOnLoadAttributes (99ms)
+			ProcessInitializeOnLoadMethodAttributes (85ms)
+		AwakeInstancesAfterBackupRestoration (14ms)
+Starting new worker id: 0 with log in /Users/lbj/Documents/gameproject/unity_assets/Logs/AssetImportWorkerHW0.log
+
+Asset Pipeline Refresh (id=9ef65a2cecac0409dacc858a69e8adee): Total: 2.214 seconds - Initiated by InitialRefreshV2(ForceSynchronousImport)
+	(Values over 0.05ms)
+	Summary:
+		Imports: total=0 (actual=0, local cache=0, cache server=0)
+		Asset DB Process Time: managed=0 ms, native=594 ms
+		Asset DB Callback time: managed=18 ms, native=7 ms
+		Scripting: domain reloads=1, domain reload time=321 ms, compile time=1268 ms, other=2 ms
+		Project Asset Count: scripts=113, non-scripts=81
+		Asset File Changes: new=0, changed=0, moved=0, deleted=0
+		Scan Filter Count: 1
+	InvokePackagesCallback: 8.669ms
+	ApplyChangesToAssetFolders: 0.302ms
+	Scan: 54.940ms
+	Collect global state as custom dependencies: 12.682ms
+	CategorizeScriptCompilationAssets: 0.446ms
+	ProcessAssetsWithTransientArtifactChanges: 2.083ms
+	CategorizeAssets: 2.679ms
+	CompileScripts: 1268.457ms
+	ImportOutOfDateAssets: 490.673ms (484.953ms without children)
+		UnloadImportedAssets: 0.168ms
+		ImportSchedulerStart: 5.509ms
+	PostProcessAllAssets: 18.751ms
+		MonoPostProcessAllAssets: 18.688ms
+			WindowAssetPostprocessingWatcher.OnPostprocessAllAssets 7.574ms
+			SyncVS.PostprocessSyncProject 1.122ms
+			EditModeScopePostprocessor.OnPostprocessAllAssets 0.955ms
+			SpeedTree9Postprocessor.OnPostprocessAllAssets 0.638ms
+			ReferencedClipsPostProcessor.OnPostprocessAllAssets 0.236ms
+			TerrainToolbarOverlayPostProcessor.OnPostprocessAllAssets 0.152ms
+			AssetDatabaseCallbacks.OnPostprocessAllAssets 0.131ms
+			RenderPipelineGlobalSettingsPostprocessor.OnPostprocessAllAssets 0.063ms
+	UnloadStreamsBegin: 1.556ms
+	GenerateScriptTypeHashes: 0.232ms
+	GenerateScriptTypeSerializationHashes: 0.519ms
+	Untracked: 350.114ms
+
+Application.AssetDatabase Initial Refresh End
+Launching external process: /Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Helpers/UnityShaderCompiler
+Launched and connected shader compiler UnityShaderCompiler after 0.09 seconds
+Scanning for USB devices : 0.046ms
+Initializing Unity extensions:
+[MODES] ModeService[none].Initialize
+[MODES] ModeService[none].LoadModes
+[MODES] Loading mode Default (0) for mode-current-id-unity_assets
+Unloading 3 Unused Serialized files (Serialized files now loaded: 0)
+Unloading 76 unused Assets / (453.2 KB). Loaded Objects now: 728.
+Memory consumption went from 132.4 MB to 132.0 MB.
+Total: 7.800625 ms (FindLiveObjects: 0.038542 ms CreateObjectMapping: 0.015958 ms MarkObjects: 7.477458 ms  DeleteObjects: 0.268083 ms)
+
+[LAYOUT] About to load /Users/lbj/Library/Preferences/Unity/Editor-5.x/Layouts/current/default-6000.dwlt, keepMainWindow=False
+2026-07-31 03:16:41.713 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:16:41.718 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:16:41.719 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:16:41.719 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:16:41.719 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:16:41.719 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:16:41.719 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+[LAYOUT] Removed un-parented EditorWindow while reading window layout window #13, type=UnityEditor.FallbackEditorWindow entityId=568105584918811902
+2026-07-31 03:16:42.702 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:16:42.703 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:16:42.713 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:16:42.713 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:16:42.714 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:16:42.714 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+[LAYOUT] About to save layout /Users/lbj/Documents/gameproject/unity_assets/UserSettings/Layouts/default-6000.dwlt
+[LAYOUT] About to save layout /Users/lbj/Library/Preferences/Unity/Editor-5.x/Layouts/current/default-6000.dwlt
+[MODES] ModeService[default].InitializeCurrentMode
+[MODES] ModeService[default].RaiseModeChanged(default, default)
+This project uses Input Manager, which is marked for deprecation. To manage input in your project, use the <a href="https://docs.unity3d.com/Packages/com.unity.inputsystem@latest">Input System package</a> instead.
+[Project] Loading completed in 7.347 seconds
+	Project init time: 				5.659 seconds
+		Template init time: 		0.000 seconds
+		Package Manager init time: 		1.069 seconds
+		Asset Database init time: 		0.224 seconds
+		Global illumination init time: 	0.001 seconds
+		Assemblies load time: 			1.092 seconds
+		Unity extensions init time: 	0.001 seconds
+		Asset Database refresh time: 	2.214 seconds
+	Scene opening time: 			1.366 seconds
+##utp:{"type":"ProjectInfo","version":2,"phase":"Immediate","time":1785435402966,"processId":79386,"projectLoad":7.346900333000001,"projectInit":5.659169834,"templateInit":0.0,"packageManagerInit":1.068980959,"assetDatabaseInit":0.223782208,"globalIlluminationInit":0.000836625,"assembliesLoad":1.091911583,"unityExtensionsInit":0.000816708,"assetDatabaseRefresh":2.213919625,"sceneOpening":1.365977208}
+##utp:{"type":"EditorInfo","version":2,"phase":"Immediate","time":1785435402967,"processId":79386,"editorVersion":"6000.5.6f1 (0e0577a1a2ac)","branch":"6000.5/staging","buildType":"Release","platform":"OSX"}
+Subscribe to USB device events
+Dynamic Batching is deprecated and will be removed in a future release. Use GPU Instancing instead. Disable Dynamic Batching in Project Settings > Player > Other Settings to remove this warning.
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace () (at /Users/bokken/build/output/unity/unity/Runtime/Export/Scripting/StackTrace.cs:35)
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:LogWarning (object)
+UnityEditor.PlayerSettingsBatchingWarning:WarnIfDynamicBatchingEnabled () (at /Users/bokken/build/output/unity/unity/Editor/Mono/Inspector/PlayerSettingsEditor/PlayerSettingsBatchingWarning.cs:45)
+UnityEditor.EditorApplication:Internal_CallUpdateFunctions () (at /Users/bokken/build/output/unity/unity/Editor/Mono/EditorApplication.cs:403)
+
+(Filename: /Users/bokken/build/output/unity/unity/Editor/Mono/Inspector/PlayerSettingsEditor/PlayerSettingsBatchingWarning.cs Line: 45)
+
+Start Indexing on Editor startup
+[Indexing] Starting Initial Indexing for Assets
+Worker ready: AssetImportWorkerHW0 0
+Created GICache directory at /Users/lbj/Library/Caches/com.unity3d.UnityEditor/GiCache. Took: 0.008s, timestamps: [7.364 - 7.372]
+Starting new worker id: 1 with log in /Users/lbj/Documents/gameproject/unity_assets/Logs/AssetImportWorkerHW1.log
+[Worker0] Imported GUID: 23032f4383e95e772bce465c5896d0fd - Path: Packages/com.unity.modules.terrain/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '11cacde683a3757f42fd45506494d30e') in 0.1377625 seconds
+[Worker0] Imported GUID: 8a752aaaadd2410dd9a84e01c1bace9f - Path: Packages/com.unity.modules.uielements/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'a5c78b99be623d9aa0356e39f3470cbb') in 0.003321792 seconds
+[Worker0] Imported GUID: 54407f5deee4439eb1885bee01956e9c - Path: Packages/com.unity.multiplayer.center/Editor/Analytics/AnalyticsUtils.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '8322a1796c9c571fb23c7b210ced15b9') in 0.016767167 seconds
+[Worker0] Imported GUID: 1bd8e2f47a6c4478ab8f0ade7687e79b - Path: Packages/com.unity.multiplayer.center/Common/IOnboardingSection.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '4b4d9708add3e0ac19d0b097c1492160') in 0.0015905 seconds
+[Worker0] Imported GUID: be13c398521e3c1ad21fb9da30ab2ab6 - Path: Packages/com.unity.modules.imgui/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '376e91a713d81f58b297b2e8ba2c3a09') in 0.001224625 seconds
+[Worker0] Imported GUID: 6d56244f8c39a851975d3c0bd432c66f - Path: Packages/com.unity.modules.terrain/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '6ff35fb0e1070aad45e7d13b4b854e60') in 0.001953417 seconds
+[Worker0] Imported GUID: 4f0f9b9f3ed97ad2b9ba8f1a8e4666c2 - Path: Packages/com.unity.modules.uielements/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '24ee3ee9144f18e1d30e629ef3af9220') in 0.001635417 seconds
+[Worker0] Imported GUID: 833328f3bcf144cc94f92e286e86b427 - Path: Packages/com.unity.multiplayer.center/Common/IOnboardingSectionAnalyticsProvider.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '5dcab048c5e067703f5be2d7fcc0ce1a') in 0.001443416 seconds
+[Worker0] Imported GUID: 222fc39b0c85d800342910da2cd64781 - Path: Packages/com.unity.modules.assetbundle/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '7cfcb0a9b6b8fe53ebb209a1e2c80c8d') in 0.001425375 seconds
+[Worker0] Imported GUID: e1ef8466c8fd01a549f10baa4d51fa17 - Path: Packages/com.unity.modules.assetbundle/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '839e0ab95286367860bce051a506fb03') in 0.001645666 seconds
+[Worker0] Imported GUID: e9df95f53f1c1d0c9199e235d6c42b50 - Path: Packages/com.unity.modules.audio/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'f26c0bd07e9ec152dc0be051ead02f93') in 0.001606 seconds
+[Worker0] Imported GUID: 2c814623cb42764d304be0c5ddd03ceb - Path: Packages/com.unity.modules.xr/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '6f28014b3b1c5da6ac66fae9f105601e') in 0.001443833 seconds
+[Worker0] Imported GUID: c359bcaf4a0bc4040aac650bf14ec619 - Path: Packages/com.unity.multiplayer.center/README.md - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'e99a2a60ccba081d3c0fe47e3398ebd7') in 0.001284583 seconds
+[Worker0] Imported GUID: 89b6d933e4994d0980f6b48dc2b8779c - Path: Packages/com.unity.multiplayer.center/Common/AnswerData.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b385b347bf8d4d2f04f3aa68c677828e') in 0.001130833 seconds
+[Worker0] Imported GUID: 553737203d61a8109f9544a97201e1aa - Path: Packages/com.unity.modules.unitywebrequestaudio/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '5cc8e0ffe181850838e06823feb8d8a8') in 0.001071375 seconds
+[Worker0] Imported GUID: 0a9ab22e4e004c7db707338bccb538b9 - Path: Packages/com.unity.multiplayer.center/Common/Preset.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'a9aedf3b9082bc4b16a20a3261b65d65') in 0.002815875 seconds
+[Worker0] Imported GUID: 50d5ff9fe4ab4477b7ea648da183e9d1 - Path: Packages/com.unity.multiplayer.center/Common/StyleConstants.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '67d6df8e01788e70491bc9c420161299') in 0.001716083 seconds
+[Worker0] Imported GUID: c7a8b0317f4e68556d7509828e9e211e - Path: Packages/com.unity.modules.xr/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'ab40f72c9fc6078199338253eb75952e') in 0.001171792 seconds
+[Worker0] Imported GUID: 185e678d90804a8a85ab38276eca86fb - Path: Packages/com.unity.multiplayer.center/Editor/Analytics/MultiplayerCenterAnalytics.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '41d7a2eba4fe709190d7f065ad61ff6f') in 0.001594542 seconds
+[Worker0] Imported GUID: 70554f6c9e4114e1084bb38f9ea400ce - Path: Packages/com.unity.multiplayer.center/LICENSE.md - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '73524056f9888b1c4e6bc736f4520c0d') in 0.001656542 seconds
+[Worker0] Imported GUID: 80beef77cb19e713c7c2d481b65ed485 - Path: Packages/com.unity.modules.screencapture/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '1e6879f908aac7f979a1517fcda07fc0') in 0.001254667 seconds
+[Worker0] Imported GUID: df0857f6a11054383be91b1f8e1b5800 - Path: Packages/com.unity.multiplayer.center/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '7d040bb68d761c2337ca4c6da809c8a8') in 0.001188417 seconds
+[Worker0] Imported GUID: be17709716f1648caa5de6d0c38103ed - Path: Packages/com.unity.multiplayer.center/Editor/Unity.Multiplayer.Center.Editor.asmdef - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '019d74819044c788237db8ddc3482ffe') in 0.00272975 seconds
+[Worker0] Imported GUID: ae87256f29d9c8b50490f4caf75b2c41 - Path: Packages/com.unity.modules.unitywebrequestwww/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'f6522f0059c8a696ae7c7444a78abaff') in 0.00156925 seconds
+[Worker0] Imported GUID: 676a3852811f4199813ce7f6dbac6880 - Path: Packages/com.unity.multiplayer.center/Editor/Features/PackageManagement.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '0ac858cc34a10b49411f4917a655a16b') in 0.002599417 seconds
+[Worker0] Imported GUID: 052c764978664486a9c04518899ddf57 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/RecommendationTabView.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '9d3d3bd8846b776046fb27365a3cca31') in 0.001532125 seconds
+[Worker0] Imported GUID: a31a332ce3485f00f7df8d987302a29c - Path: Packages/com.unity.modules.unitywebrequesttexture/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '6f2a9117428c0dda2c7db2544e14237d') in 0.001294667 seconds
+[Worker0] Imported GUID: d1084186a4004823abee9b87c8ddf198 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/RecommendationViewBottomBar.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '2987731f5e97b1f300687b2a07ff40b8') in 0.001173875 seconds
+[Worker0] Imported GUID: d85e5eeaf8f135aeaaebdc8aa3cff6c3 - Path: Packages/com.unity.modules.umbra/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '317bb9539cb6c92a66b04a1336cc00c1') in 0.001190917 seconds
+[Worker0] Imported GUID: 84abd2ab34a74600a33a3bb9d72859fe - Path: Packages/com.unity.multiplayer.center/Common/Unity.Multiplayer.Center.Common.asmdef - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'e22f9201a8a08fa92cdf7efb9c3623f3') in 0.001232167 seconds
+[Worker0] Imported GUID: 4b518b37798c97b0f860962cbf615533 - Path: Packages/com.unity.modules.unitywebrequestaudio/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '5f8f3028a3c97f1984de1987bbd9df1d') in 0.001215041 seconds
+[Worker0] Imported GUID: ec737041edec4a5b93f7953a6ffe9f06 - Path: Packages/com.unity.multiplayer.center/Common/SelectedSolutionsData.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'd4aeeffb9085bb01995c6cda43cf4d1b') in 0.001408541 seconds
+[Worker0] Imported GUID: b5930dbc378b45d406aeb881f06b6dfa - Path: Packages/com.unity.modules.physicscore2d/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '398ed90deb817d58ec48dd3606a38c29') in 0.001426 seconds
+[Worker0] Imported GUID: a1c42005fe7c5d78585a77ce396a5eea - Path: Packages/com.unity.modules.tilemap/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b2ce76d0e4d98c0a2f3cccca6c8d57a2') in 0.001049 seconds
+[Worker0] Imported GUID: e9faa4a7023c43c5805642250c703f48 - Path: Packages/com.unity.multiplayer.center/Editor/Analytics/OnboardingSectionAnalyticsProvider.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '6c004c56bcf8aab716983cc951b79979') in 0.001042542 seconds
+[Worker0] Imported GUID: fcbb62ff857b4cf49e74f5f9aca6e8d6 - Path: Packages/com.unity.multiplayer.center/Editor/OnBoarding/SectionsFinder.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'fbafba3f0f1a6462dcc47df49c8168c5') in 0.0010345 seconds
+[Worker0] Imported GUID: cbb1a39d56ce4d9ac1a46ac505893fa7 - Path: Packages/com.unity.modules.terrainphysics/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'bfb1b3a992ae195294502470d5eaf9de') in 0.000962708 seconds
+[Worker0] Imported GUID: cd561f5f687aed43bf280c27a84f79e3 - Path: Packages/com.unity.modules.screencapture/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'e4f0cfc16436f0a92c7da8884bcf5de3') in 0.000923167 seconds
+[Worker0] Imported GUID: 1b6246f2248883964991eac9e9b4817c - Path: Packages/com.unity.modules.umbra/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '4de1f650f4578ea17ee15d569bd2a4a1') in 0.000956792 seconds
+[Worker0] Imported GUID: c8f6fa942856442b8bd72594d3ce7363 - Path: Packages/com.unity.multiplayer.center/Third Party Notices.md - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'a49e43529ef66702e352f47fb4827ab8') in 0.001203042 seconds
+[Worker0] Imported GUID: 40bf3cec17fa0b49fe04443c8332d638 - Path: Packages/com.unity.modules.jsonserialize/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '9fef0617714ec9f974ce75157dac035a') in 0.001292875 seconds
+[Worker0] Imported GUID: 042dc296246916648e55a43d0eeb2036 - Path: Packages/com.unity.modules.audio/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '6161cc1ab2957c1cf3f237331ec2628f') in 0.002195416 seconds
+[Worker0] Imported GUID: d3cbe921f7b3d9a3257e7c61a5761796 - Path: Packages/com.unity.modules.terrainphysics/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'a9511364c90585c6367098390fadc1aa') in 0.002034416 seconds
+[Worker0] Imported GUID: 14e86f88e9a8c9c448d7e7df92f2aeec - Path: Packages/com.unity.modules.physicscore2d/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '4ead8eade85aa254e861ad3d7d20dd0e') in 0.001491708 seconds
+[Worker0] Imported GUID: 51566b3736df4282bbe76645014b0cc5 - Path: Packages/com.unity.multiplayer.center/Editor/AssemblyInfo.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'eb6e6d5403926533ce71a115389abc27') in 0.001323542 seconds
+[Worker0] Imported GUID: 4cee1dc929764056ac40ece91efef712 - Path: Packages/com.unity.multiplayer.center/Editor/Analytics/AnalyticsData.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '1c4b2f0919d361951103d1ad597edc86') in 0.001265125 seconds
+[Worker0] Imported GUID: d0e3ad91972c66f5238f5b9b7d5ae58a - Path: Packages/com.unity.modules.unitywebrequesttexture/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '6cbd226f0535e85d15e4b4294567ea13') in 0.001347375 seconds
+[Worker0] Imported GUID: 3bbd27b3dd7be4a74aeab8da6b0af5cc - Path: Packages/com.unity.multiplayer.center/CHANGELOG.md - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '81f2c7010ce1673bd937c086a38ebdbb') in 0.001323042 seconds
+[Worker0] Imported GUID: 42fe78c8fe682715a2cb531422e6ccb3 - Path: Packages/com.unity.modules.imgui/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'aab309a664a5563cf4f0690d5daf6035') in 0.001470333 seconds
+[Worker0] Imported GUID: dd20f32039084a12a8e48dffd4d58f48 - Path: Packages/com.unity.multiplayer.center/Editor/Analytics/DebugAnalytics.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '664bb002dc9c221f4398473d02c14849') in 0.001268459 seconds
+[Worker0] Imported GUID: e6a135e3ea9cb46795d1b0e05ac3e1e5 - Path: Packages/com.unity.modules.jsonserialize/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '1c388e127b7f7c7a0b0da032988e90a0') in 0.001215125 seconds
+[Worker0] Imported GUID: 71136fc5cf34f2cc10be0e33c0b08019 - Path: Packages/com.unity.modules.unityanalytics/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '2a18c0b8cdf63520077cd5493d5cd674') in 0.001474 seconds
+[Worker0] Imported GUID: 8bce0b24c28e45d884acfcf49a3b8945 - Path: Packages/com.unity.multiplayer.center/Editor/Analytics/MultiplayerCenterAnalyticsFactory.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '2c425bd3605076c33431cedf912ad400') in 0.001197666 seconds
+[Licensing::Client] Successfully resolved entitlement details
+[Worker0] Imported GUID: fa27413e9edb06a6058d6c894eca0338 - Path: Packages/com.unity.modules.unitywebrequestwww/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'e18b63c00ae1cc2017e9792c8e898731') in 0.003312375 seconds
+[Worker0] Imported GUID: d2c2caab1f2642afa6c07dec054fd34f - Path: Packages/com.unity.multiplayer.center/Editor/OnBoarding/GettingStartedTabView.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '969dc46f1eac08f4a5732f9f9bb1cf0c') in 0.001551292 seconds
+[Worker0] Imported GUID: 322b0121d39f45208a3d933e6926a9d8 - Path: Packages/com.unity.multiplayer.center/Editor/OnBoarding/QuickstartPackageHandling.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '21494947ae913c69cbe39649c73199e5') in 0.001326625 seconds
+[Worker0] Imported GUID: 26a4f29db434fd79025c91f6126382cc - Path: Packages/com.unity.modules.unityanalytics/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'edadc07bedc024b5b36aff9693d9d560') in 0.001297459 seconds
+[Worker0] Imported GUID: 7e006510f5f4425ca971c7de0bfbb77a - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/MultiplayerCenterWindow.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '8ecff33daa34f29ea9096633e92b2911') in 0.001097792 seconds
+[Worker0] Imported GUID: fdefed6b790f4373b0feb7d25854d8ac - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/TabGroup.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '2d77a57572cf21ec53f0ecce373263b6') in 0.001064917 seconds
+[Worker0] Imported GUID: 92a378669877c05c6071d0fed687bb95 - Path: Packages/com.unity.modules.tilemap/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '2d23c6ae4143b89127501b7e9fd057ff') in 0.001085292 seconds
+[Worker0] Imported GUID: 157e1606dfbd48dda6f01acbf49435b0 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/QuestionSection.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '8e4d6d1a5fe1fefca8d86813fe215e2d') in 0.001543583 seconds
+[Worker0] Imported GUID: ca560c7d2a0d4453a50ec4f704ce9ce1 - Path: Packages/com.unity.multiplayer.center/Tests/Editor/UtilsForRecommendationTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '34d5fce01c4e38f72f8926e8804119c5') in 0.001341875 seconds
+[Worker0] Imported GUID: 29cbd1c6a8c9419aac357b8d4edbdc84 - Path: Packages/com.unity.multiplayer.center/Tests/Editor/QuickstartTabTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '7952bcaa36c77cd1af1eb0232c52e1c4') in 0.001342417 seconds
+[Worker0] Imported GUID: 3595bcaa1af84e6d92e07f0258a4256c - Path: Packages/com.unity.multiplayer.center/Editor/Questionnaire/PresetData.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'fef49af31862c1a35bf9637ba0a26a47') in 0.001329291 seconds
+[Worker0] Imported GUID: cfc5ccd4416341629caf73dd3e318aac - Path: Packages/com.unity.multiplayer.center/Tests/Editor/UtilsForMultiplayerCenterTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '4af71a9c3faa1a6e351bff9018555bc3') in 0.001493 seconds
+[Licensing::Client] Successfully resolved entitlement details
+[Worker0] Imported GUID: 1c3db2c484234a94a19c3acdc2539575 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/StyleClasses.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'd68b8a72bba642083a2358b5556a87fd') in 0.002670375 seconds
+[Worker0] Imported GUID: ad1d29f4654194951a3c8bf507914d05 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/CloudCode.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '2d852038570a2e284283ef3f4c450f71') in 0.095484708 seconds
+[Worker0] Imported GUID: f1ac2efb1bcd4dfd95dc196ed3c11367 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/light.uss - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '099667152d55b7b7719cc1e34f28130a') in 0.056309625 seconds
+[Worker0] Imported GUID: d7711b0cc806d430b8a95f1e33ec3649 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/CustomNetcode@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '764d8b99e2ff504c071a90536beebf70') in 0.005655459 seconds
+[Worker0] Imported GUID: 7ca5cd79ef39442e599efb761abcbaac - Path: Packages/com.unity.multiplayer.center/Editor/Questionnaire/QuestionnaireData.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '5bc562b98446489d8a90b7908a7f0049') in 0.001541167 seconds
+[Worker0] Imported GUID: 787ec048daec145b580d1134da5dd278 - Path: Packages/com.unity.multiplayer.center/Tests/Editor/Unity.Multiplayer.Center.Editor.Tests.asmdef - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '353e561845099745c1a44c05cafbd700') in 0.002686042 seconds
+[Worker0] Imported GUID: c2c1cf24bea5410ea530b2c8a875b293 - Path: Packages/com.unity.multiplayer.center/Tests/Editor/AnalyticsUtilsTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '23eb243a6de56754c0545b68c688ea26') in 0.001513875 seconds
+[Worker0] Imported GUID: 0d9328c739784454ad03d404f395a0ab - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/ViewUtils.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'c526ce47274b9ed31f9b3ef73936e76a') in 0.001431375 seconds
+[Worker0] Imported GUID: 36b51591e13f48b5bed734724d149fb4 - Path: Packages/com.unity.multiplayer.center/Tests/Editor/RecommendationAnalyticsTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '53e7c4e887ae4f7d6fbf5de973252773') in 0.001700666 seconds
+[Worker0] Imported GUID: 8110dd6ddbc04e58b50978562ce0c00a - Path: Packages/com.unity.multiplayer.center/Tests/Editor/ExpectedPresetRecommendations.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'c0736cbdbc4673c858cee127428fd70d') in 0.001795375 seconds
+[Worker0] Imported GUID: 424a8de5def3b46dcb08edd00ad1c7bd - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/Loading.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b5695242cae783d68847d28f641df784') in 0.004331042 seconds
+[Worker0] Imported GUID: 6cfa81557736450abfb73264580451c1 - Path: Packages/com.unity.multiplayer.center/Tests/Editor/SectionHeaderTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '175dfbcbd1ddb129036410f0caa7e4b0') in 0.003245291 seconds
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "sLCG4iVR"... (expires: 2026-07-30T19:25:36Z)
+[Worker0] Imported GUID: 52a77c59214a4cb5a43fc7b0e097d832 - Path: Packages/com.unity.multiplayer.center/Editor/Recommendations/RecommendationUtils.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '81718ca9c73ed7d27c9f263e129c7951') in 0.001471541 seconds
+[Worker0] Imported GUID: c3d3226643b94888b02e25de0a9de55f - Path: Packages/com.unity.multiplayer.center/Tests/Editor/UserVisibleTextTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '48ca29f9bd14ae151fe3f85075be3207') in 0.001302166 seconds
+[Worker0] Imported GUID: 83b28bcaaf34b4fd580114fb05d9f160 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/NGO@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '22a6f2b0c96adafb4351f9d6d3b32c8c') in 0.00620375 seconds
+[Worker0] Imported GUID: a1c995459c0d418c88dd274e04840c5d - Path: Packages/com.unity.multiplayer.center/Editor/Recommendations/RecommenderSystem.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b11d7d456ef728db3188f3d9ce2cc9aa') in 0.001665875 seconds
+[Worker0] Imported GUID: e4439b4b4bb24a5eb61c59c5a67aa5a0 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/QuestionViewFactory.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'd484ba92f851be30bbcb25a007559ce0') in 0.002018792 seconds
+[Worker0] Imported GUID: 38b78df4a34c94fa6a52c90239606ff1 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/DedicatedServer@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b77cac6a72f0fff88f300a212a6de551') in 0.005215709 seconds
+[Worker0] Imported GUID: 0ddc3b8a12c84454b04e4d6bdd88241c - Path: Packages/com.unity.multiplayer.center/Editor/Recommendations/RecommendationViewData.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'fd496f0a4ce15fa3aa9157538ddc9ac7') in 0.001546166 seconds
+[Worker0] Imported GUID: a23c0dd570fd44b57a03a8880002fcca - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/CloudCode@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'cbfdc113c4f0aa3baf8976c74f62ca24') in 0.005891125 seconds
+[Worker0] Imported GUID: d63245ece6d8f476c8c7ca24da9937f6 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/DistributedAuthority.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '9b09f66f9a8e40d27111f58178b7beab') in 0.00475375 seconds
+[Worker0] Imported GUID: 3fe892784421e47f5aa40c2784a6cb3e - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/DedicatedServer.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '97146f1d7de565bd4d894327cbbd2832') in 0.004589792 seconds
+[Worker0] Imported GUID: a659150180ae3489ba41c71780ba3779 - Path: Packages/com.unity.multiplayer.center/Editor/Questionnaire/Questionnaire.questionnaire - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '05fba625050e601618fb92056304c723') in 0.00147375 seconds
+[Worker0] Imported GUID: b66d076cdcfe3b14388de66307a0e7ff - Path: Packages/com.unity.multiplayer.center/Editor/Recommendations/RecommendationData_6000.0.recommendations - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'e02a43183595c5d0b572b3ce497ed19f') in 0.001387125 seconds
+[Worker0] Imported GUID: c37c4c45cacc46edb43b8c32617b3e34 - Path: Packages/com.unity.multiplayer.center/Tests/Editor/UtilsForGettingStartedTabTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b70b5b2d1809eb76885742f399952b0f') in 0.001627583 seconds
+[Worker0] Imported GUID: e9669051ff70449b5923861e0e0b8838 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/N4E.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'a64da61546b51fa343cc9cacfd77cb17') in 0.005512209 seconds
+[Worker0] Imported GUID: 1daed49eec0f94f7ebb36dfef6159884 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/NoNetcode.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'ddeab9411f84438527c1aee32d515f63') in 0.00429475 seconds
+[Worker0] Imported GUID: 38a11839c22b4e67aa2e508d906edf65 - Path: Packages/com.unity.multiplayer.center/Editor/Recommendations/RecommenderSystemData.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '2d8eca3c8dc1dd5947537fac2eae8581') in 0.001613833 seconds
+[Worker0] Imported GUID: 5d117d33f89d41cd9123918383c9b981 - Path: Packages/com.unity.multiplayer.center/Editor/Questionnaire/QuestionnaireEditor.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'ea5052bef3207d787b7368637cd97079') in 0.0013645 seconds
+[Worker0] Imported GUID: b46a48f780f84026b9d1e73ee1b0121d - Path: Packages/com.unity.multiplayer.center/Editor/Recommendations/RecommendationType.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '1bfaecd48873d2a870e77d93530438bb') in 0.001453125 seconds
+[Worker0] Imported GUID: 0354877031b64465ea7e5cafea1a2653 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/DistributedAuthority@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'c43333fabef02bb82985566163404b17') in 0.005163375 seconds
+[Worker0] Imported GUID: 7456ea4ba2dcd48d3909b82e610f2048 - Path: Packages/com.unity.multiplayer.center/Tests/Runtime/PlaceholderTest.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '9538bfb5918898588a4c88fca5508060') in 0.001457292 seconds
+[Worker0] Imported GUID: 89ffa359141b49fea9bfa6a1db3b18be - Path: Packages/com.unity.multiplayer.center/Tests/Editor/AssemblyInfo.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '0b9766afe9839014319cdfbd238d2a89') in 0.001339292 seconds
+[Worker0] Imported GUID: d9beb5106d424f23902054f76d4b673d - Path: Packages/com.unity.multiplayer.center/Editor/Questionnaire/Logic.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'fed6a355d3f5a0c2ab4d0f066cb5f7b9') in 0.00148875 seconds
+[Worker0] Imported GUID: 23342257960b4b618e6f7c444137663c - Path: Packages/com.unity.multiplayer.center/Editor/Recommendations/PreReleaseHandling.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '0d66acd3aa04e6aa4748bc05e017819a') in 0.005289875 seconds
+[Worker0] Imported GUID: 15513aed5d41411c887ccfe14c103337 - Path: Packages/com.unity.multiplayer.center/Tests/Editor/UserChoicesMigrationTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '7b7ec2f5b73339ed324201fafb970e63') in 0.001641583 seconds
+[Worker0] Imported GUID: f526d484b0c04a1896c469f31c713786 - Path: Packages/com.unity.multiplayer.center/Editor/Recommendations/Scoring.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'd3ad16e8df8c91ae85275cdb5908d769') in 0.001663667 seconds
+[Worker0] Imported GUID: c3677cd9ede84e78b2fff6331c6301da - Path: Packages/com.unity.multiplayer.center/Editor/Questionnaire/QuestionnaireObject.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b427df85c08346a522e035a4a86c3b38') in 0.00145 seconds
+[Worker0] Imported GUID: b58a826ca804e4c67bab4283ad5a6102 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/NoNetcode@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '5f3e50616a5cd994b4d81e6f16606a24') in 0.005824167 seconds
+[Worker0] Imported GUID: 0efb92c924574ec59b71b9185a6ed8fb - Path: Packages/com.unity.multiplayer.center/Tests/Editor/RecommendationTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '682ffad67525388bf7aee2e1bc9d749d') in 0.001541125 seconds
+[Worker0] Imported GUID: 4f78a544322c742b89e63fb68557b1d2 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/Check.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b29b2081e3c82b742bb885cd3754a296') in 0.005249167 seconds
+[Worker0] Imported GUID: 284da2a38ea043d69e1a38fd8a22bec9 - Path: Packages/com.unity.multiplayer.center/Tests/Editor/RecommenderSystemTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'ce61ca42a87946eb6779192d5ba62eae') in 0.001631458 seconds
+[Worker0] Imported GUID: dce12af736e0a4a1ba35d6424f897dc9 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/CustomNetcode.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '88cf8af27b9e8a204328abb976691348') in 0.005689708 seconds
+[Worker0] Imported GUID: b2ce704e56cc84fb3b347499263c6244 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/ClientHosted.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '57eec671a16f2cafa71c11b5a25357cd') in 0.004604459 seconds
+[Worker0] Imported GUID: 99da7b3894f364efdb5fa1443952a55d - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/NGO.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'df7c8bf3fb83b58b12ba569067ad757e') in 0.004533625 seconds
+[Worker0] Imported GUID: bac00d6e07f0b4305bb395363c89d92b - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/MultiplayerCenterWindow.uss - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '7bb2e070426fe767fdd329ebbfb69119') in 0.0111115 seconds
+[Worker0] Imported GUID: 2cb589d4e01184d928bb698f06e77561 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/N4E@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '6ce4fd0ae78dcd27301546b293e2cd4d') in 0.005534333 seconds
+[Worker0] Imported GUID: 9d9689eab72c8480c90679f4dcf18820 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/Package.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '3582481ad9884255f4e13e91748f753e') in 0.004512084 seconds
+[Worker0] Imported GUID: b6a02e450cd04bb781e7728f2056251c - Path: Packages/com.unity.multiplayer.center/Editor/Recommendations/RecommenderSystemDataObject.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '05ad8dfc30f4192ba270ef8a750de3c0') in 0.001547208 seconds
+[Worker0] Imported GUID: 2664430aff4254d79887d32c3fc1e221 - Path: Packages/com.unity.multiplayer.center/Tests/Runtime/Unity.Multiplayer.Center.Tests.asmdef - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '2bee475856594e0acf73774c025ef1da') in 0.001837459 seconds
+[Worker0] Imported GUID: 18cde282a8d045bf9d245fdcfaa7271b - Path: Packages/com.unity.multiplayer.center/Editor/Questionnaire/UserChoicesObject.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'c42fbd2fd4201f4314a4508e0b29c469') in 0.001747833 seconds
+[Worker0] Imported GUID: 84e4bbd00035e4671bf14e0380a89001 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/EmptyViewIcon.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'cd86eaf20b5c139fdcd5f1210533d1db') in 0.005263208 seconds
+[Worker0] Imported GUID: 71b3035ad4d343cbbe033e93369d187e - Path: Packages/com.unity.multiplayer.center/Editor/Recommendations/RecommendationAuthoringData.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'ec9cf68612ffa29c56ea3c76b3a2c0fd') in 0.0015015 seconds
+[Worker0] Imported GUID: 1984cd07fe96417f9e88f5771f6b4b32 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/dark.uss - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '28bd5035f138b1325fb88cf406446fdd') in 0.006669417 seconds
+[Worker0] Imported GUID: bcf305fff4614e26a6979b63e954f6d6 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/QuestionnaireView.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'df82f9b5c4799875473bab5f1839fa37') in 0.00192575 seconds
+[Worker0] Imported GUID: ea491f91a8b84866ad13371715bf90c8 - Path: Packages/com.unity.multiplayer.center/Tests/Editor/LogicTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'a6d2739d0b9b52e8c9209866bb300be0') in 0.001753417 seconds
+[Worker0] Imported GUID: 470a2d15035f44b7b2888a0db0704bff - Path: Packages/com.unity.multiplayer.center/Tests/Editor/TabGroupTests.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'd196741aee47eac98115e0ab6dc7ac40') in 0.002982709 seconds
+[Worker0] Imported GUID: 2adffcc506285402aa795dee6f3166d0 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/EmptyViewIcon@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '9840288f2263fd4a43fade0549c0be45') in 0.004760208 seconds
+[Worker0] Imported GUID: c7a38e6eccbfc49778cb8b77f594a971 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/ClientHosted@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'dba2bc9124b820a089be157b700d79a2') in 0.004152625 seconds
+[Worker0] Imported GUID: 525a6cca8dd9a4d28875a8fe824710d9 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/d_Package.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '677bc92daf17d8f446b9c08c24acb572') in 0.007267583 seconds
+[Worker0] Imported GUID: dab91f148d99946e7b3c3a87ecf4b973 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/d_Loading.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'fddcc491506bea3e022be1022cf7c092') in 0.007552709 seconds
+[Worker0] Imported GUID: 679f9999c6f8f497e806a2d5d0511879 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/PackageManager.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'c58e0e1490d403438408d5320419154c') in 0.004910792 seconds
+[Worker0] Imported GUID: 96d14b71b907bb52333b2886e665aba6 - Path: Packages/com.unity.modules.video/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'fb6bbc0674efb61bd5902b54ad7c0a83') in 0.00186425 seconds
+[Worker0] Imported GUID: fe6a6957b37b61417b457a1e0541791d - Path: Packages/com.unity.modules.physics2d/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '9ce9bbaf45134e3124d8aa342fab9f8b') in 0.001613958 seconds
+[Worker0] Imported GUID: 5262b119dc3e4259a40e6d93c8ea1048 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/RecommendationView/PackageSelectionView.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'd3bdad65062661bdffb561c5bd640642') in 0.001640792 seconds
+[Worker0] Imported GUID: 4745d06d5a7ca576dcf9e5e67b417652 - Path: Packages/com.unity.modules.accessibility/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '5bde5589659f3189a5648a4ccee57c56') in 0.001489917 seconds
+[Worker0] Imported GUID: f1e4f3f59aa446bfb097357fa8ad4a8b - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/RecommendationView/SolutionSelectionView.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'a8e5bc94284f1070bf480c99535324d6') in 0.001561 seconds
+[Worker0] Imported GUID: 9b1a5759726ef9d39a0ab82047b615f1 - Path: Packages/com.unity.modules.hierarchycore/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b528160ed81da64c9ddafd9e485c4765') in 0.001651083 seconds
+[Worker0] Imported GUID: c82e859b16636ddd2ca4a1f63fd34938 - Path: Packages/com.unity.modules.androidjni/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'c7ed5b5741b0de5aaa9eb68ccdd63b71') in 0.001481666 seconds
+[Worker0] Imported GUID: 0423146d9f51c4563a0f2a8200b6cd38 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/PackageInstalled@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '798dc6cab813e179c6bc5049a0015213') in 0.00533575 seconds
+[Worker0] Imported GUID: 4c413a81cadcce7038e446e56570117e - Path: Packages/com.unity.modules.adaptiveperformance/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b1cc2227f5d2ac98d86d2191521b5400') in 0.001719541 seconds
+[Worker0] Imported GUID: 8d4bc6bfa28760b29f13174d6b6ea710 - Path: Packages/com.unity.modules.subsystems/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '85772d8d0c948264f22dc82c27eba69a') in 0.001444166 seconds
+[Worker0] Imported GUID: 082fbee38a82835433261a5e9c00e267 - Path: Packages/com.unity.modules.cloth/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '1ae88e823cbdb923accd9648ddd5a58e') in 0.001571417 seconds
+[Worker0] Imported GUID: 51fa60bb2bd1e5bc74e8cc95a7bfd5b7 - Path: Packages/com.unity.modules.ui/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '489e752de7ee0bc5f584ddb297097a98') in 0.001488584 seconds
+[Worker0] Imported GUID: 1b4c88814ec6241eb8e327515399c006 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/d_PackageManager.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '18e416aee09bcd39df24797263f91fbb') in 0.004181958 seconds
+[Worker0] Imported GUID: 17f093324b67f5bd57e55b546736750e - Path: Packages/com.unity.modules.particlesystem/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '824da40c072770b925b8ad19563aa70a') in 0.0014495 seconds
+[Worker0] Imported GUID: 87d720faa37005c08600090e04d8c739 - Path: Packages/com.unity.modules.particlesystem/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b3380d1cbcd328743a62f8b7f1bcab51') in 0.00133425 seconds
+[Worker0] Imported GUID: e2d09a26ce46dc617b54e49a534ace20 - Path: Packages/com.unity.modules.ai/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '277424ebe94d277f85c10a3048b458ae') in 0.001087458 seconds
+[Worker0] Imported GUID: c88e90bad18cceb5d182d0c805883056 - Path: Packages/com.unity.modules.director/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '8239394b9e9dc1ae2032de6765566ed8') in 0.0012375 seconds
+[Worker0] Imported GUID: dd70cd654275d47db807e918055e004f - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/Questionnaire.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '77ed0aa7815b5d7b0209ad3a68342ba0') in 0.004558583 seconds
+[Worker0] Imported GUID: 906c12bc9cd95d3963c6d58f62522c78 - Path: Packages/com.unity.modules.cloth/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '801128c512449a1f95ff4d769654963b') in 0.001611709 seconds
+[Worker0] Imported GUID: a2c71c02b50345e99168bda191ec01b4 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/RecommendationView/RecommendationView.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '46b3ef9fc8804637c8ad07f80a3810b2') in 0.001555083 seconds
+[Worker0] Imported GUID: 1af35a910338381f753e8a985eb5daab - Path: Packages/com.unity.modules.adaptiveperformance/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '11d395670b0125ac7ad1eced34f55fc4') in 0.001470125 seconds
+[Worker0] Imported GUID: 43674d438e19b89d7fe6af07234f3252 - Path: Packages/com.unity.modules.accessibility/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '00e8281a2ca0c06248bca880a8216061') in 0.001563333 seconds
+[Worker0] Imported GUID: 2adec19fac7df68adf1fd6eb83197bb1 - Path: Packages/com.unity.modules.wind/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '4c6a09cc3a84b4d16c5fd2bcb1f5d2ab') in 0.002583375 seconds
+[Worker0] Imported GUID: bfd567a3d1631a761bca9e99fa53d86d - Path: Packages/com.unity.modules.ui/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '4f4e23fc09ffa997fab93eff27d0939c') in 0.001733458 seconds
+[Worker0] Imported GUID: 741761e72e6f24446bd8ba03ea3d0261 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/d_Questionnaire.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b9d1287d32f551d14c55e4949e6d9b27') in 0.004334917 seconds
+[Worker0] Imported GUID: d104359075a97392b803d3d5aebc77f7 - Path: Packages/com.unity.modules.hierarchycore/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'ff95b217c15d2da8a8dd4de16a84c4d2') in 0.00142525 seconds
+[Worker0] Imported GUID: f62135e79edb837b2d2ee3c524da864c - Path: Packages/com.unity.modules.video/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '30aceda8bc54c630de182f90ddd2cf65') in 0.0013775 seconds
+[Worker0] Imported GUID: 4616b2fa4acd1429e931835b80966c2a - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/PackageInstalled.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'a04a5eecfe9f0f5abbc460e357c8c398') in 0.004361458 seconds
+[Worker0] Imported GUID: f7a8357347c80dc69c08d0b1a05e2122 - Path: Packages/com.unity.modules.physics2d/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '674298b115e1605920947bc6041e17a4') in 0.002308042 seconds
+[Worker0] Imported GUID: 29395f0639574c1fbc8b729aa257fb84 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/d_Check.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '66846825acea615a06e4f419a1a0aa49') in 0.005727208 seconds
+[Worker0] Imported GUID: 05f7f519769978b79b31d063a7fc6fa1 - Path: Packages/com.unity.modules.unitywebrequestassetbundle/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '968606c3963ec5bb1a28684cc46b3456') in 0.0016625 seconds
+[Worker0] Imported GUID: 77be953cf28de42a4ad8532539fef3f5 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/d_PackageInstalled.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '0c834183315e9ea9e4876236023958d5') in 0.004331 seconds
+[Worker0] Imported GUID: 5c1ee4056d0ac7ad3c5a16597fcaa38a - Path: Packages/com.unity.modules.physics/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '3a6b2ccf3c4ba0c66d5ee4f02af2ed5c') in 0.001431667 seconds
+[Worker0] Imported GUID: e5c46c19ce0ce2e0103aa6f82df1043a - Path: Packages/com.unity.modules.vehicles/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b3a277767a8cca6fd14f30597b49896d') in 0.001306041 seconds
+[Worker0] Imported GUID: 830a36a23cf3ab1e61fa47940a6dc35e - Path: Packages/com.unity.modules.imageconversion/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'e576379a83a002dc76445387c778c38f') in 0.001355083 seconds
+[Worker0] Imported GUID: db8e609a39b9b231fccc54e5fa4cbd1b - Path: Packages/com.unity.modules.animation/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'aa0b53700f399bc133f25ec9dfe33a8c') in 0.001689 seconds
+[Worker0] Imported GUID: 953fab16d15d5885b3600fcd6388b2ad - Path: Packages/com.unity.modules.imageconversion/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '855d548feab60f7df5addde6328b4f4d') in 0.001849417 seconds
+[Worker0] Imported GUID: 1a4266815e998967becf686f9c71f0a6 - Path: Packages/com.unity.modules.physics/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '945bdd367b117839aa237042e2f5438c') in 0.001663333 seconds
+[Worker0] Imported GUID: 6afb166a156df2d20433d981f4bb2832 - Path: Packages/com.unity.modules.vehicles/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '76bb563c978c191cbc3eb2ac742f5d08') in 0.001601042 seconds
+[Worker0] Imported GUID: ec02776fe29df900b897106d61977735 - Path: Packages/com.unity.modules.director/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '6b86654081d16b13fa0a84077ea2e998') in 0.001701042 seconds
+[Worker0] Imported GUID: bd1af0a6633ee94ae21c7d1d702cdc12 - Path: Packages/com.unity.modules.androidjni/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'b24bc3331060a8456f6d4c8e810437ee') in 0.001501708 seconds
+[Worker0] Imported GUID: 7ef8348b8ea834d7e1bc214b07f7fb87 - Path: Packages/com.unity.modules.animation/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'a1d4a588e2760278b2f763afbda00f80') in 0.002211709 seconds
+[Worker0] Imported GUID: 7610600f5c83e01041a6fe849d39279f - Path: Packages/com.unity.modules.unitywebrequestassetbundle/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'e3f4d0b8b8535f8668fa450fc658c299') in 0.0013915 seconds
+[Worker0] Imported GUID: f0f13f2ab3d6d13cfc6e4656824bfca8 - Path: Packages/com.unity.modules.ai/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '97518e8d199da07d1b74a0e47899c775') in 0.0016 seconds
+[Worker0] Imported GUID: 281e16dfc02f4a86bf924188eb96b176 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/RecommendationView/RecommendationItemView.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'c8361569cb8e5204548eeec56a2fa3bf') in 0.001534 seconds
+[Worker0] Imported GUID: b83f06ac0c0696e9563230865ca72b81 - Path: Packages/com.unity.modules.wind/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '79bd38a7e52acde8db11761797cace4a') in 0.001740625 seconds
+[Worker0] Imported GUID: a6fd0c627f5aa48fa81512221e70a11e - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/d_PackageManager@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '82ad1f0c4022ba41c5bb8ea5095847af') in 0.005462959 seconds
+[Worker0] Imported GUID: 318df756abab5463e9aa361360784865 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/d_PackageInstalled@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '95fa4fab95f635ce8b00aa73571be91c') in 0.004491875 seconds
+[Worker0] Imported GUID: 30b312a167534621b316172253b08723 - Path: Packages/com.unity.modules.subsystems/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'cd1a85f86133f40fe0640dc11b2be0e5') in 0.001722292 seconds
+[Worker0] Imported GUID: 63314900d81e4a15814496af1889cb51 - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/RecommendationView/SectionHeader.cs - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: 'bbf6fb72d7e0585e7e67c6df414bd83e') in 0.001596542 seconds
+[Worker0] Imported GUID: 9431e8221045c4af189b2fa7174b9e9f - Path: Packages/com.unity.multiplayer.center/Editor/MultiplayerCenterWindow/UI/Icons/PackageManager@2x.png - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '75096a568876c68c3c5133e555e5e47b') in 0.004360375 seconds
+[Worker0] Imported GUID: 3cc1ebf2abb7fef6871ad48f499b6e21 - Path: Packages/com.unity.modules.vectorgraphics/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '386a5d06e10ceb987efe2010068a41cf') in 0.002864917 seconds
+[Worker0] Imported GUID: d2ec2d1228c8e67cdd913cb5609176a2 - Path: Packages/com.unity.modules.unitywebrequest/package.ModuleCompilationTrigger - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '742a22de558544884306893c722ba95b') in 0.001733875 seconds
+[Worker0] Imported GUID: 3fdd83b151eb8d25c5e2f82fc39dcb04 - Path: Packages/com.unity.modules.unitywebrequest/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '64905393ef3d16825b45be601708fa3a') in 0.00178425 seconds
+[Worker0] Imported GUID: 78e5667e52329c3ceef41288763404ae - Path: Packages/com.unity.modules.vectorgraphics/package.json - Importer: ScriptedImporter/UnityEditor.QuickSearchModule:UnityEditor.Search:ASIAI0B -> (ImportResultId: '9ba5ab5b384190e524cc582f1b9cbf08') in 0.001563333 seconds
+Asset Pipeline Refresh (id=68f59a8c96ee245fdb7ef07b12c91148): Total: 0.228 seconds - Initiated by RefreshV2(AllowForceSynchronousImport)
+[Licensing::Client] Successfully resolved entitlement details
+Worker ready: AssetImportWorkerHW1 1
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+TrimDiskCacheJob: Current cache size 0mb
+Asset Pipeline Refresh (id=fc09e259340384143bdb1ee1c896e9f4): Total: 0.116 seconds - Initiated by RefreshV2(AllowForceSynchronousImport)
+Asset Pipeline Refresh (id=373aa5a1d5296452b875c0843d578d35): Total: 0.129 seconds - Initiated by RefreshV2(AllowForceSynchronousImport)
+Asset Pipeline Refresh (id=2bc65fbf90f4b49199bcf8e521105697): Total: 0.067 seconds - Initiated by RefreshV2(AllowForceSynchronousImport)
+Asset Pipeline Refresh (id=74305fe80d11d4e858886596f6da0058): Total: 0.031 seconds - Initiated by RefreshV2(AllowForceSynchronousImport)
+Asset Pipeline Refresh (id=9b7d56a959d2a46b384e5dffd252059f): Total: 0.032 seconds - Initiated by RefreshV2(AllowForceSynchronousImport)
+Asset Pipeline Refresh (id=19db6a9e161134886bc76f5b50c74b80): Total: 0.038 seconds - Initiated by RefreshV2(AllowForceSynchronousImport)
+2026-07-31 03:27:31.735 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:27:31.757 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+[Licensing::Client] Successfully resolved entitlement details
+2026-07-31 03:27:40.192 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:27:40.205 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+Asset Pipeline Refresh (id=5f29d23dff2754edfbdfc794d264c394): Total: 0.045 seconds - Initiated by RefreshV2(AllowForceSynchronousImport)
+2026-07-31 03:27:53.527 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:27:53.531 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:27:57.685 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:27:57.689 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:27:59.582 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+2026-07-31 03:27:59.590 Unity[79386:29359223] CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000
+Asset Pipeline Refresh (id=63b24d33192f54f00b8d65baee370243): Total: 0.051 seconds - Initiated by RefreshV2(AllowForceSynchronousImport)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "ovf9LuAX"... (expires: 2026-07-30T21:24:54Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "_eGmyZ8W"... (expires: 2026-07-30T23:24:26Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "rhtbd07e"... (expires: 2026-07-31T01:24:04Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "u2DwnHT-"... (expires: 2026-07-31T03:23:43Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "M8FlU65M"... (expires: 2026-07-31T05:22:49Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "BshaRjSd"... (expires: 2026-07-31T07:22:24Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "Tl094rpP"... (expires: 2026-07-31T09:22:19Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "g7Yr-1LF"... (expires: 2026-07-31T11:21:56Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "lLEP0-Lr"... (expires: 2026-07-31T13:21:45Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+warn: Microsoft.AspNetCore.Server.Kestrel[22]
+      As of "07/31/2026 12:16:45 +00:00", the heartbeat has been running for "00:00:01.2139195" which is longer than "00:00:01". This could be caused by thread pool starvation.
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "37yFiW7P"... (expires: 2026-07-31T15:21:25Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "tNTf-387"... (expires: 2026-07-31T17:21:19Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "1zY6aoDm"... (expires: 2026-07-31T19:20:56Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "gXdN44dq"... (expires: 2026-07-31T21:20:00Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "HUtK-vqE"... (expires: 2026-07-31T23:19:29Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "3P1sScpV"... (expires: 2026-08-01T01:19:27Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "jxmr0IJc"... (expires: 2026-08-01T03:18:49Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "tjWKh3nH"... (expires: 2026-08-01T05:18:04Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "yMepUWxj"... (expires: 2026-08-01T07:17:23Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "MFceSLiq"... (expires: 2026-08-01T09:17:24Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "ghmmd_cO"... (expires: 2026-08-01T11:17:04Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "T9jSwjgk"... (expires: 2026-08-01T13:16:24Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "zppCQJFE"... (expires: 2026-08-01T15:15:46Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully updated the access token
+[Licensing::Module] Successfully updated access token: "fyoYuG3w"... (expires: 2026-08-01T17:15:43Z)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+IPCStream (hubIPCService): IPC stream failed to read (Not connected)
+[Package Manager] Done resolving packages in 11.01 seconds
+[Licensing::Client] Successfully resolved entitlement details
+[Package Manager] Lock file was modified
+[Package Manager] Registered 41 packages:
+  Packages from [https://packages.unity.com]:
+    com.unity.nuget.newtonsoft-json@3.2.2 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.nuget.newtonsoft-json@4dfd81071c64)
+  Built-in packages:
+    com.unity.multiplayer.center@1.0.1 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.multiplayer.center@b860850997d0)
+    com.unity.modules.accessibility@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.accessibility)
+    com.unity.modules.adaptiveperformance@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.adaptiveperformance)
+    com.unity.modules.ai@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.ai)
+    com.unity.modules.androidjni@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.androidjni)
+    com.unity.modules.animation@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.animation)
+    com.unity.modules.assetbundle@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.assetbundle)
+    com.unity.modules.audio@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.audio)
+    com.unity.modules.cloth@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.cloth)
+    com.unity.modules.director@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.director)
+    com.unity.modules.imageconversion@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.imageconversion)
+    com.unity.modules.imgui@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.imgui)
+    com.unity.modules.jsonserialize@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.jsonserialize)
+    com.unity.modules.particlesystem@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.particlesystem)
+    com.unity.modules.physics@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.physics)
+    com.unity.modules.physics2d@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.physics2d)
+    com.unity.modules.physicscore2d@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.physicscore2d)
+    com.unity.modules.screencapture@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.screencapture)
+    com.unity.modules.terrain@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.terrain)
+    com.unity.modules.terrainphysics@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.terrainphysics)
+    com.unity.modules.tilemap@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.tilemap)
+    com.unity.modules.ui@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.ui)
+    com.unity.modules.uielements@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.uielements)
+    com.unity.modules.umbra@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.umbra)
+    com.unity.modules.unityanalytics@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unityanalytics)
+    com.unity.modules.unitywebrequest@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unitywebrequest)
+    com.unity.modules.unitywebrequestassetbundle@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unitywebrequestassetbundle)
+    com.unity.modules.unitywebrequestaudio@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unitywebrequestaudio)
+    com.unity.modules.unitywebrequesttexture@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unitywebrequesttexture)
+    com.unity.modules.unitywebrequestwww@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.unitywebrequestwww)
+    com.unity.modules.vectorgraphics@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.vectorgraphics)
+    com.unity.modules.vehicles@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.vehicles)
+    com.unity.modules.video@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.video)
+    com.unity.modules.wind@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.wind)
+    com.unity.modules.xr@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.xr)
+    com.unity.modules.subsystems@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.subsystems)
+    com.unity.modules.hierarchycore@1.0.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.modules.hierarchycore)
+    com.unity.test-framework@1.7.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.test-framework@1405238725ab)
+    com.unity.ext.nunit@2.1.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.unity.ext.nunit@44f7d31723bd)
+  Git packages:
+    com.coplaydev.unity-mcp@https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#v10.1.0 (location: /Users/lbj/Documents/gameproject/unity_assets/Library/PackageCache/com.coplaydev.unity-mcp@a4c2d0a84573)
+[Subsystems] No new subsystems found in resolved package list.
+[Package Manager] Done registering packages in 0.31 seconds
+[API Updater] Processing imported assemblies took 439 ms (0/0 assembly(ies)).
+Assembly Updater Post Process Assets time: 0.456234s
+[ScriptCompilation] Requested script compilation because: Assembly Definition File(s) changed
+[ScriptCompilation] Requested script compilation because: AssetDatabase observed changes in script compilation related files
+[Licensing::Client] Successfully resolved entitlement details
+info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+      Request starting HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/Ping - application/grpc -
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+      Executing endpoint 'gRPC - /UnityILPP.PostProcessing/Ping'
+info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+      Executed endpoint 'gRPC - /UnityILPP.PostProcessing/Ping'
+info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+      Request finished HTTP/2 POST http://ilpp/UnityILPP.PostProcessing/Ping - 200 - application/grpc 1212.7786ms
+Starting: /Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/BuildPipeline/bee_backend --ipc --defer-dag-verification --dagfile="Library/Bee/200b0aE.dag" --continue-on-failure --profile="Library/Bee/backend1.traceevents" ScriptAssemblies
+WorkingDir: /Users/lbj/Documents/gameproject/unity_assets
+Starting: /Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/Scripting/netcorerun/netcorerun "/Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/BuildPipeline/ScriptCompilationBuildProgram.exe" "Library/Bee/200b0aE.dag.json" "Library/Bee/200b0aE-inputdata.json" "Library/Bee/buildprogram0.traceevents"
+WorkingDir: /Users/lbj/Documents/gameproject/unity_assets
+ExitCode: 4 Duration: 3s412ms
+Rebuilding DAG because FileSignature timestamp changed: Library/Bee/200b0aE-inputdata.json
+*** Tundra requires additional run (0.65 seconds), 0 items updated, 29 evaluated
+ExitCode: 0 Duration: 2s763ms
+Starting: /Applications/Unity/Hub/Editor/6000.5.6f1/Unity.app/Contents/Resources/BuildPipeline/bee_backend --ipc --defer-dag-verification --dagfile="Library/Bee/200b0aE.dag" --continue-on-failure --dagfilejson="Library/Bee/200b0aE.dag.json" --profile="Library/Bee/backend2.traceevents" ScriptAssemblies
+WorkingDir: /Users/lbj/Documents/gameproject/unity_assets
+info: Microsoft.Hosting.Lifetime[0]
+      Application is shutting down...

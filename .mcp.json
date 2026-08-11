@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "UnityMCP": {
+      "type": "stdio",
+      "command": "/Users/lbj/.local/bin/uvx",
+      "args": [
+        "--from",
+        "mcpforunityserver==10.1.0",
+        "mcp-for-unity"
+      ],
+      "env": {}
+    }
+  }
+}

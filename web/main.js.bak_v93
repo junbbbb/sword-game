@@ -1,0 +1,3625 @@
+// 검 게임 조작 프로토타입 — three.js
+//  - WASD 이동 / Shift 달리기 / Space 베기(3연타 콤보) / 마우스 시점
+//  - 칼끝 궤적을 매 프레임 샘플링해 물의 호흡 리본을 실시간 생성(Blender 에서 쓴 원리 그대로)
+import * as THREE from './lib/three.module.js';
+import { GLTFLoader } from './lib/GLTFLoader.js';
+import { EffectComposer } from './lib/postprocessing/EffectComposer.js';
+import { RenderPass } from './lib/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from './lib/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from './lib/postprocessing/OutputPass.js';
+// 요괴·전투는 별도 모듈(main.js 가 이미 2천 줄이다).
+// 페이지 쿼리(?v=..)를 그대로 물려준다. 안 그러면 main.js 만 새로 받고 enemy.js 는
+// 캐시된 옛것이 돌아서 고친 게 반영 안 된 것처럼 보인다(index.html 이 쓰는 수법 그대로).
+const { createEnemySystem } = await import('./enemy.js' + location.search);
+// 보스·증표·탈출(= 한 층을 깨는 루프)도 별도 모듈이다. 쿼리를 물려주는 이유는 위와 같다.
+const { createBossSystem } = await import('./boss.js' + location.search);
+// 수풀 은신(리그 오브 레전드 규칙 + 소리). enemy.js 도 **같은 URL** 로 불러
+// 같은 인스턴스를 본다. 여기서 플레이어 상태를 넣고, 요괴 쪽에서 canSee 로 읽는다.
+const stealth = await import('./stealth.js' + location.search);
+// 손맛(히트스톱·흔들림·처치 연출)과 소리. 둘 다 같은 캐시버스팅 규칙을 쓴다.
+const { createFeel } = await import('./feel.js' + location.search);
+const { createSfx } = await import('./sfx.js' + location.search);
+
+// ── 개발 모드 스위치 ──
+// ★한 군데서만 정한다. 예전엔 location.search.includes('dev') 를 필요할 때마다 따로
+//   물어봐서, 게이트를 새로 걸 때 어디는 켜지고 어디는 안 켜지는 일이 생겼다.
+//   지금은 이 값 하나가 캐릭터 명단(S4)·우상단 상태줄(S5)·조작 안내·검증 창구를 전부 문다.
+//   ★선언 위치가 파일 맨 위인 이유: CHAR_LIST 같은 **모듈 최상위 상수**가 이 값을 읽는다.
+//   아래쪽에 두면 TDZ 로 모듈이 통째로 죽는다.
+const DEV = location.search.includes('dev');
+
+// ── 렌더 스케일 (2026-08-10 9차. 건틀릿 성능 격차) ──
+// ★레티나에서 devicePixelRatio 2 를 그대로 쓰면 그리는 픽셀이 **4배**다. 실기 M1
+//   1280x800 에서 18~29fps 가 나온 첫째 원인이 필레이트였다(폴리곤이 아니다).
+//   기본 상한을 1.5 로 내린다. 1.5 는 "계단이 안 보이는 하한"으로, 여기에
+//   멀티샘플 8x 가 겹쳐 있어 1.0 과 달리 가장자리가 살아 있다.
+//   ?q=<수> 로 덮어쓴다(?q=1 성능 / ?q=2 스크린샷용). 값은 0.75~3 으로 가둔다.
+const Q_OVERRIDE = parseFloat(new URLSearchParams(location.search).get('q'));
+const DPR_CAP = (Q_OVERRIDE > 0) ? Math.max(0.75, Math.min(3, Q_OVERRIDE)) : 1.5;
+const cv = document.getElementById('cv');
+const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, DPR_CAP));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+// 2000 년대 게임처럼 보이는 원인은 폴리곤만이 아니다. 그림자·블룸·톤매핑이 없으면
+// 화면이 납작하다. 셋 다 코드로만 붙는다.
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+// ── 아침 산야 ──
+// 2026-08-10. 오너: "맵도 1층이니까 개방감 있게. 너무 답답한 느낌이야.
+//   SAO, 게임 속 바바리안의 **첫 층에 온 것 같은 느낌**."
+// 밤색(#04060c) 배경 + 파란 안개는 "깊은 던전"의 그림이다. 1층은 그러면 안 된다.
+// 배경·안개·조명을 옅은 하늘빛 아침으로 통째로 옮긴다. 배경색과 안개색은
+// **같은 값**이어야 한다(다르면 화면 끝에서 지형이 안개색으로 사라졌다가
+// 배경색으로 한 번 더 갈아타서 띠가 생긴다).
+const SKY = 0x9fc2d8;
+scene.background = new THREE.Color(SKY);
+// ★안개 거리는 **카메라 거리에 물려 있다.** near 가 카메라-플레이어 거리보다 멀어야
+//   플레이어 자신이 안개를 먹지 않는다. 카메라가 34m 였던 시절 값이 34~66 이었고,
+//   dist 를 24 로 당기면서 26~48 로 다시 계산했다(아래 CAM 주석 참고).
+//   지금 시점에서 화면에 보이는 지면은 카메라에서 22.5m(화면 아래끝) ~ 32.6m(위끝)다.
+//   플레이어(24m)는 0%, 화면 위끝이 30% 정도 먹어 깊이감만 남는다.
+//   ★값 자체는 아래 CAM 블록에서 dist 를 읽어 다시 세팅한다(한 군데서 정하게).
+scene.fog = new THREE.Fog(SKY, 26, 48);
+
+const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 200);
+
+// ---------- 후처리 ----------
+// 블룸은 **밝은 부분만** 번지게 한다. 칼 이펙트가 빛나 보이는 건 이게 있어야 한다.
+// 임계값을 낮게 잡으면 옷까지 번져서 뿌예지므로 0.85 로 높게 둔다.
+// ★EffectComposer 는 **자체 렌더타겟**에 그린다. WebGLRenderer 의 antialias:true 는
+// 기본 프레임버퍼에만 걸리므로, 컴포저를 붙이는 순간 계단이 전부 살아난다.
+// 멀티샘플 타겟을 직접 만들어 넘겨야 한다.
+// ★samples 8 -> 4 (9차 성능 파도 실측. handoff_perf.md 2-2):
+//   1920x1200 HalfFloat 8샘플은 타일 메모리를 크게 먹는다. 조용한 구간 짝 비교에서
+//   씬 1패스 4.73 -> 3.61ms(-24%). 이 톤(툰 셰이딩·굵은 실루엣)에서 4x 와 8x 는
+//   육안 구분이 안 된다.
+const _rt = new THREE.WebGLRenderTarget(
+  innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio(),
+  { type: THREE.HalfFloatType, samples: 4 });
+const composer = new EffectComposer(renderer, _rt);
+composer.addPass(new RenderPass(scene, camera));
+// ★임계값은 **씬 밝기에 물려 있다.** 밤 팔레트에서 0.93 이면 이펙트만 번졌지만,
+//   아침 산야로 바꾸면서 밝은 흙바닥까지 임계값을 넘어 화면 전체가 뿌예졌다.
+//   1.02 로 올려 "가산합성으로 1을 넘긴 것 = 이펙트"만 번지게 하고,
+//   그만큼 세기를 올려 감청 궤적·붓질이 밝은 배경 위에서도 또렷하게 남는다.
+const bloom = new UnrealBloomPass(
+  new THREE.Vector2(innerWidth, innerHeight), 0.46, 0.55, 1.02);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+// ★★시작 크기 사고 (9차 성능 실측. handoff_perf.md 2-1. 이번 파도 제일 큰 성능 레버):
+//   EffectComposer 는 **렌더타겟을 직접 받으면 그 크기를 CSS 크기로 오해**한다.
+//   _rt 는 이미 device 픽셀(1920x1200)인데 addPass 에서 pixelRatio(1.5)를 한 번 더
+//   곱해 2880x1800 을 패스에 먹인다. UnrealBloomPass 는 받은 크기의 절반부터 밉을
+//   쌓으므로 밉 0단이 640x400 이어야 할 것이 **1440x900**(면적 2.25배)이 됐다.
+//   창을 한 번 리사이즈하면 아래 resize 핸들러가 고쳐 주지만, 평소에 리사이즈할 일이
+//   없으니 게임은 **늘 틀린 크기로** 돌고 있었다.
+//   실측: 후처리가 한 프레임에 훑는 픽셀 6.05Mpx -> 1.19Mpx (-80%).
+//   ★값 튜닝이 아니다. 리사이즈 핸들러와 **같은 크기**를 시작에도 한 번 먹이는 것뿐이다.
+bloom.setSize(innerWidth, innerHeight);
+// ★핑퐁 타겟 둘째는 멀티샘플일 이유가 없다(three 는 clone 이라 samples 까지 복제한다).
+//   씬을 받는 첫 타겟만 MSAA 면 되고, 블룸 결과를 받는 쪽은 저장·리졸브만 낭비다.
+if (composer.renderTarget2) composer.renderTarget2.samples = 0;
+
+// ---------- 손맛 · 소리 ----------
+// ★scene·camera·bloom 이 다 선 뒤에 만든다(전멸 순간 블룸을 펄스로 밀어야 해서 필요).
+const feel = createFeel({ scene, camera, bloom });
+const sfx = createSfx();
+// ★자동재생 정책: 사용자 입력 **전에는** AudioContext 가 suspended 라 소리가 안 난다.
+//   첫 입력에서 만들고 resume 한다. 이 세 줄이 없으면 "구현했는데 소리가 안 나는"
+//   상태가 되고, 그 상태는 코드만 봐서는 절대 안 보인다.
+for (const ev of ['keydown', 'pointerdown', 'touchstart']) {
+  addEventListener(ev, () => sfx.unlock(), { passive: true });
+}
+
+// ---------- 조명 ----------
+// 아침 햇살. 하늘은 옅은 하늘색, 바닥 반사는 마른 흙색이다.
+// ★밤 팔레트에서는 아랫빛이 0x0a1018(거의 검정)이라 그늘이 통째로 죽어 있었다.
+//   1층은 "그늘도 밝은" 곳이라 아랫빛을 흙색으로 올려야 답답함이 풀린다.
+scene.add(new THREE.HemisphereLight(0xcfe4f2, 0x5b5140, 1.55));
+const key = new THREE.DirectionalLight(0xfff0d4, 2.35);   // 따뜻한 해
+key.position.set(5, 9, 4);
+key.castShadow = true;
+// ★그림자 맵 크기 (9차 성능 실측. handoff_perf.md 3):
+//   2048 -> 1024 는 씬 1패스 중앙값 -18.6%(18쌍 중 14쌍 개선)지만, 상자가 ±10m 라
+//   텍셀이 9.8 -> 19.6mm 로 두 배가 되어 **캐릭터 발밑 접지 그림자**가 뭉갠다
+//   (그 접지가 이 게임 손맛의 일부다 - v90). 그래서 타협점 1536(텍셀 13mm)을 쓴다.
+//   ?q=1(성능 확인)에서는 1024 까지 내린다.
+const SHADOW_MAP = (Q_OVERRIDE > 0 && Q_OVERRIDE < 1.25) ? 1024 : 1536;
+key.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+// ★그림자 상자는 카메라 시야에 물려 있다. 화면 밖까지 덮으면 텍셀만 굵어지고,
+//   좁으면 걸어가는 동안 그림자가 끊겼다 붙었다 한다.
+//   시점 개정(dist 34 -> 24) 후 한 화면이 18.0 x 14.8m 라 반폭 9.0m / 앞뒤 11.2·3.6m 다.
+//   ±10 이면 화면 전체를 덮고도 1m 여유가 남는다(2048 맵 기준 텍셀 11.7 -> 9.8mm 로
+//   오히려 선명해졌다).
+key.shadow.camera.near = 1; key.shadow.camera.far = 44;
+key.shadow.camera.left = -10; key.shadow.camera.right = 10;
+key.shadow.camera.top = 10; key.shadow.camera.bottom = -10;
+key.shadow.bias = -0.0012;
+key.shadow.normalBias = 0.02;
+scene.add(key);
+scene.add(key.target);       // 캐릭터를 따라가게(범위가 좁아야 그림자가 선명하다)
+// 반대쪽 하늘빛. 그림자 쪽 실루엣이 배경에 녹지 않게 잡아 주는 역할이라 남긴다.
+// 밤에는 진한 파랑(0x66aaff)이었는데 아침에는 옅게 깔아야 색이 안 튄다.
+const rim = new THREE.DirectionalLight(0x9dc8ee, 0.55);
+rim.position.set(-6, 4, -5);
+scene.add(rim);
+
+// ---------- 맵 ----------
+// ★플레이스홀더 평면(120x120)과 격자는 걷어냈다. 맵 바닥이 y=0.02 라 y=0 짜리 평면을
+//   같이 두면 z-fighting 이 난다(블렌더가 바닥을 2cm 띄워 놓은 이유가 바로 그거였다).
+// ★여기서 await 하는 이유: 아래 코드가 스폰 지점과 요괴 무리 좌표를 맵에서 받아 쓴다.
+//   main.js 는 top-level await 를 쓰는 모듈이라 이렇게 순서를 세울 수 있다.
+//   쿼리(?v=..)를 물려주는 것도 enemy.js 와 같은 이유다(맵만 캐시된 옛것이 남으면
+//   충돌 좌표와 보이는 벽이 어긋난다).
+const level = await import('./level.js' + location.search);
+await level.loadLevel(scene);
+window.__level = level;
+
+// ---------- 상태 ----------
+const keys = {};
+// ── 층 돌파 게이트 ──
+// v72 QA #15: "층 돌파" 패널이 뜬 채로 계속 걸어다닐 수 있었다. 판이 끝났는데 조작이
+// 살아 있으면 패널이 그냥 떠 있는 글자가 된다. 돌파 뒤에는 R(재시작)만 받는다.
+// ★상태는 boss 를 **읽기만** 한다(boss.js 는 안 건드리는 파일이다). boss 는 아래쪽에서
+//   const 로 선언되므로 로딩 중 TDZ 를 피하려고 window.__boss 로 돈다(R 키와 같은 이유).
+function isCleared() {
+  return !!(window.__boss && window.__boss.cleared);
+}
+// ── 한 판 다시 시작 (2026-08-10 9차. 연출UI S2 "매번 8.3초 암전") ──
+// 심사에서 사망·R·클리어가 전부 **전체 페이지 리로드**로 보였다. 실제로 코드에는
+// location.reload 가 한 줄도 없다(그 건은 handoff 에 규명을 적었다). 문제는 그게 아니라
+// **되돌리는 창구가 세 군데로 흩어져 있어서 무엇이 리셋되는지 아무도 몰랐다**는 것이다.
+// 그래서 한 함수로 모은다. R 키·클리어 뒤 R·검증 창구가 전부 여기를 지난다.
+//   자리      : toSpawn()          — 스폰 지점 + 카메라
+//   체력·요괴 : enemies.reset()    — 체력 만땅 · 무리 전원 재배치 · 새는 통 초기화
+//   처치 수   : enemies.resetKills()— 판 기준으로 0
+//   보스·증표 : boss.restart()     — 체력 · 증표 · 소요 시간
+//   내 상태   : 공격·대시·점프·콤보·궤적·선입력
+// ★window.__boss / window.__enemy 로 도는 이유는 아래 R 키 주석과 같다(TDZ).
+function resetRun() {
+  toSpawn();
+  const E = window.__enemy, B = window.__boss;
+  if (E) { if (E.reset) E.reset(); if (E.resetKills) E.resetKills(); }
+  if (B && B.restart) B.restart();
+  attacking = false; heavy = false; atkClip = null; atkStruck = false; atkHitT = -99;
+  stepLeft = 0; stepDist = 0;
+  dashLeft = 0; dashGone = 0; dashReadyT = -99; dashIfUntil = -99;
+  restoreDashTs();
+  vy = 0; grounded = true; jumping = false;
+  comboStep = 0; comboWindow = 0; resetCombo(null);
+  clearBuffer();
+  trailBuf.length = 0; spray.length = 0;
+  if (hurtDirEl) { hurtDirEl.classList.remove('on'); hurtDirT = 0; }
+  sfx.stopTell();                  // 보스 예고음이 판을 넘어 이어지면 안 된다
+}
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  // ── 클립 미리보기 패널(개발용). 아래 정의는 '클립 미리보기 패널' 절에 있다 ──
+  // 여기 세 키는 원래 게임이 안 쓰던 키라 모드와 무관하게 받아도 기존 조작이 안 변한다.
+  if (e.code === 'Escape') { exitPreview(); return; }
+  if (e.code === 'KeyP') { e.preventDefault(); togglePreview(); return; }
+  if (e.code === 'Comma' || e.code === 'Period') {
+    // 정지 상태에서 1/30 초씩 앞뒤로. 미리보기가 아니면 아무 일도 안 한다.
+    if (preview.on) { e.preventDefault(); stepFrame(e.code === 'Period' ? 1 : -1); }
+    return;
+  }
+  // ── 층 돌파 뒤 ──
+  // R 만 살아 있다. 이동키는 keys[] 에 적히지만 아래 루프가 무시하고(cleared),
+  // 공격·점프는 이 return 이 막는다(버퍼로 새는 경로는 try* 안쪽에서 한 번 더 막는다).
+  if (isCleared()) {
+    if (e.code === 'Space' || e.code === 'Tab' || /^Arrow/.test(e.code)) e.preventDefault();
+    if (e.code === 'KeyR') resetRun();
+    return;
+  }
+  // ★숫자키 충돌: 1~7 은 원래 칼 교체다(스킬이 아니라 무기 슬롯).
+  //   그래서 **미리보기 중일 때만** 클립 선택으로 돌린다. 평소 조작은 지금과 100% 같다.
+  //   8·9 는 원래 아무 데도 안 쓰였으므로 정상 모드에선 그대로 무시한다.
+  if (/^Digit[1-9]$/.test(e.code)) {
+    const n = +e.code.slice(5) - 1;
+    if (preview.on) previewClipAt(n);
+    else if (n < 7) equipSword(n);
+    return;
+  }
+  // 미리보기 중에는 전투·점프 입력을 막는다. 저것들이 current 를 가로채면
+  // 고른 클립이 그 자리에서 끊긴다(이동 입력은 루프에서 무시한다).
+  // 칼 교체·캐릭터 교체·제자리는 애니 상태를 안 건드리므로 열어둔다.
+  if (preview.on) {
+    if (e.code === 'Space' || e.code === 'Tab' || /^Arrow/.test(e.code)) e.preventDefault();
+    if (e.code === 'Tab') equipSword((swordIdx + 1) % SWORDS.length);
+    if (e.code === 'KeyR') toSpawn();
+    if (e.code === 'KeyF' && DEV) { e.preventDefault(); cycleChar(); }   // 개발용(S4)
+    return;
+  }
+  // 방향키 조작으로 바꾸면서 Space 를 점프에 내줬다. 베기는 Z 로.
+  // ★9차: 이동키를 누른 채면 **대시(회피)**, 아니면 예전대로 점프다.
+  //   두 동작이 한 키를 나눠 쓰지만 조건이 배타적이라 헷갈릴 여지가 없다
+  //   (제자리에서 회피할 이유가 없고, 달리면서 점프할 이유도 이 게임엔 없다).
+  if (e.code === 'Space') { e.preventDefault(); if (!tryDash()) tryJump(); }
+  if (e.code === 'KeyZ') { e.preventDefault(); tryAttack(); }
+  if (e.code === 'KeyQ' || e.code === 'KeyX') { e.preventDefault(); tryHeavy(); }
+  if (e.code === 'KeyE' || e.code === 'KeyC') { e.preventDefault(); tryWide(); }
+  if (/^Arrow/.test(e.code)) e.preventDefault();      // 화면 스크롤 방지
+  if (e.code === 'Tab') { e.preventDefault(); equipSword((swordIdx + 1) % SWORDS.length); }
+  // R = 제자리 + 층 재시작. 보스 체력·증표·소요 시간이 전부 처음으로 돌아간다.
+  // ★window.__boss 로 도는 이유: boss 는 아래쪽에서 const 로 선언되므로 로딩 중에
+  //   키가 눌리면 TDZ 로 터진다. typeof 로도 못 막는다(const 는 typeof 도 던진다).
+  if (e.code === 'KeyR') resetRun();
+  // F = 캐릭터 교체. ★개발용이다(S4). 평시에는 **아무 일도 안 한다** — 안내에도 안 띄우므로
+  //   "눌렀는데 반응이 없다"가 아니라 "그런 키가 없다"로 읽힌다. preventDefault 도 안 한다.
+  if (e.code === 'KeyF' && DEV) { e.preventDefault(); cycleChar(); }
+  // M = 음소거. HUD 의 마지막 줄이 상태를 그대로 보여준다.
+  if (e.code === 'KeyM') { e.preventDefault(); setMute(sfx.toggleMute()); }
+});
+// 조작 안내의 F 줄은 개발용이라 기본이 숨김이다(index.html). ?dev 에서만 켠다.
+{
+  const fRow = document.getElementById('hFchar');
+  if (fRow && DEV) fRow.style.display = '';
+}
+// ★sfx 는 이 파일 위쪽에서 만들어지지만 HUD 요소는 index.html 에 있다.
+const muteEl = document.getElementById('mute');
+function setMute(on) {
+  // ★안내의 다른 줄이 전부 **동작형**("이 안내 접기", "베기")인데 이 줄만 상태형이라
+  //   말투가 혼자 달랐다(건틀릿 연출UI S8). 누르면 무슨 일이 나는지로 적는다.
+  //   구조도 index.html 의 새 안내 구조(.ks / .t)를 따른다.
+  if (muteEl) muteEl.innerHTML = '<span class="ks"><span class="k">M</span></span>'
+    + '<span class="t">소리 ' + (on ? '켜기' : '끄기') + '</span>';
+}
+setMute(false);
+addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ── 고정 쿼터뷰 (리그 오브 레전드 기준) ──
+// 시점이 매번 달라지면 맵을 외울 수가 없고, 수풀에 숨었는지 같은 판단도
+// 시점 따라 달라진다. 그래서 각도를 고정한다. 플레이어는 카메라를 못 돌린다.
+//
+// ★이 값은 "시점을 먼저 고르고 끝"이 아니라 **한 화면에 뭐가 들어와야 하는지**를
+//   먼저 계산하고 거기서 역산했다. 근거는 전부 이 레포의 실측값이다.
+//
+//   필요한 지면 범위 (renders/history/v56_camera 에 렌더 증거)
+//     전방 >= 9m : 무리 어그로가 7.0m(enemy.js AGGRO_RADIUS)다. 무리가 화면에
+//                  들어온 뒤 판단할 틈이 있어야 하니 어그로선보다 2m 는 더 봐야 한다.
+//     후방 >= 6m : 궁수·힐러가 뒤에 선다. 요괴 정지거리 1.2m(ENEMY_ATK_RANGE 0.95
+//                  + 몸집 0.25)와 무리 반경 2.6m 밖이어야 하니 5.5~6.5m 뒤가 제자리다.
+//     폭   >= 18m: 요괴 5마리가 반경 2.6m 로 퍼지고 탱커가 옆을 잡고 검사가 측면을
+//                  도는 교전 하나가 폭 7~8m 다. 좌우 지형까지 읽으려면 이만큼 필요하다.
+//                  대신 무리 간격이 17m 이상이라 폭을 이보다 크게 벌리면 두 무리가
+//                  한 화면에 들어와 "한 무리만 떼어낸다"가 깨진다.
+//   => 필요 지면 = 깊이 15~16m x 폭 18~21m. 지금 값은 이 안에서 고른 것이다.
+//
+// pitch 0.90rad = 지면에서 51.6도. LoL 이 56도인데 4도 눕혔다. 우리 캐릭터가 1.75m
+//   라 56도로 세우면 필요한 깊이 16m 를 확보하는 순간 캐릭터가 화면 세로의 7.6%
+//   까지 작아진다. 51.6도면 같은 깊이에서 9.0% 로 LoL 대역(9~11%)에 들어온다.
+//   각을 더 세우면(1.15rad 등) 캐릭터도 작아지고 보이는 범위도 같이 줄어 둘 다 잃는다.
+// ── 2026-08-10 개정 (오너: "너무 위에서 보는 느낌이다. 롤 느낌으로") ──
+// 옛 값 fov 20 / dist 34 는 **각이 문제가 아니라 원근이 죽은 것**이 문제였다.
+// 화각 20도에 34m 면 거의 정사영이라 지도를 내려다보는 그림이 되고, 게다가 카메라가
+// 캐릭터를 정면으로 겨눠서 캐릭터 몸통이 화면 정중앙(세로 49%)에 박혀 있었다.
+// LoL 은 (1) 세로 화각이 40도 가까워 원근이 살아 있고 (2) 챔피언이 화면 아래쪽에 서고
+// 전방이 넓다. 둘 다 고친다.
+//
+//   dist 24 / fov 24 : 거리를 10m 당기고 화각을 넓혔다. 위/아래 원근 왜곡비가
+//     1.33 -> 1.45 로 올라간다(LoL 실측 대역 1.32~1.65 의 한가운데). 화각을 더
+//     넓히면(30도) 같은 폭을 유지하려고 거리를 18m 까지 당겨야 하는데, 그러면
+//     왜곡비가 1.7 을 넘어 화면 위쪽 벽이 눈에 띄게 기운다.
+//   pitch 0.86rad = 49.3도. 옛 51.6도보다 2.3도 눕혔다(= 덜 내려다본다).
+//   lead 1.25m : **바라보는 지점을 캐릭터보다 1.25m 앞으로** 옮긴다. 이것만으로
+//     캐릭터 몸통이 화면 세로 49% -> 39% 로 내려가고 전방 시야가 10.1 -> 10.9m 로
+//     넓어진다. 옛 시점에서 "캐릭터가 정중앙"이던 건 카메라가 가슴 높이를 정확히
+//     겨누고 있어서였다(camTarget = 캐릭터 위치 그대로).
+//     ★lead 1m 당 캐릭터가 화면 세로로 8% 씩 내려간다. 1.75 를 넘기면 후방이
+//     3.4m 밑으로 떨어져 등 뒤 1.2m 에 붙은 고블린 말고는 아무것도 안 보인다.
+//
+// 제약 충족치(브라우저 __probe() 실측, 1600x900):
+//   전방 10.89m (>= 9 필요) · 후방 3.86m · 폭 18.13m (18~21)
+//   캐릭터 세로 10.91% (9~11.5) · 왜곡비 1.448 (<= 1.45) · 몸통 화면 아래에서 39.4%
+// ★후방은 6.14 -> 3.86 으로 줄었다. 이건 감수한 것이다. 옛 "후방 6m" 기준은
+//   파티(궁수·힐러가 뒤에 선다) 전제였는데 지금은 솔로 대 고블린이고, 오너 지시가
+//   "전방이 넓게"다. 등 뒤 교전 거리(정지 1.2m)는 3.86m 안에 넉넉히 들어온다.
+// yaw 0 = 맵 격자와 정면으로 맞춘다. 맵이 축 정렬 96x96 이라 3.2m 통로가 화면과
+//   나란히 놓이고 캐릭터 등이 정면으로 보인다. yaw 45도(마름모)도 렌더해 봤는데
+//   통로가 화면을 대각으로 가르고 캐릭터가 옆등으로 보여서 LoL 과 멀어진다.
+const CAM = { yaw: 0.0, pitch: 0.86, dist: 24.0, fov: 24, lead: 1.25 };
+let yaw = CAM.yaw, pitch = CAM.pitch, dist = CAM.dist, lead = CAM.lead;
+camera.fov = CAM.fov;
+camera.updateProjectionMatrix();
+// 휠 확대만 남긴다. 회전은 아예 없다.
+// ★LoL 은 확대 폭이 좁고 대부분 최대로 당긴 상태로 고정해 쓴다. 그래서 **기본값이
+//   제일 먼 쪽**(24)이고 안쪽으로만 3m 열어준다.
+//   위에 적은 제약 대역(폭 18~21m / 캐릭터 9~11.5%)은 **기본값 기준**이다.
+//   21m 까지 당기면 폭 15.9m / 캐릭터 12.4% 로 대역을 벗어나는데, 이건 "가까이
+//   들여다보는" 선택지라서 그렇게 둔다. 전방 시야만은 확대 구간 전체에서
+//   9.5m 이상이라(어그로 7m + 판단 여유 2m) 요괴가 화면 밖에서 달려들지는 않는다.
+// ── 2026-08-10 9차 개정: 줌 폭을 18~32 로 연다 (지형 심사 8위 "부감 불가") ──
+// 옛 대역(21~24)은 "기본이 제일 먼 쪽"이라 **한 발짝도 물러설 수 없었다.** 심사에서
+// 지형·동선을 읽으려고 뒤로 빼려는 시도가 전부 벽에 부딪혔다.
+//   18 : 교전 확대. 폭 13.6m / 캐릭터 세로 14.5% — 롤 대역 밖이지만 "들여다보는" 선택지다
+//   24 : 기본값. 위에 적은 제약 계산이 전부 이 값 기준이다
+//   32 : 부감. 폭 24.2m / 캐릭터 8.2% — 무리 둘이 한 화면에 들어오므로 길 찾기용이다
+// ★pitch·yaw 는 그대로 고정이다(롤처럼 각도는 못 돌린다). 거리만 연다.
+// ★안개·그림자 상자는 **거리에서 역산**하므로 아래 applyDist() 한 군데서만 정한다.
+const DIST_MIN = 18.0, DIST_MAX = 32.0;
+// 안개 near 를 카메라-플레이어 거리보다 2m 뒤에 두면 플레이어는 0% 로 남고,
+// 화면 위끝 지면이 30% 정도 먹어 깊이감만 생긴다. 32m 로 빼도 이 관계가 유지된다.
+// 그림자 상자도 같이 넓힌다(24m 에서 ±10m 였다. 안 넓히면 부감에서 화면 가장자리
+// 그림자가 통째로 잘린다. 텍셀은 그만큼 굵어지지만 부감은 원래 세밀함이 필요 없다).
+function applyDist() {
+  scene.fog.near = dist + 2;
+  scene.fog.far = dist + 30;
+  const half = 10 * (dist / CAM.dist);
+  const sc = key.shadow.camera;
+  sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half;
+  sc.far = 20 + dist;
+  sc.updateProjectionMatrix();
+}
+addEventListener('wheel', e => {
+  const d0 = dist;
+  dist = Math.max(DIST_MIN, Math.min(DIST_MAX, dist + e.deltaY * 0.010));
+  if (dist !== d0) applyDist();
+}, { passive: true });
+applyDist();
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+  _rt.setSize(innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio());
+  bloom.setSize(innerWidth, innerHeight);
+});
+
+// 속성 표. 팔레트 순서 = 짙은심 / 진한 / 중간 / 밝은1 / 밝은2 / 최명 / 코어
+//   wrap  : 칼을 감는 리본을 쓸 것인가 (기본칼은 안 쓴다)
+//   spray : 흩날리는 조각 양 배수
+//   style : 0 = 칠한 2D 원소 효과, 1 = 평범한 검기(단순 3단 흰빛)
+//   tGain : 궤적 리본 **폭** 배수 (없으면 1). 칼끝 바깥으로 얼마나 부푸는가
+//   tAlpha: 궤적 **알파** 배수 (없으면 1)
+// ★tGain·tAlpha 는 2026-08-10 2차 QA(S6) 때 생겼다. 그전에는 칼마다 궤적 상수가
+//   따로 없었다(7자루가 폭·알파를 통째로 공유). 그래서 "어떤 칼만 크다"를 조절할
+//   손잡이 자체가 없었다. 기본값 1 이라 안 적은 칼은 예전과 100% 같다.
+// ★밝기 계단 구조는 전 속성이 같다. 구조까지 바꾸면 "칠한 그림" 느낌이 깨진다.
+const HEX = h => [parseInt(h.slice(0,2),16)/255, parseInt(h.slice(2,4),16)/255, parseInt(h.slice(4,6),16)/255];
+const ELEMENTS = {
+  // 1번 기본칼: 원소 없음. 감는 리본도 없고 조각도 없다. 뒤에 남는 꼬리만.
+  // 기본칼 검기. 회색이면 칙칙해서 밝은 하늘색으로(오너 지시).
+  // style=1 셰이더는 안쪽부터 uPal[6](흰 심) - uPal[5] - uPal[3](가장자리) 세 단만 쓴다.
+  plain:  { p:['2A5A7A','3E86AE','62A8CE','7FD4F5','A8E4FA','D8F4FF','FFFFFF'], wrap:0, spray:0.0, style:1 },
+  water:  { p:['123054','1E4272','4884A2','549CBA','60A8C6','72C0E4','F0F0F8'], wrap:1, spray:1.0, style:0 },
+  // 불은 물과 정반대 구조다. 물은 바깥에 흰 포말이 붙지만 불은 **안쪽이 가장 뜨겁고**
+  // 바깥으로 갈수록 식어 검붉게 스러진다. 경계도 매끈한 호가 아니라 혀다. style=2
+  fire:   { p:['4A0E08','8C1A0C','C4321A','E85E1C','F58C22','FFC63E','FFF0C8'], wrap:1, spray:1.1, style:2, rise:1 },
+  ice:    { p:['0E3A52','1A5C7A','3E93B4','6FBAD2','9AD6E6','C8EEF6','FFFFFF'], wrap:1, spray:1.3, style:0 },
+  poison: { p:['14320E','24521A','47892E','6FB343','96D160','C6EC93','E9FBC8'], wrap:1, spray:0.8, style:0 },
+  earth:  { p:['33231A','55392A','856046','A97F5C','C69D77','E0C3A0','F2E2CC'], wrap:1, spray:1.2, style:0 },
+  // ★어둑(7번)만 폭·알파를 줄여 둔다(2차 QA S6 "보라 리본이 화면을 덮는다").
+  //   원인은 상수가 아니라 **경로**였다: 백아·홍염은 구운 손그림 텍스처를 입어서
+  //   가장자리가 찢겨 있고 구멍이 뚫려 있는데(uUseTex=1), 텍스처가 없는 칼은
+  //   절차 분기로 리본을 **꽉 채워** 칠한다. 같은 지오메트리인데 어둑만 통판으로 보이는 이유다.
+  //   팔레트(어두운 보라)는 그대로 두고 면적만 줄인다. 값은 실측으로 골랐다
+  //   (Z 연타 최악 프레임 덮임 9.31% -> 백아 8.40% 아래로).
+  dark:   { p:['140E1E','261A38','452F63','63478C','8467B0','AC93D0','E4DCF2'],
+            wrap:1, spray:0.6, style:0, tGain:0.72, tAlpha:0.82 },
+};
+const PAL = {};
+for (const k in ELEMENTS) PAL[k] = ELEMENTS[k].p.map(h => new THREE.Vector3(...HEX(h)));
+// ── 손그림 파도 텍스처 ──
+// GLSL 노이즈로는 붓 느낌이 안 나온다(3번 실패). 원본 프레임을 픽셀 클러스터링한
+// 색(#1E82AA 청록 / #285AA0 파랑 / #001428 잉크 / #C8D2D2 포말)으로 오프라인에서
+// 그려 구운 텍스처를 입는다. 리본의 띠 구조·갓선·포말·찢긴 가장자리가 다 그림에 있다.
+const texLoader = new THREE.TextureLoader();
+const WAVETEX = {
+  water: texLoader.load('./tex/wave_water.png'),
+  fire: texLoader.load('./tex/wave_fire.png'),
+};
+for (const k in WAVETEX) {
+  WAVETEX[k].wrapS = THREE.RepeatWrapping;
+  WAVETEX[k].wrapT = THREE.ClampToEdgeWrapping;
+  WAVETEX[k].colorSpace = THREE.SRGBColorSpace;
+}
+
+// ── 참격 그림은 여기서 안 읽는다 (v92) ──
+// 예전에는 이 자리에서 tex/brush_slash.png(옛 붓자국 한 장)와 tex/hit_spark.png
+// (초승달에 겹치던 별빛)를 읽어 feel.js·arcMat 에 넘겼다. 셋 다 없앴다:
+//   · 참격은 v91 부터 플립북 시트(tex/slash_flip.png)이고 그 시트는 feel.js 가 직접 읽는다
+//   · 초승달(가산합성)과 별빛은 v92 에서 그 플립북으로 통째로 갈렸다
+// 그래서 여기 남아 있던 setTimeout(0) 지연 로드 한 뭉치가 통째로 죽은 코드였다
+// (TDZ 를 피하려고 setTimeout 을 쓰던 자리 - 이제 참조할 대상 자체가 없다).
+
+let curEl = ELEMENTS.water;
+function setElement(name) {
+  const e = ELEMENTS[name] || ELEMENTS.water;
+  curEl = e;
+  const p = PAL[name] || PAL.water;
+  trailMat.uniforms.uPal.value = p;
+  trailMat.uniforms.uStyle.value = e.style;
+  const wt = WAVETEX[name];
+  trailMat.uniforms.uTex.value = wt || WAVETEX.water;
+  trailMat.uniforms.uUseTex.value = wt ? 1 : 0;
+  wrapMat.uniforms.uPal.value = p;
+  wrapMat.uniforms.uStyle.value = e.style;
+  sprayMat.uniforms.uPal.value = p;
+  sprayMat.uniforms.uRise.value = e.rise || 0;
+}
+
+// ---------- 칼 궤적(물의 호흡) ----------
+// 목표는 "빛나는 띠"가 아니라 **납작하게 칠한 2D 파도 그림**이다.
+// 예전엔 AdditiveBlending 이라 겹칠수록 흰색으로 타서 번쩍였고, 정점 색 2개를
+// 그라데이션으로 섞을 뿐이라 줄무늬가 없었다. 레퍼런스(water-breathing.mp4
+// c_06 프레임)의 리본 단면을 픽셀로 재보면 이렇게 칠해져 있다:
+//   연하늘 → 밝은시안 → 진파랑 → 남색 → 아주진한남색 → 흰선 → 밝은시안 → 흰 포말(제일 넓음)
+// 경계는 흐리지 않고 딱 끊긴다. 그래서 색 계단은 프래그먼트에서 계산한다
+// (정점 보간으로 하면 아무리 색을 넣어도 그라데이션이 된다).
+// ── 24fps 양자화 (v92) ──
+// ★참격·임팩트 컷·속도선은 v91 에서 전부 1/24 로 끊어 그리게 바꿨는데(feel.js)
+//   화면에서 제일 크게 보이는 **궤적 리본만 60fps 로 매끈하게** 자라고 있었다.
+//   그래서 다 고쳤는데도 "효과가 그대로"로 읽혔다. 여기가 그 마지막 조각이다.
+// 두 가지를 한다:
+//   1) **프레임 홀드**: 같은 1/24 칸 안에서는 리본을 아예 다시 안 그린다.
+//      60fps 화면에서 같은 그림이 2~3프레임 붙들려 있고(3-2-3-2), 그게 계단감이다.
+//   2) **폭·알파 양자화**: 마디의 세기를 1/24 로 끊는다. 굵기와 알파가 같은 계단을
+//      밟아야 리본이 여러 겹이 아니라 한 장으로 읽힌다.
+// ★히트스톱은 저절로 물린다. 이 시계가 게임시간(gameT)이라 멈춘 동안은 칸 번호가
+//   안 바뀌고, 리본은 **그 한 장을 붙들고 있는다**(연출 의도 그대로).
+//   셰이더 안의 재시딩도 이미 floor(uT*24.0) 이라 같은 칸에서 같은 씨앗이 나온다.
+const FX_FPS = 24;
+let trailQFrame = -1;              // 마지막으로 다시 그린 1/24 칸 번호
+let trailHold = 0;                 // 그 뒤로 붙들고 지나간 렌더 프레임 수(검증용)
+const TRAIL_MAX = 64;              // 보관 샘플 수(원본)
+const RIBS = 220;                  // 실제로 그리는 마디 수. 원본을 곡선 보간해 늘린다.
+                                   // 64 였을 때 빠른 호에서 외곽선이 각져 보였다.
+                                   // 26개를 그대로 이으면 빠른 호에서 각이 눈에 띈다.
+const STRANDS = 5;                 // 겹쳐 흐르는 물줄기 수. 캐릭터가 저폴리라도
+                                   // 이펙트까지 성기면 안 된다(오너 지시).
+const trailBuf = [];               // {a:Vec3, b:Vec3, t:number}
+const trailGeo = new THREE.BufferGeometry();
+const segs = RIBS - 1;
+const vtxCount = STRANDS * RIBS * 2;
+const posArr = new Float32Array(vtxCount * 3);
+const uvArr = new Float32Array(vtxCount * 2);   // x=길이(0=최신), y=폭(0=칼날쪽,1=바깥)
+const alpArr = new Float32Array(vtxCount);
+const seedArr = new Float32Array(vtxCount);
+const idx = [];
+for (let s = 0; s < STRANDS; s++) {
+  const off = s * RIBS * 2;
+  for (let i = 0; i < segs; i++) {
+    const a = off + i * 2;
+    idx.push(a, a + 2, a + 3, a, a + 3, a + 1);
+  }
+}
+trailGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+trailGeo.setAttribute('aUV', new THREE.BufferAttribute(uvArr, 2));
+trailGeo.setAttribute('aAlpha', new THREE.BufferAttribute(alpArr, 1));
+trailGeo.setAttribute('aSeed', new THREE.BufferAttribute(seedArr, 1));
+trailGeo.setIndex(idx);
+
+const trailMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  blending: THREE.NormalBlending,
+  uniforms: { uPal: { value: null }, uStyle: { value: 0 }, uT: { value: 0 },
+              uTex: { value: null }, uUseTex: { value: 0 } },
+  vertexShader: `
+    attribute float aAlpha;
+    attribute vec2 aUV;
+    attribute float aSeed;
+    varying vec2 vUV; varying float vA; varying float vSeed;
+    void main(){ vUV = aUV; vA = aAlpha; vSeed = aSeed;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    varying vec2 vUV; varying float vA; varying float vSeed;
+    uniform vec3 uPal[7];
+    uniform float uStyle;      // 1 = 평범한 검기, 2 = 불꽃
+    uniform float uT;
+    uniform sampler2D uTex;
+    uniform float uUseTex;
+    #define C_DK2 uPal[0]
+    #define C_DK1 uPal[1]
+    #define C_MID uPal[2]
+    #define C_LT1 uPal[3]
+    #define C_LT2 uPal[4]
+    #define C_LT3 uPal[5]
+    #define C_WHT uPal[6]
+
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+    float noise(vec2 p){
+      vec2 i = floor(p), f = fract(p);
+      f = f*f*(3.0-2.0*f);
+      return mix(mix(hash(i), hash(i+vec2(1,0)), f.x),
+                 mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+    }
+
+    // ───────────────────────────────────────────────────────────
+    // 원작이 물을 그리는 방식 (water-breathing.mp4 실측 + 프레임 육안):
+    //  1. 모든 물 형태에 **짙은 남색 잉크 외곽선**, 바로 안쪽에 밝은 갓선.
+    //     이게 빠지면 이펙트가 배경에 녹아 '반투명 CG 띠'가 된다.
+    //  2. 리본은 길이 방향으로 **비틀리며**(뫼비우스) 폭이 죄었다 풀린다.
+    //  3. 내부는 가닥 4~6 개. 가닥마다 관 음영 + 자기 윤곽선.
+    //  4. 포말은 흰 덩어리에 남색 윤곽 + 배경이 비치는 구멍.
+    //  5. 24fps 로 다시 그린다 (매끈한 60fps 흐름이 곧 CG 티다).
+    // ───────────────────────────────────────────────────────────
+
+    float strand(float u, float v, float sd, float fk, float spread, float thick,
+                 out float tone, out float vc)
+    {
+      float h1 = hash(vec2(fk * 3.1 + sd, 1.0));
+      float h2 = hash(vec2(fk * 5.7 + sd, 2.0));
+      float h3 = hash(vec2(fk * 7.3 + sd, 3.0));
+      float u0 = h1 * 0.40;
+      float u1 = u0 + 0.40 + h2 * 0.62;
+      float s = (u - u0) / max(u1 - u0, 1e-3);
+      tone = 0.0; vc = 0.0;
+      if (s < 0.0 || s > 1.0) return 0.0;
+      float taper = pow(sin(3.14159265 * s), 0.40);       // 붓자국: 양끝이 뾰족
+      vc = (fk + 0.5) * spread + (noise(vec2(u * 3.4 + fk * 9.0 + sd, 5.0)) - 0.5) * 0.17;
+      float hw = thick * (0.62 + 0.55 * h3) * taper;
+      float d = abs(v - vc) / max(hw, 1e-4);
+      if (d > 1.0) return 0.0;
+      tone = 1.0 - d * d;                                  // 관 음영
+      return 1.0;
+    }
+
+    void main(){
+      if (vA <= 0.004) discard;
+      float u = vUV.x, v = vUV.y;
+      float kind = floor(vSeed + 0.5);        // 0=몸통 1=포말 2=가는 심
+      float sd = vSeed * 2.7 + 1.0 + floor(uT * 24.0) * 0.31;
+
+      if (uStyle > 0.5 && uStyle < 1.5) {
+        // --- 평범한 검기: 원소 없이 얇고 깔끔한 흰빛 호 ---
+        // ★v92. 여기도 끝을 흐리지 않고 **선으로 끊는다**. 바깥 한 겹은 먹(uPal[0]).
+        if (kind > 0.5) discard;
+        float hw = 0.5 * (0.30 + 0.70 * (1.0 - u));
+        float q = abs(v - 0.5) / hw;
+        float ea = 1.0 - smoothstep(0.985, 1.0, q);
+        if (!(ea > 0.02)) discard;
+        vec3 cc = q < 0.30 ? uPal[6] : (q < 0.58 ? uPal[5] : (q < 0.80 ? uPal[3] : uPal[0]));
+        gl_FragColor = vec4(cc, vA * (1.0 - 0.35 * u) * ea);
+        return;
+      }
+
+      bool fire = uStyle > 1.5;
+      float age = clamp(u * 1.2, 0.0, 1.0);
+      // ★비틀림. 폭이 주기적으로 죄었다 풀리면 리본이 공간에서 도는 것처럼 읽힌다.
+      float tw = 0.68 + 0.32 * abs(sin(u * 2.7 + vSeed * 2.3 + 0.6));
+
+      if (kind < 0.5) {
+        // ---------- 몸통 ----------
+        float wob = (noise(vec2(u * 5.0 + sd, 1.0)) - 0.5) * 0.09;
+        float outer = mix(1.06, 0.68, age)
+                    * (0.80 + 0.24 * noise(vec2(u * 9.0 + sd, 4.0))) * tw;
+        // ★v92. 바깥 끝을 0.06 폭으로 흐려 없애던 자리다. 그 부드러운 알파가
+        //   "속이 비치는 유리 부채"의 절반이었다. 이제 **형태의 끝은 선으로 끊는다**
+        //   (아래 먹 밴드가 그 자리를 차지한다). 0.016 은 계단이 안 보일 만큼만
+        //   남긴 안티에일리어싱 폭이다 - 넓히면 다시 반투명 띠가 된다.
+        float ea = 1.0 - smoothstep(outer - 0.010, outer + 0.006, v);
+        if (!(ea > 0.02)) discard;
+        float t = clamp(v / max(outer, 1e-3) + wob, 0.0, 1.0);
+        if (uUseTex > 0.5) {
+          // ── 구운 손그림을 입는다. 색·띠·갓선·포말·찢김 전부 텍스처가 담당 ──
+          vec2 tuv = vec2(u * 1.35 + floor(uT * 24.0) * 0.041 + vSeed * 0.13, t);
+          vec4 tx = texture2D(uTex, tuv);
+          // ★2026-08-10. 맵이 밤(#04060c)에서 아침 산야로 바뀌면서 같은 알파로는
+          //   궤적이 밝은 바닥에 묻혀 "유리 부채"로 보였다(실측 스크린샷).
+          //   밝은 배경 위에서 물결이 또렷하려면 알파를 올리고 색을 짙게 눌러야 한다.
+          // ── 만화 채색 (v92. 오너: "만화 같은 그래픽 + 외곽선 렌더링") ──
+          // ★알파는 **형태의 유무**만 가른다. 은은하게 비치는 반투명을 쓰는 순간
+          //   그림이 아니라 '유리 부채'가 된다(오너가 지적한 그 그림이다).
+          //   텍스처 알파를 문턱으로 끊어서 구멍은 구멍대로 남기고 몸은 통짜로 칠한다.
+          float aa = min(1.0, vA * ea * step(0.45, tx.a) * 1.55);
+          if (!(aa > 0.03)) discard;      // ★NaN 도 걸러내는 형태(!(a > x))
+          // ── 색 계단 ──
+          // ★텍스처를 실측하고 정했다(2048x256, 알파는 사실상 이진 - 불투명 94%).
+          //   가로 방향 띠(연하늘-시안-진파랑-남색-흰 포말)는 **이미 평칠로 구워져
+          //   있다.** 그러니 여기서 밝기를 다시 뭉개면 애써 그린 띠 구조가 통째로
+          //   한 색으로 합쳐진다(실측 밝기 중앙값 0.324 / 0.377 / 0.409 가 한 칸에
+          //   들어온다). 매끄럽게 미끄러지던 건 **길이 방향 감쇠 하나**뿐이라
+          //   그것만 네 단으로 끊는다. 이제 꼬리가 그라데이션이 아니라 단으로 진다.
+          float aq = floor(age * 4.0) / 4.0;                   // 0 / 0.25 / 0.5 / 0.75
+          vec3 ct = tx.rgb * (1.0 - 0.30 * aq);                // 꼬리로 갈수록 한 단씩 가라앉는다
+          ct = pow(ct, vec3(1.18));                            // 감청 쪽으로 한 단 눌러 채도를 살린다
+          // ── 외곽선 렌더링 ──
+          // ★외곽선은 얹는 장식이 아니라 **형태를 정의하는 선**이다. 이 리본이
+          //   "반투명 파란 부채"로 보이던 진짜 이유도 색이 아니라 경계였다 - 바깥 끝을
+          //   알파로 흐려 없앴으니 배경과 만나는 선이 아예 없었다.
+          //   리본 스트립의 **가장자리로부터의 거리**로 굵은 먹 밴드를 두른다.
+          //     · 머리(방금 지나간 자리)는 굵고 꼬리로 갈수록 얇다(붓이 빠지는 결)
+          //     · 텍스처가 찢겨 뚫린 자리도 경계다(옆 텍셀이 비면 거기가 실루엣이다)
+          //   두께 전환은 1~2px 폭으로만 준다. 넓히면 그라데이션이 되어 도로아미타불이다.
+          float tn = clamp(v / max(outer, 1e-3), 0.0, 1.0);    // 0=안쪽 가장자리 1=바깥
+          float dE = min(tn, 1.0 - tn) * 2.0;                  // 0=가장자리 1=한가운데
+          float ow = mix(0.30, 0.10, age);                     // 먹 밴드 굵기(머리->꼬리)
+          float na = min(min(texture2D(uTex, tuv + vec2(0.0, 0.030)).a,
+                             texture2D(uTex, tuv - vec2(0.0, 0.030)).a),
+                         min(texture2D(uTex, tuv + vec2(0.005, 0.0)).a,
+                             texture2D(uTex, tuv - vec2(0.005, 0.0)).a));
+          float ik = max(1.0 - smoothstep(ow, ow + 0.05, dE), step(na, 0.45));
+          gl_FragColor = vec4(mix(ct, C_DK2 * 0.55, ik), aa);
+          return;
+        }
+        vec3 c;
+        // ── 잉크 외곽선(양쪽) + 밝은 갓선. 원작의 결정적 특징 ──
+        // ★v92. 고정 폭(0.075 / 0.045)이던 것을 **머리는 굵고 꼬리는 얇게** 바꿨다.
+        //   텍스처를 안 입는 칼들(얼음·독·흙·어둑)도 같은 외곽선 문법을 따라야 한다.
+        float ib = mix(0.15, 0.07, age);
+        if (t > 1.0 - ib || t < ib * 0.6) c = C_DK2;
+        else if (t > 0.91 - ib) c = fire ? C_WHT : C_LT3;
+        else {
+          float q = (t - 0.045) / 0.79;
+          if (fire) {
+            c = q < 0.16 ? C_WHT : q < 0.34 ? C_LT3 : q < 0.52 ? C_LT2
+              : q < 0.70 ? C_LT1 : q < 0.87 ? C_MID : C_DK1;
+          } else {
+            c = q < 0.12 ? C_LT3 : q < 0.30 ? C_LT2 : q < 0.50 ? C_LT1
+              : q < 0.70 ? C_MID : q < 0.88 ? C_DK1 : C_DK2;
+          }
+          // 붓자국 가닥. tone 낮은 곳 = 가닥의 자기 윤곽선
+          for (int k = 0; k < 5; k++) {
+            float tone, vc;
+            float ok = strand(u, t, sd, float(k), 0.185, fire ? 0.16 : 0.14, tone, vc);
+            if (ok < 0.5) continue;
+            vec3 base;
+            if (fire) base = vc < 0.22 ? C_WHT : vc < 0.42 ? C_LT3 : vc < 0.62 ? C_LT2
+                           : vc < 0.80 ? C_LT1 : C_MID;
+            else      base = vc < 0.22 ? C_LT3 : vc < 0.42 ? C_LT2 : vc < 0.62 ? C_LT1
+                           : vc < 0.80 ? C_MID : C_DK1;
+            c = tone > 0.62 ? mix(base, C_WHT, 0.42)
+              : tone > 0.30 ? base
+              : C_DK1;
+          }
+        }
+        if (fire) {
+          float hole = noise(vec2(u * 30.0 + sd * 5.0, v * 10.0 + sd));
+          float hth = 0.04 + 0.30 * age;
+          ea *= smoothstep(hth - 0.05, hth + 0.04, hole);
+          if (ea <= 0.02) discard;
+          c = mix(c, C_DK2, age * 0.40);
+        } else {
+          c = mix(c, c * 0.78 + C_DK1 * 0.18, age * 0.8);
+        }
+        gl_FragColor = vec4(c, vA * ea);
+        return;
+      }
+
+      if (kind < 1.5) {
+        // ---------- 포말/불혀: 덩어리 + 남색 윤곽 + 구멍 ----------
+        float a = 0.0; float rmin = 9.0;
+        for (int k = 0; k < 5; k++) {
+          float fk = float(k);
+          float cu = hash(vec2(fk * 4.3 + sd, 11.0)) * 0.92;
+          float cr = 0.045 + 0.075 * hash(vec2(fk * 6.1 + sd, 13.0));
+          float du = (u - cu) / cr;
+          float dv = (v - (fire ? 0.18 : 0.32)) / (fire ? 0.55 : 0.80);
+          float r = sqrt(du * du + dv * dv);
+          // ★v92. 제일 잔 결(u*63 · v*44)을 u*24 · v*17 로 낮췄다. 계단으로 끊고 나니
+          //   그 주파수가 그대로 **점묘 얼룩**이 됐다(부드럽던 시절엔 안 보이던 결이다).
+          float lump = noise(vec2(u * 11.0 + fk * 17.0 + sd, v * 7.0)) * 0.62
+                     + noise(vec2(u * 27.0 + fk * 7.0 + sd, v * 19.0)) * 0.27
+                     + noise(vec2(u * 24.0 + fk * 3.0 + sd, v * 17.0)) * 0.11;
+          float edge = 0.62 + 0.62 * lump;
+          a = max(a, smoothstep(edge + 0.06, edge - 0.06, r));
+          rmin = min(rmin, r / max(edge, 1e-3));
+        }
+        // ★v92. 덩어리 경계(smoothstep)와 구멍을 **계단으로** 끊는다. 예전에는
+        //   포말 가장자리가 0.12 폭으로 부드럽게 사라져서, 꼬리에서 다섯 가닥이
+        //   전부 창백한 실선이 되고 그 사이로 배경이 비쳤다(실측: z_010 꼬리 확대).
+        //   덩어리는 있거나 없거나 둘 중 하나여야 흰 포말이 '칠한 덩어리'로 읽힌다.
+        if (!(a > 0.03)) discard;
+        // ★v92. 구멍 주파수를 44x30 -> 12x9 로 낮췄다. 문턱으로 끊는 순간 44개짜리
+        //   잔 구멍이 꼬리에서 **말뚝 울타리**(가로로 늘어선 막대 20여 개)가 됐다
+        //   (실측: t1 z_010). 구멍은 '그린 구멍'이라야 하므로 크고 드물어야 한다.
+        float hole = noise(vec2(u * 12.0 + sd * 9.0, v * 9.0));
+        a = step(0.5, a) * step(0.30, hole);
+        if (!(a > 0.03)) discard;
+        vec3 c;
+        if (fire) {
+          c = rmin > 0.86 ? C_DK2
+            : rmin < 0.35 ? C_WHT : rmin < 0.62 ? C_LT3 : rmin < 0.82 ? C_LT2 : C_MID;
+          c = mix(c, C_DK2, age * 0.45);
+        } else {
+          // ★포말에도 윤곽선. 흰 덩어리가 배경에 그냥 녹으면 안 된다.
+          // ★v92. 윤곽 띠를 넓혔다(0.86 -> 0.74). 외곽선이 형태를 정의해야 한다는
+          //   오너 지시. 먹은 C_DK1 보다 한 단 더 진하게(C_DK2) 간다.
+          if (rmin > 0.74) c = C_DK2;
+          else {
+            c = C_WHT;
+            if (hole < 0.46) c = C_LT2;
+            if (rmin > 0.58) c = C_LT1;
+          }
+        }
+        gl_FragColor = vec4(c, vA * a);
+        return;
+      }
+
+      // ---------- 가는 심: 흰 심 + 갓선 + 윤곽 ----------
+      float mid, halfw;
+      if (fire) { mid = 0.10 + 0.12 * noise(vec2(u * 8.0 + sd, 2.0)); halfw = mid; }
+      else      { mid = 0.5 + 0.30 * (noise(vec2(u * 8.0 + sd, 2.0)) - 0.5);
+                  halfw = 0.05 + 0.05 * noise(vec2(u * 15.0 + sd, 6.0)); }
+      float dd2 = fire ? v : abs(v - mid);
+      float lim = fire ? mid : halfw;
+      lim *= pow(sin(3.14159265 * clamp(u * 0.9 + 0.06, 0.0, 1.0)), 0.35);
+      // ★v92. 여기도 끝을 흐리지 않는다(0.02 -> 0.004 폭). 바깥 한 겹은 먹.
+      float ea2 = 1.0 - smoothstep(lim - 0.004, lim, dd2);
+      if (!(ea2 > 0.02)) discard;
+      vec3 c2 = (dd2 < lim * 0.40) ? C_WHT : (dd2 < lim * 0.70 ? C_LT3 : C_DK2);
+      gl_FragColor = vec4(c2, vA * ea2);
+    }`
+});
+const trailMesh = new THREE.Mesh(trailGeo, trailMat);
+trailMesh.frustumCulled = false;
+trailMesh.renderOrder = 3;
+scene.add(trailMesh);
+
+// ---------- 칼을 휘감는 리본 (리듬체조 리본) ----------
+// 궤적(trail)은 "지나간 자취"라서 칼이 멈춰 있으면 아무것도 안 보인다.
+// 이 리본은 **기를 모으는 표시**다. 칼을 세워 모으는 동안 칼날을 축으로 감겨 있다가,
+// 베는 순간 확 퍼지며 사라진다(그 힘이 파도로 나가는 것이므로 꼬리로 남기지 않는다).
+//   coil = 1 -> 칼을 감고 있다(느릴 때)   coil = 0 -> 터져서 사라짐(빠를 때)
+// coil 을 칼끝 속도로 자동 계산하므로 3연타/일격기 둘 다 그냥 동작한다.
+// 한 가닥이면 그냥 감은 끈처럼 보인다. 두 가닥을 서로 어긋나게(위상 반대 +
+// 감는 횟수도 다르게) 두면 서로 교차하며 얽혀서 물줄기 둘이 휘감는 그림이 된다.
+const WRAP_N = 140;                 // 가닥당 마디
+const WRAP_STRANDS = 2;
+//              위상차,           감는 횟수, 반지름 배율, 폭 배율, 색조(0=밝게 1=짙게)
+const WRAP_CFG = [
+  { phase: 0.0,        turns: 3.4, rad: 1.00, w: 1.00, tone: 0.0 },
+  { phase: Math.PI,    turns: 2.7, rad: 0.82, w: 0.82, tone: 1.0 },
+];
+const wrapGeo = new THREE.BufferGeometry();
+const wPos = new Float32Array(WRAP_STRANDS * WRAP_N * 2 * 3);
+const wUV = new Float32Array(WRAP_STRANDS * WRAP_N * 2 * 2);
+const wTone = new Float32Array(WRAP_STRANDS * WRAP_N * 2);
+const wIdx = [];
+for (let sIdx = 0; sIdx < WRAP_STRANDS; sIdx++) {
+  const off = sIdx * WRAP_N * 2;
+  for (let i = 0; i < WRAP_N - 1; i++) {
+    const a = off + i * 2;
+    wIdx.push(a, a + 2, a + 3, a, a + 3, a + 1);
+  }
+}
+wrapGeo.setAttribute('position', new THREE.BufferAttribute(wPos, 3));
+wrapGeo.setAttribute('aUV', new THREE.BufferAttribute(wUV, 2));
+wrapGeo.setAttribute('aTone', new THREE.BufferAttribute(wTone, 1));
+wrapGeo.setIndex(wIdx);
+
+const wrapMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  blending: THREE.NormalBlending,
+  uniforms: { uFade: { value: 0 }, uPal: { value: null }, uStyle: { value: 0 } },
+  vertexShader: `
+    attribute vec2 aUV;
+    attribute float aTone;
+    varying vec2 vUV; varying float vTone;
+    void main(){ vUV = aUV; vTone = aTone;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    varying vec2 vUV; varying float vTone;
+    uniform float uFade;
+    uniform float uStyle;
+    uniform vec3 uPal[7];
+    #define C_DK2 uPal[0]
+    #define C_DEEP uPal[1]
+    #define C_MID uPal[2]
+    #define C_CY1 uPal[4]
+    #define C_WHT uPal[6]
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+    float noise(vec2 p){
+      vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+      return mix(mix(hash(i), hash(i+vec2(1,0)), f.x),
+                 mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+    }
+    void main(){
+      if (uFade <= 0.01) discard;
+      float u = vUV.x, v = vUV.y;
+      // 끝으로 갈수록 가늘어지며 뜯긴다(리본 끝의 나풀거림)
+      // 좌우 대칭으로 자르면 그냥 '끈'이다. 파도는 한쪽(마루)만 부풀고 뜯긴다.
+      float sd = vTone * 5.3 + 1.0;
+      float len = mix(1.0, 0.42, u);                    // 끝으로 갈수록 가늘어짐
+      // 안쪽(칼에 붙는 쪽): 완만하게 물결친다
+      float inner = 0.5 - len * (0.30 + 0.10 * sin(u * 21.0 + sd * 3.0));
+      // 바깥쪽(마루): 굵게 부풀었다 잦아들고, 가장자리가 뭉게뭉게 뜯긴다
+      float swell = 0.34 + 0.46 * (0.5 + 0.5 * sin(u * 9.0 + sd * 2.0))
+                  + 0.26 * noise(vec2(u * 15.0 + sd, 2.0));
+      float outer = 0.5 + len * swell;
+      float lump  = noise(vec2(u * 34.0 + sd * 7.0, 5.0)) * 0.6
+                  + noise(vec2(u * 74.0 + sd * 3.0, 9.0)) * 0.4;
+      outer -= len * 0.30 * (1.0 - lump);               // 마루 끝이 들쭉날쭉
+      if (v < inner || v > outer) discard;
+
+      float t = (v - inner) / max(1e-4, outer - inner);
+      vec3 c;
+      if (uStyle > 1.5) {
+        // 불꽃 감김: 물처럼 **마루 끝에 흰 포말**을 두면 안 된다. 불은 정반대로
+        // 칼에 붙는 안쪽이 가장 뜨겁고(흰-노랑) 바깥 끝이 식어 검붉게 스러진다.
+        float k = vTone < 0.5 ? t : clamp(t * 1.12 - 0.06, 0.0, 1.0);
+        if      (k < 0.14) c = uPal[6];
+        else if (k < 0.30) c = uPal[5];
+        else if (k < 0.48) c = uPal[4];
+        else if (k < 0.66) c = uPal[3];
+        else if (k < 0.84) c = uPal[2];
+        else               c = uPal[1];
+        // 불은 속이 뚫린다. 바깥으로 갈수록 성기게
+        float hl = noise(vec2(u * 40.0 + sd * 9.0, v * 22.0));
+        if (hl < 0.08 + 0.36 * k) discard;
+        gl_FragColor = vec4(c, uFade * (1.0 - 0.30 * u));
+        return;
+      }
+      if (vTone < 0.5) {          // 밝은 가닥
+        if      (t < 0.14) c = C_MID;
+        else if (t < 0.34) c = C_DEEP;
+        else if (t < 0.52) c = C_CY1;
+        else if (t < 0.62) c = C_WHT;
+        else if (t < 0.80) c = C_CY1;
+        else               c = C_WHT;   // 마루 = 흰 포말
+      } else {                    // 짙은 가닥. 색이 달라야 두 가닥으로 읽힌다
+        if      (t < 0.20) c = C_DEEP;
+        else if (t < 0.48) c = C_MID;
+        else if (t < 0.58) c = C_WHT;
+        else if (t < 0.84) c = C_CY1;
+        else               c = C_WHT;
+      }
+      // 마루 안쪽에 포말 얼룩
+      if (t > 0.78) {
+        float f = noise(vec2(u * 44.0 + sd * 11.0, v * 30.0));
+        if (f < 0.34) c = C_CY1;
+      }
+      gl_FragColor = vec4(c, uFade * (1.0 - 0.30 * u));
+    }`
+});
+const wrapMesh = new THREE.Mesh(wrapGeo, wrapMat);
+wrapMesh.frustumCulled = false;
+wrapMesh.renderOrder = 4;
+scene.add(wrapMesh);
+
+// ---------- 흩날리는 흰 물거품 조각 ----------
+// 레퍼런스에서 흰 조각들이 호에서 멀리까지 날아간다. 띠 가장자리에 붙어 있는
+// 포말만으로는 그 느낌이 안 나서 별도 파티클로 뽑는다.
+// 빛나는 점이 아니라 **찢어진 종이 조각**이라 알파는 계단, 색은 납작한 흰색.
+const SPRAY_MAX = 260;
+const spray = [];                 // {p, v, t, ttl, size, seed, spin, rot}
+const sprayGeo = new THREE.BufferGeometry();
+const spPos = new Float32Array(SPRAY_MAX * 4 * 3);
+const spUV = new Float32Array(SPRAY_MAX * 4 * 2);
+const spA = new Float32Array(SPRAY_MAX * 4);
+const spSeed = new Float32Array(SPRAY_MAX * 4);
+// 먹물 튐. 같은 조각 시스템을 쓰되 이 값이 1 이면 **어두운 붉은 먹물 + 흰 심**으로
+// 칠한다. 처치 순간에만 켠다(칼 궤적의 감청 팔레트를 오염시키지 않으려면 색을
+// 파티클 단위로 갈라야 한다. 팔레트를 통째로 바꾸면 리본까지 붉어진다).
+const spInk = new Float32Array(SPRAY_MAX * 4);
+const spIdx = [];
+for (let i = 0; i < SPRAY_MAX; i++) {
+  const o = i * 4;
+  spIdx.push(o, o + 1, o + 2, o, o + 2, o + 3);
+  spUV[(o) * 2] = 0; spUV[(o) * 2 + 1] = 0;
+  spUV[(o + 1) * 2] = 1; spUV[(o + 1) * 2 + 1] = 0;
+  spUV[(o + 2) * 2] = 1; spUV[(o + 2) * 2 + 1] = 1;
+  spUV[(o + 3) * 2] = 0; spUV[(o + 3) * 2 + 1] = 1;
+}
+sprayGeo.setAttribute('position', new THREE.BufferAttribute(spPos, 3));
+sprayGeo.setAttribute('aUV', new THREE.BufferAttribute(spUV, 2));
+sprayGeo.setAttribute('aAlpha', new THREE.BufferAttribute(spA, 1));
+sprayGeo.setAttribute('aSeed', new THREE.BufferAttribute(spSeed, 1));
+sprayGeo.setAttribute('aInk', new THREE.BufferAttribute(spInk, 1));
+sprayGeo.setIndex(spIdx);
+
+const sprayMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  blending: THREE.NormalBlending,
+  uniforms: { uPal: { value: null }, uRise: { value: 0 },
+              uInkDark: { value: new THREE.Color(0x5c1220) },
+              uInkCore: { value: new THREE.Color(0xf4e8ea) } },
+  vertexShader: `
+    attribute vec2 aUV; attribute float aAlpha; attribute float aSeed; attribute float aInk;
+    varying vec2 vUV; varying float vA; varying float vSeed; varying float vInk;
+    void main(){ vUV = aUV; vA = aAlpha; vSeed = aSeed; vInk = aInk;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    varying vec2 vUV; varying float vA; varying float vSeed; varying float vInk;
+    uniform vec3 uPal[7];
+    uniform float uRise;
+    uniform vec3 uInkDark;
+    uniform vec3 uInkCore;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+    float noise(vec2 p){
+      vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+      return mix(mix(hash(i), hash(i+vec2(1,0)), f.x),
+                 mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+    }
+    void main(){
+      if (vA <= 0.02) discard;
+      // ★원작 물방울은 동그란 점이 아니라 **초승달/쉼표꼴**이고 남색 윤곽선이 있다.
+      // 진행 방향(+x, JS 에서 속도로 정렬)이 볼록한 쪽.
+      vec2 q = vUV - 0.5;
+      float wob = (noise(vUV * 5.0 + vSeed * 7.0) - 0.5) * 0.06;
+      float r1 = length(vec2(q.x, q.y * 1.35)) + wob;
+      float r2 = length(vec2(q.x - 0.17, q.y * 1.22)) + wob;
+      if (r1 > 0.50 || r2 < 0.29) discard;              // 초승달 실루엣
+      bool edge = (r1 > 0.435) || (r2 < 0.355);          // 윤곽선 띠
+      vec3 c;
+      if (vInk > 0.5) {
+        // 먹물: 어두운 붉은 덩어리에 흰 심. 물보라와 같은 실루엣이라 튀지 않는다.
+        c = edge ? uInkDark * 0.55 : (r1 < 0.30 ? uInkCore : uInkDark);
+        gl_FragColor = vec4(c, vA > 0.35 ? 1.0 : 0.7);
+        return;
+      }
+      if (uRise > 0.5) {
+        // 불티: 심이 있는 불덩이. 윤곽은 검붉게, 식으면 재.
+        c = edge ? uPal[0]
+          : r1 < 0.24 ? uPal[6] : r1 < 0.34 ? uPal[5] : uPal[4];
+        c = mix(c, uPal[0], (1.0 - vA) * 0.75);
+      } else {
+        c = edge ? uPal[1] : uPal[6];
+        if (!edge && noise(vUV * 6.0 + vSeed * 5.0) < 0.30) c = uPal[4];
+      }
+      gl_FragColor = vec4(c, vA > 0.4 ? 1.0 : 0.62);
+    }`
+});
+const sprayMesh = new THREE.Mesh(sprayGeo, sprayMat);
+sprayMesh.frustumCulled = false;
+sprayMesh.renderOrder = 5;
+scene.add(sprayMesh);
+
+// ---------- 참격(타격 지점) ----------
+// ★v92. 여기 있던 **가산합성 초승달 + 별빛 텍스처**(arcMat/spawnArc/updateArcs,
+//   약 150줄)를 통째로 지웠다. 명중 지점의 한 획은 이제 feel.js 가 플립북 시트
+//   (tex/slash_flip.png)를 월드에 눕혀 1/24 로 재생한다 - feel.impactSlash().
+//   화면에 남는 역할("여기서 갈라졌다")은 그대로고, 문법만 60fps 가산합성에서
+//   24fps 작화 프레임으로 갈렸다. 부르는 쪽(main.js)은 좌표·각도·크기·종류만 넘긴다.
+// ★왜 여기서 안 그리나: 시트를 읽는 쪽이 feel.js 하나여야 밝기 계약(먹 0.12 /
+//   0.45 / 0.70 / 심 0.95)과 팔레트 분기(처치 진홍 / 물 감청)가 한 군데서만 산다.
+
+// ---------- 타격 물보라 ----------
+// 처음엔 충격파 '링'을 그렸는데, 카메라 빌보드 원판은 크기·각도 어느 조합에서도
+// '납작한 파스텔 블롭'으로 보였다(실측 3회). 원작의 임팩트는 링이 아니라
+// **물보라 파편이 왕창 터지는 것**이고, 그건 초승달 물방울 시스템이 이미 한다.
+// 그래서 타격 순간에 물방울을 크게·많이 터뜨리는 것으로 정리했다.
+const _tipDir = new THREE.Vector3();
+const _advAxis = new THREE.Vector3(0, 1, 0);
+function spawnBurst(a, b, delta) {
+  _tipDir.copy(delta);
+  if (_tipDir.lengthSq() < 1e-6) _tipDir.set(0, 1, 0);
+  _tipDir.normalize();
+  spawnSpray(a, b, _tipDir, 34, 2.8);
+}
+function updateBursts(dt) {}
+
+const _sq = new THREE.Vector3(), _camR = new THREE.Vector3(), _camU = new THREE.Vector3();
+const _c1 = new THREE.Vector3(), _c2 = new THREE.Vector3();
+let sprayAcc = 0;
+function spawnSpray(aPt, bPt, moveDir, count, scale, ink) {
+  for (let i = 0; i < count && spray.length < SPRAY_MAX; i++) {
+    const f = 0.35 + Math.random() * 0.85;                 // 칼날 바깥쪽에서 주로
+    const p = aPt.clone().lerp(bPt, f);
+    // 진행 방향으로 튀고 + 바깥으로 흩어진다
+    const v = moveDir.clone().multiplyScalar(0.35 + Math.random() * 1.1);
+    v.x += (Math.random() - 0.5) * 3.2;
+    v.y += Math.random() * 2.6 - 0.5;
+    v.z += (Math.random() - 0.5) * 3.2;
+    spray.push({
+      p, v, t: 0,
+      ttl: 0.30 + Math.random() * 0.55,
+      size: charH * (0.012 + Math.random() * Math.random() * 0.055) * scale,
+      seed: Math.random() * 10,
+      rot: Math.random() * 6.28, spin: (Math.random() - 0.5) * 9,
+      ink: ink ? 1 : 0,
+    });
+  }
+}
+
+// 먹물 튐. 처치한 자리에서 사방으로. 칼날 선분이 아니라 **맞은 지점**이 원점이다.
+const _ia = new THREE.Vector3(), _ib = new THREE.Vector3(), _idir = new THREE.Vector3();
+function spawnInk(x, y, z, dx, dy, dz, count, scale) {
+  _idir.set(dx, dy, dz);
+  if (_idir.lengthSq() < 1e-6) _idir.set(0, 1, 0);
+  _idir.normalize();
+  _ia.set(x, y, z).addScaledVector(_idir, -0.22);
+  _ib.set(x, y, z).addScaledVector(_idir, 0.22);
+  spawnSpray(_ia, _ib, _idir, count, scale, true);
+}
+function updateSpray(dt) {
+  _camR.setFromMatrixColumn(camera.matrixWorld, 0);
+  _camU.setFromMatrixColumn(camera.matrixWorld, 1);
+  for (let i = spray.length - 1; i >= 0; i--) {
+    const s2 = spray[i];
+    s2.t += dt;
+    if (s2.t >= s2.ttl) { spray.splice(i, 1); continue; }
+    s2.v.multiplyScalar(Math.pow(curEl.rise ? 0.05 : 0.12, dt));   // 공기저항으로 금방 멈춘다
+    // 물방울은 떨어지고 불티는 떠오른다. 이걸 안 뒤집으면 팔레트만 주황인
+    // '주황색 물방울'이 된다.
+    s2.v.y += curEl.rise ? 2.4 * dt : -5.5 * dt;
+    s2.p.addScaledVector(s2.v, dt);
+    s2.rot += s2.spin * dt;
+  }
+  for (let i = 0; i < SPRAY_MAX; i++) {
+    const o = i * 4;
+    if (i >= spray.length) {
+      for (let k = 0; k < 4; k++) { spA[o + k] = 0; spInk[o + k] = 0; }
+      continue;
+    }
+    const s2 = spray[i];
+    const life = 1 - s2.t / s2.ttl;
+    // ★속도를 화면에 투영해 그 방향으로 눕히고, 빠를수록 길게(물방울 꼬리).
+    // 카메라 정면 정사각형으로 돌리기만 하면 '색종이'로 보인다.
+    const vx = s2.v.dot(_camR), vyv = s2.v.dot(_camU);
+    const sp2 = Math.hypot(vx, vyv);
+    const angv = sp2 > 0.4 ? Math.atan2(vyv, vx) : s2.rot;
+    const cs = Math.cos(angv), sn = Math.sin(angv);
+    const stretch = 1.0 + Math.min(1.5, sp2 * 0.14);
+    _c1.copy(_camR).multiplyScalar(cs).addScaledVector(_camU, sn).multiplyScalar(s2.size * stretch);
+    _c2.copy(_camR).multiplyScalar(-sn).addScaledVector(_camU, cs).multiplyScalar(s2.size * 0.74);
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    for (let k = 0; k < 4; k++) {
+      _sq.copy(s2.p).addScaledVector(_c1, corners[k][0]).addScaledVector(_c2, corners[k][1]);
+      spPos[(o + k) * 3] = _sq.x; spPos[(o + k) * 3 + 1] = _sq.y; spPos[(o + k) * 3 + 2] = _sq.z;
+      spA[o + k] = life;
+      spSeed[o + k] = s2.seed;
+      spInk[o + k] = s2.ink || 0;
+    }
+  }
+  sprayGeo.attributes.position.needsUpdate = true;
+  sprayGeo.attributes.aAlpha.needsUpdate = true;
+  sprayGeo.attributes.aSeed.needsUpdate = true;
+  sprayGeo.attributes.aInk.needsUpdate = true;
+}
+
+setElement('water');            // 셰이더가 uniform 없이 컴파일되면 검게 나온다
+const spec_R0 = (L, c) => L * 0.155 * (1 + (1 - c) * 0.9);
+let coil = 1.0, wrapPhase = 0, lastTip = null, tipSpeed = 0;
+let swordFast = 0;   // 0=칼이 느리다(감김) 1=베는 중(풀림)
+let released = false; // 이번 공격에서 이미 터졌는가. 터진 뒤 다시 감기면
+                      // '기를 모은다'는 뜻이 흐려진다.
+// 칼끝이 이만큼 빨라야 '벤다'로 친다. 실측(Heavy 클립): 들어올릴 때 ~12,
+// 실제 타격 순간 ~98. 둘이 확실히 갈리도록 45 로 둔다.
+// 낮게 잡으면 들어올리는 동안 리본이 풀려버려 "감았다 푸는" 그림이 안 나온다.
+const FAST_REF = 45.0;
+const _n1 = new THREE.Vector3(), _n2 = new THREE.Vector3(), _sp = new THREE.Vector3();
+const _tan = new THREE.Vector3(), _wd = new THREE.Vector3(), _prev = new THREE.Vector3();
+const _spd = new THREE.Vector3(), _cam = new THREE.Vector3();
+function updateWrap(dt, aPt, bPt, active) {
+  // 감겨 있을 때만 보인다. 베는 순간 coil 이 떨어지면서 그대로 사라진다.
+  const want = (active && !released && curEl.wrap) ? Math.max(0, coil * 1.25 - 0.25) : 0;
+  wrapMat.uniforms.uFade.value += (want - wrapMat.uniforms.uFade.value) * Math.min(1, dt * 14);
+  if (wrapMat.uniforms.uFade.value < 0.02) return;
+  _d.copy(bPt).sub(aPt);
+  const L = _d.length() || 1;
+  _d.multiplyScalar(1 / L);
+  // 칼끝 속도로 감김/풀림을 정한다. 모을 땐 감기고 벨 땐 풀린다.
+  const coilT = 1 - swordFast;
+  coil += (coilT - coil) * Math.min(1, dt * (coilT < coil ? 22 : 2.6));
+  wrapPhase += dt * 5.5;
+
+  const NP = bladePath.length;
+  // 휜 칼을 따라가려면 매 마디마다 접선/법선을 다시 잡아야 한다.
+  // 직선 축 하나로 감으면 칼이 휜 만큼 리본이 날에서 떠버린다.
+  const _bp = new THREE.Vector3(), _bp2 = new THREE.Vector3(), _tg = new THREE.Vector3();
+  const R0 = spec_R0(L, coil);
+  _cam.copy(camera.position);
+  for (let sIdx = 0; sIdx < WRAP_STRANDS; sIdx++) {
+    const cf = WRAP_CFG[sIdx];
+    const base = sIdx * WRAP_N * 2;
+    for (let j = 0; j < WRAP_N; j++) {
+      const t = j / (WRAP_N - 1);
+      // 중심선 위의 점과 그 지점의 접선
+      if (NP >= 2) {
+        const f = Math.min(NP - 1.001, t * 1.26 * (NP - 1));
+        const i0 = Math.floor(f), fr = f - i0;
+        _bp.copy(bladePath[i0]).lerp(bladePath[Math.min(NP - 1, i0 + 1)], fr);
+        _bp2.copy(bladePath[Math.min(NP - 1, i0 + 1)]).sub(bladePath[i0]);
+        _bp.applyMatrix4(handBone.matrixWorld);
+        _tg.copy(_bp2).transformDirection(handBone.matrixWorld).normalize();
+      } else {
+        _bp.copy(aPt).addScaledVector(_d, L * (0.02 + 1.26 * t));
+        _tg.copy(_d);
+      }
+      _n1.set(0, 1, 0).cross(_tg);
+      if (_n1.lengthSq() < 1e-6) _n1.set(1, 0, 0).cross(_tg);
+      _n1.normalize();
+      _n2.copy(_tg).cross(_n1).normalize();
+      const th = t * cf.turns * Math.PI * 2 + wrapPhase + cf.phase;
+      const pulse = 1 + 0.34 * Math.sin(t * 8.0 + wrapPhase * 1.7 + cf.phase * 1.5)
+                      + 0.16 * Math.sin(t * 19.0 - wrapPhase * 1.1);
+      const rad = R0 * cf.rad * Math.sin(Math.PI * Math.min(1, t * 1.12)) * pulse;
+      _sp.copy(_bp).addScaledVector(_n1, Math.cos(th) * rad)
+                   .addScaledVector(_n2, Math.sin(th) * rad);
+      if (j === 0) _tan.copy(_tg);
+      else _tan.copy(_sp).sub(_prev).normalize();
+      const swell = (0.62 + 0.55 * Math.sin(t * 6.5 + wrapPhase * 1.3 + cf.phase * 2.0))
+                  * (0.55 + 0.45 * Math.sin(Math.PI * Math.min(1, t * 1.1)));
+      _wd.copy(_tan).cross(_cam.clone().sub(_sp)).normalize();
+      const sm = Math.max(0, Math.min(1, (t - 0.30) / 0.34));
+      _wd.applyAxisAngle(_tan, Math.PI * (sm * sm * (3 - 2 * sm)) + cf.phase * 0.3);
+      _wd.multiplyScalar(L * 0.135 * cf.w * Math.max(0.18, swell));
+      const o = base + j * 2;
+      wPos[o * 3] = _sp.x + _wd.x; wPos[o * 3 + 1] = _sp.y + _wd.y; wPos[o * 3 + 2] = _sp.z + _wd.z;
+      wPos[(o + 1) * 3] = _sp.x - _wd.x; wPos[(o + 1) * 3 + 1] = _sp.y - _wd.y;
+      wPos[(o + 1) * 3 + 2] = _sp.z - _wd.z;
+      wUV[o * 2] = t; wUV[o * 2 + 1] = 1;
+      wUV[(o + 1) * 2] = t; wUV[(o + 1) * 2 + 1] = 0;
+      wTone[o] = cf.tone; wTone[o + 1] = cf.tone;
+      _prev.copy(_sp);
+    }
+  }
+  wrapGeo.attributes.position.needsUpdate = true;
+  wrapGeo.attributes.aUV.needsUpdate = true;
+  wrapGeo.attributes.aTone.needsUpdate = true;
+}
+
+const clampi = (v, a, b) => (v < a ? a : (v > b ? b : v));
+// Catmull-Rom: 저장된 샘플 사이를 부드럽게 잇는다(각진 호 제거)
+function cr(p0, p1, p2, p3, t, out) {
+  const t2 = t * t, t3 = t2 * t;
+  out.x = 0.5 * (2 * p1.x + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2
+                 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+  out.y = 0.5 * (2 * p1.y + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2
+                 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
+  out.z = 0.5 * (2 * p1.z + (-p0.z + p2.z) * t + (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * t2
+                 + (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * t3);
+  return out;
+}
+let trailGain = 1.0;       // 일격기에서 1.0 -> 1.9 로 부푼다
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3();
+const _pa = new THREE.Vector3(), _pb = new THREE.Vector3(), _perp = new THREE.Vector3();
+// force = 1/24 홀드를 건너뛰고 무조건 다시 그린다(DEV 굽기 창구 전용.
+//         클립을 손으로 밀며 부르는 경로는 gameT 가 안 흘러서 홀드에 갇힌다).
+function updateTrail(force) {
+  // ★리본의 시계. 게임시간을 1/24 로 끊어 칸 번호를 만든다.
+  const fq = Math.floor(gameT * FX_FPS);
+  if (!force && fq === trailQFrame) {
+    // 붙들고 지나간 렌더 프레임 수. 60fps 면 2~3 이 정상(3-2-3-2 홀드),
+    // 히트스톱 중에는 멈춘 만큼 계속 올라간다.
+    trailHold++;
+    if (window.__trailDbg) window.__trailDbg.hold = trailHold;
+    return;
+  }
+  trailQFrame = fq;
+  trailHold = 0;
+  const n = trailBuf.length;
+  let w = 0;
+  for (let s = 0; s < STRANDS; s++) {
+    // 줄기마다 역할이 다르다. 그리는 순서 = 몸통 -> 시안선 -> 포말(맨 위).
+    // 포말이 몸통을 덮으면 온통 흰색이 되므로 바깥쪽으로 밀어 겹침을 줄인다.
+    // 5 가닥: 몸통 2겹(안/바깥) + 가는 심 + 포말 2겹.
+    // 3 겹일 때는 두께가 얇아 '띠 하나'로 보였다.
+    const KIND = [0, 0, 2, 1, 1][s];
+    // ★v92. 포말 두 가닥(KIND 1)의 폭을 0.52/0.54 -> 0.34/0.34 로 좁혔다.
+    //   레퍼런스(water-breathing.mp4, 'WHIRLPOOL' 프레임)를 자로 대고 보면 흰 포말은
+    //   **좁은 강조 띠**이고 화면의 대부분은 짙은 파랑 몸통이다. 우리 쪽은 포말이
+    //   몸통과 같은 폭이라, 계단으로 끊어 불투명하게 칠하자마자 **창백한 흰 덩어리가
+    //   파랑을 덮어버렸다**(실측: t1/t2 z_012~014 상단). 폭을 좁히면 흰빛이 강조로
+    //   돌아가고 색 계단(남색-파랑-시안-흰)이 제 순서대로 보인다.
+    const SPAN = [[0.02, 0.62], [0.30, 0.88], [0.34, 0.74],
+                  [0.80, 1.14], [0.98, 1.32]][s];
+    // 일격기는 같은 궤적이라도 파도를 크게 부풀린다(칼끝 바깥으로 더 뻗음)
+    // ★칼별 폭 배수(tGain)를 여기서 곱한다. 지오메트리 한 군데서만 곱해야
+    //   "폭만 줄였는데 알파 계단은 그대로"가 보장된다.
+    const g = trailGain * (curEl.tGain || 1);
+    const mid0 = (SPAN[0] + SPAN[1]) * 0.5;
+    const rIn = mid0 + (SPAN[0] - mid0) * g, rOut = mid0 + (SPAN[1] - mid0) * g;
+    for (let i = 0; i < RIBS; i++) {
+      const base = (s * RIBS + i) * 2;
+      if (n < 2) { alpArr[base] = 0; alpArr[base + 1] = 0; continue; }
+      // 최신(n-1)에서 과거로, 실수 인덱스로 훑으며 Catmull-Rom 보간
+      const fi = (i / (RIBS - 1)) * (n - 1);
+      const k = n - 1 - fi;
+      const i1 = Math.floor(k), fr = k - i1;
+      const e = trailBuf[clampi(i1, 0, n - 1)];
+      const e0 = trailBuf[clampi(i1 - 1, 0, n - 1)];
+      const e2 = trailBuf[clampi(i1 + 1, 0, n - 1)];
+      const e3 = trailBuf[clampi(i1 + 2, 0, n - 1)];
+      cr(e0.a, e.a, e2.a, e3.a, fr, _a);
+      cr(e0.b, e.b, e2.b, e3.b, fr, _b);
+      _d.copy(_b).sub(_a);
+      const L = _d.length() || 1;
+      _d.multiplyScalar(1 / L);
+      const age = i / (RIBS - 1);
+      // 이웃 샘플로 진행 방향 -> 수직 오프셋(줄기끼리 교차해 겹쳐 보이게)
+      const nb = trailBuf[clampi(Math.floor(k) - 1, 0, n - 1)];
+      _perp.copy(e.b).sub(nb.b);
+      if (_perp.lengthSq() < 1e-8) _perp.set(0, 1, 0);
+      // 바깥 포말 줄기는 마루가 진행 방향으로 말리도록 더 크게 밀어준다(호쿠사이식 말림).
+      const curl = (KIND === 1) ? (0.34 * (1 - age) + 0.05) : 0.05;
+      _perp.cross(_d).normalize()
+           .multiplyScalar(L * curl * (KIND === 1 ? 1 : Math.sin(s * 1.9 + k * 0.42)));
+      // 남은 세기가 곧 굵기다. 꼬리 끝은 가늘어지며 사라진다.
+      // ★세기를 1/24 로 끊는다(v92). 폭도 알파도 이 값 하나에서 나오므로,
+      //   여기서 한 번 끊으면 **둘이 같은 계단**을 밟는다. 굵기가 미끄러지듯
+      //   줄어들면 아무리 색을 계단으로 칠해도 리본은 다시 3D 띠로 보인다.
+      const inten = Math.floor((e.t * (1 - fr) + e2.t * fr) * FX_FPS) / FX_FPS;
+      const wob = 1.0 + 0.28 * Math.sin(k * 0.55 + s * 2.3) + 0.14 * Math.sin(k * 1.31 + s);
+      // 폭 하한을 0 까지 내렸더니 꼬리가 실오라기가 돼서 궤적 자체가 약해졌다.
+      // 하한은 남기되 위치로 한 번 더 좁혀 끝이 뾰족해지게 한다.
+      // ★2026-08-10. 궤적을 키우면서(gain 1.15 -> 2.2) 하한 0.12 의 부작용이 드러났다.
+      //   세기가 약한 꼬리에서 5 가닥이 각자 실선이 되어 **무지개 철사 다발**처럼 보였다
+      //   (renders/history/v65_feel 초판 스크린샷). 가닥이 서로 겹칠 만큼은 굵어야
+      //   한 덩어리 물결로 읽힌다. 0.26 이 그 경계다.
+      // ★v92. 그 경계를 0.42 로 더 올렸다. 실측(renders/history/v92_ribbon/after
+      //   z_010 꼬리 확대)에서 0.26 은 여전히 **창백한 빗살**이었다 - 가닥 다섯이
+      //   각자 가는 띠로 남고 그 사이로 배경이 비쳐서, 색을 아무리 계단으로 칠해도
+      //   꼬리 절반이 반투명 철사로 보인다. 만화 채색의 조건은 "가닥이 서로 붙어
+      //   한 덩어리가 되는 것"이라 폭 하한이 곧 그 조건이다.
+      const shrink = (0.42 + 0.58 * inten) * (1.0 - 0.45 * age * age) * wob;
+      const mid = (rIn + rOut) * 0.5, half = (rOut - rIn) * 0.5 * shrink;
+      _pa.copy(_a).addScaledVector(_d, L * (mid + half)).add(_perp);
+      _pb.copy(_a).addScaledVector(_d, L * (mid - half)).add(_perp);
+      posArr[base * 3] = _pa.x; posArr[base * 3 + 1] = _pa.y; posArr[base * 3 + 2] = _pa.z;
+      posArr[(base + 1) * 3] = _pb.x; posArr[(base + 1) * 3 + 1] = _pb.y; posArr[(base + 1) * 3 + 2] = _pb.z;
+      uvArr[base * 2] = age; uvArr[base * 2 + 1] = 1.0;        // 바깥 = 포말 쪽
+      uvArr[(base + 1) * 2] = age; uvArr[(base + 1) * 2 + 1] = 0.0;
+      seedArr[base] = KIND; seedArr[base + 1] = KIND;
+      // 알파는 계단으로. 매끈하게 흐리면 칠 그림이 아니라 다시 빛처럼 보인다.
+      // ★v92. 6단(1.0/0.84/0.66/0.46/0.24)을 **3단으로 줄이고 밑을 잘랐다.**
+      //   오너 지시: "알파는 형태의 유/무를 가르는 데만 쓴다." 아래 두 단(0.46·0.24)이
+      //   곧 꼬리의 반투명 구간이었고, 거기서 궤적이 만화 그림이 아니라 유리가 됐다.
+      //   이제 0.13 아래는 **아예 없다**(형태가 끝난다). 남은 세 단은 다 진하다.
+      //   꼬리가 짧아지는 대신 있는 데까지는 통짜로 칠해진다.
+      let q = inten > 0.46 ? 1.0 : (inten > 0.26 ? 0.92 : (inten > 0.13 ? 0.78 : 0));
+      // 칼별 알파 배수. 계단은 그대로 두고 전체만 낮춘다(계단을 재계산하면 띠가 진다).
+      q *= (curEl.tAlpha === undefined ? 1 : curEl.tAlpha);
+      alpArr[base] = q; alpArr[base + 1] = q;
+      w++;
+    }
+  }
+  // ★q 는 지금 그린 1/24 칸 번호다. 연속 캡처에서 이 값이 몇 프레임마다 오르는지가
+  //   곧 "리본이 계단으로 자라는가"의 숫자 증거다(60fps 면 3-2-3-2 여야 한다).
+  window.__trailDbg = { n, wrote: w, q: trailQFrame, hold: 0,
+                        lastT: trailBuf.length ? trailBuf[trailBuf.length-1].t : -1 };
+  trailGeo.attributes.position.needsUpdate = true;
+  trailGeo.attributes.aUV.needsUpdate = true;
+  trailGeo.attributes.aAlpha.needsUpdate = true;
+  trailGeo.attributes.aSeed.needsUpdate = true;
+}
+
+// ---------- 캐릭터 ----------
+const root = new THREE.Group();
+scene.add(root);
+// ── 시작 위치 ──
+// 맵의 spawns[] 중 하나에서 시작한다(?spawn=2 로 바꿀 수 있다). 어디를 보고 서는지도
+// 맵이 정해 준다(yaw). 죽어서 되살아날 때도, R(제자리)도 전부 이 함수를 지나게 해서
+// "시작 자리"가 한 군데서만 정해지게 한다.
+const SPAWN_I = +(new URLSearchParams(location.search).get('spawn') || 0);
+function toSpawn() {
+  const s = level.spawnPoint(SPAWN_I);
+  root.position.set(s.x, s.y, s.z);
+  root.rotation.y = s.yaw;
+}
+toSpawn();
+// ── 캐릭터별 설정 ──
+// 발 미끄러짐 0 의 조건: 이동속도 = (클립의 접지 발 속도) x (재생속도)
+// 접지 발 속도는 blender/probe_stride.py 실측(게임 키 기준, 재생속도 1.0):
+//   검사  걷기 0.98 / 달리기 1.74      탱커  걷기 1.31 / 달리기 1.48
+// ★예전엔 검사 달리기를 2.42 로 잘못 알고 4.8 을 줘서 **49% 미끄러지고** 있었다.
+//   그 2.42 는 blend 원본을 잰 값인데 게임이 쓰는 glb 는 키 기준이 달랐다.
+//   이제 게임이 실제 로드하는 glb 를, 게임과 같은 방식(무기 제외)으로 잰다.
+const CHAR_CFG = {
+  // jump 는 클립 안에서 구간이 어디인지를 초 단위로 적는다.
+  // start=도약 시작(웅크림은 건너뛴다) / rise=상승 중 버틸 지점 / fall=하강 중 버틸 지점
+  // land=착지 흡수 시작 / end=회복 끝
+  // ★예전엔 이 값이 검사 클립 기준으로 하드코딩(0.20/0.40/0.50/0.73)돼 있었다.
+  //   궁수 점프는 1.92초짜리라 0.73 이면 **정점(0.83)에 닿기도 전에** 잘려서,
+  //   팔을 위로 뻗던 도중에 Idle 로 튀며 양팔이 휙 돌아갔다.
+  // 검사(kensa)는 Meshy 로 받은 삿갓 쓴 한국 검사 몸이다.
+  // Idle/Attack/Heavy/Wide/Jump 는 slayer 무브셋을 이식한 것이고
+  // (blender/s26_swordsman.py -> s24_moveset.py), 점프 구간(초)은 그래서 slayer 와 같다.
+  // ★걷기/달리기만 2026-08-10 에 **Meshy 네이티브 원본**으로 갈아 끼웠다
+  //   (blender/s27_kensa_native.py). 같은 리그라 리타게팅 왜곡이 0 이고, 그 대신
+  //   보폭과 사이클이 통째로 달라져서 발 속도를 다시 쟀다:
+  //     걷기   1.033초 / 발 속도 1.570 -> 이동 1.71 을 내려고 재생속도 1.09
+  //     달리기 0.633초 / 발 속도 5.325 -> 이동 3.20 을 내려고 재생속도 0.60
+  //   ★이 값은 **모델 공간**에서 잰 것이다. probe_stride.py 는 발을 골반 기준으로
+  //     재는데, 게임은 모델 원점을 고정한 채 root 만 미므로 골반이 앞뒤로 출렁이면
+  //     그만큼 값이 어긋난다(이번 걷기에서 1.570 vs 1.474 로 6% 차이가 났다).
+  // ★달리기 재생속도가 1 밑으로 내려간 이유와, 남은 선택지
+  //   네이티브 달리기는 **접지 5프레임 / 체공 5프레임짜리 전력질주**다. 원본 속도로
+  //   틀면 5.3m/s 로 달리는 그림이다. 이동속도를 3.20 으로 묶어 두면 발이 안
+  //   미끄러지는 대신 사이클이 1.05초(분당 114걸음)로 늘어나고 **체공이 0.26초**가 된다.
+  //   사람 전력질주 체공은 0.10~0.15초라, 이대로면 살짝 둥둥 뜬 것처럼 보일 수 있다.
+  //   더 힘차게 만들려면 이동속도를 올려야 한다(미끄러짐은 그래도 0이다):
+  //     run: { spd: 4.42, ts: 0.83 }  -> 사이클 0.76초(분당 158걸음), 체공 0.19초
+  //   다만 이동속도를 38% 올리면 요괴 추격·칼 사거리·전진 스텝이 전부 다시 잡혀야 해서
+  //   여기서 임의로 안 바꿨다. 바꾸려면 enemy.js/feel.js 와 같이 봐야 한다.
+  kensa:  { h: 1.75, walk: { spd: 1.71, ts: 1.09 }, run: { spd: 3.20, ts: 0.60 },
+            jump: { start: 0.00, rise: 0.20, fall: 0.40, land: 0.50, end: 0.73 } },
+  // 검사 걷기는 2026-08-05 에 발 궤적 + IK 로 다시 만들었다(옛 4포즈 클립은 접지 구간이
+  // 없어 두 발이 서로 반대로 왕복했다). 재작성 후 실측 발 속도 0.928, 재생속도 1.84 -> 1.71.
+  slayer: { h: 1.75, walk: { spd: 1.71, ts: 1.84 }, run: { spd: 3.20, ts: 1.84 },
+            jump: { start: 0.00, rise: 0.20, fall: 0.40, land: 0.50, end: 0.73 } },
+  tank:   { h: 2.00, walk: { spd: 1.70, ts: 1.30 }, run: { spd: 2.20, ts: 1.49 } },
+  // 궁수 걷기: 원본에 뿌리 뼈 스케일 1.1765 가 박혀 있어 걸을 때 17.65% 부풀었다.
+  // 제거 후 보폭이 정확히 15% 줄어 발 속도 1.63 -> 1.39. 이동 1.63 을 유지하려고 재생속도를 올린다.
+  // 궁수 점프는 클립이 두 개다(glb 에 Jump / JumpB 둘 다 들어 있다).
+  //   Jump  = 2.50초. 몸 회전 11도, 발이 뜨는 높이 0.30. **이걸 쓴다**
+  //   JumpB = 1.92초. 몸이 82도 돌아가고 발이 0.94 뜬다. 게임이 이미 루트를 0.95 올리므로
+  //           겹쳐서 겉보기 1.9 가 되고, 끝날 때 40도 돌아간 채라 Idle 로 홱 돌아온다.
+  // ★Jump 는 첫 키가 0.042초다. time=0 이면 그 프레임에 멈춰 있는 셈이 되니 start 를 꼭 준다.
+  archer: { h: 1.70, walk: { spd: 1.63, ts: 1.17 }, run: { spd: 3.20, ts: 0.64 },
+            jump: { start: 0.417, rise: 0.625, fall: 0.875, land: 1.000, end: 1.417 } },
+  // 병사는 걷기가 합성 클립이라 발 속도 측정이 1.35 와 0.88 로 갈렸다.
+  // 중간값 1.1 로 잡고 눈으로 맞춘다. 달리기 2.35 는 두 방식이 일치해 신뢰도 높다.
+  soldier:{ h: 1.75, walk: { spd: 1.80, ts: 1.64 }, run: { spd: 3.20, ts: 1.36 } },
+  // 기본 모델은 클립이 걷기/달리기뿐이라 Idle 을 만들어 넣었다. 공격/점프 없음(방어 코드 있음).
+  // 실측 발 속도 걷기 1.42 / 달리기 4.85. 달리기는 보폭 1.41m 짜리 전력질주라 재생속도를 낮춘다.
+  basic:  { h: 1.75, walk: { spd: 1.71, ts: 1.20 }, run: { spd: 3.20, ts: 0.66 } },
+  // 기본2 는 Idle 을 원본 병사 모션에서 리타게팅했다(몸통만. 팔은 소총 받쳐든 자세라 걷기 팔로 교체).
+  // 실측 발 속도 걷기 1.41 / 달리기 4.82. basic 과 같은 Meshy 리그라 값이 거의 같다.
+  basic2: { h: 1.75, walk: { spd: 1.71, ts: 1.21 }, run: { spd: 3.20, ts: 0.66 } },
+};
+const DEF_CFG = { h: 1.75, walk: { spd: 1.8, ts: 1.0 }, run: { spd: 3.2, ts: 1.0 },
+                  jump: { start: 0.00, rise: 0.20, fall: 0.40, land: 0.50, end: 0.73 } };
+let curCfg = DEF_CFG;
+let mixer = null, current = null, model = null;
+const actions = {};
+let handBone = null, charH = 2.4;
+const footBones = [];
+const _fp = new THREE.Vector3();
+// 바인드 포즈 박스로 높이를 맞추면 포즈에 따라 발이 뜨거나 파묻힌다.
+// (일격기·횡일섬은 루트를 내려서 주저앉으므로 특히 심하다)
+// 매 프레임 **가장 낮은 발 본**을 바닥에 붙인다. 웅크리면 엉덩이가 내려가고
+// 발은 그대로 - 물리적으로도 이게 맞다.
+const _lowHist = [];
+function groundFeet() {
+  if (!model || !footBones.length) return;
+  let low = Infinity;
+  for (const b of footBones) {
+    b.updateWorldMatrix(true, false);
+    _fp.setFromMatrixPosition(b.matrixWorld);
+    if (_fp.y < low) low = _fp.y;
+  }
+  if (low === Infinity) return;
+  // ★달리기에는 **두 발이 다 뜨는 체공 구간**이 있다. 매 프레임 '지금 가장 낮은
+  // 발'을 바닥에 붙이면 그 순간에도 발을 바닥까지 끌어내려 몸이 주저앉고,
+  // 애니메이터가 넣은 골반 상하(0.236)가 통째로 사라진다.
+  // 그래서 달릴 때만 최근 한 사이클의 **최저값**(= 실제로 디딘 발)을 바닥으로 삼는다.
+  // 주저앉기(수면참)까지 이렇게 하면 일어설 때 캐릭터가 떠 있으므로 달리기 한정.
+  // 창은 프레임 수가 아니라 **시간**으로: 120Hz 에서 창이 반으로 줄면 안 된다.
+  // 달리기 한 사이클 = 0.83 / 1.85 = 0.45 초.
+  const rel = low - model.position.y;            // 모델 원점 기준 발 높이(포즈만의 함수)
+  let base = rel;
+  if (current && current === actions.Run) {
+    const now = gameT;               // ★게임시간. 히트스톱 중에 창이 흘러가면 안 된다
+    _lowHist.push(now, rel);
+    while (_lowHist.length > 2 && _lowHist[0] < now - 0.5) _lowHist.splice(0, 2);
+    for (let i = 1; i < _lowHist.length; i += 2) if (_lowHist[i] < base) base = _lowHist[i];
+  } else if (_lowHist.length) {
+    _lowHist.length = 0;
+  }
+  model.position.y = (root.position.y + charH * 0.045) - base;   // 발바닥 두께만큼 띄움
+}
+// ★★공격 타이밍은 **게임시간(gameT)** 을 쓴다. 절대 performance.now() 를 쓰면 안 된다.
+//   히트스톱이 세계를 45~120ms 멈추는데 콤보 창만 벽시계로 흐르면, 멈춘 동안 창이
+//   그대로 지나가 **히트스톱 중에 3연타가 씹힌다.** dt 를 멈추는 것과 시계를 멈추는 것을
+//   같이 해야 한다(2026-08-10 히트스톱 도입 때 이것 하나 때문에 설계가 갈렸다).
+let gameT = 0;
+let attacking = false, attackEnd = 0, comboStep = 0, comboWindow = 0;
+// ── 입력 버퍼 (2026-08-10 9차. 건틀릿 손맛 1위 격차) ──
+// 심사 실측: "200ms 간격으로 Z 를 세 번 눌렀는데 두 번만 나갔다." 원인이 둘이었다.
+//   1) 버퍼가 **Z 전용**이고, 예약분을 푸는 자리가 클립이 통째로 끝나는 프레임뿐이었다
+//      (= 캔슬로 풀린 경우엔 예약이 그냥 버려졌다)
+//   2) 창이 0.25초라도 커밋(0.28초)보다 짧아서, 커밋 안에 누른 입력은 늘 만료됐다
+// 이제 버퍼는 **어떤 액션이든** 담고(BUF.kind), 캔슬 가능해지는 그 프레임에 바로 푼다.
+// 창은 0.15초. 짧아 보이지만 푸는 자리가 앞당겨져서 실효는 예전보다 훨씬 길다.
+// ★0.15 가 아니라 0.20 인 이유: 아래 ATK_MIN_GAP(0.24) 때문에 예약이 최대 0.24초를
+//   기다릴 수 있다. 창이 그보다 훨씬 짧으면 "기다리다 만료"가 나서 버퍼가 무의미해진다.
+const BUFFER_WINDOW = 0.20;
+// ── 연타 최소 간격 ──
+// ★enemy.js 의 SWING_GAP 0.22 와 맞물린 값이다. 그 파일은 "0.22초 안에 다시 켜진 hot"
+//   을 **같은 스윙**으로 보고 번호를 안 올린다(= 같은 요괴를 다시 못 벤다). 그래서
+//   0.22 보다 빠르게 다음 타를 내보내면 **보이고 들리는데 안 들어가는 스윙**이 생긴다.
+//   그건 이번 파도가 고치려는 '판정 정직성' 자체를 깨는 일이라, 여기서 바닥을 깐다.
+//   예약(버퍼)이 그 사이를 메우므로 입력은 안 버려지고 0.24초에 정확히 나간다.
+//   ★enemy.js 가 SWING_GAP 을 내리면 이 값도 같이 내릴 것(handoff_combat.md 에 요청해 뒀다).
+const ATK_MIN_GAP = 0.24;
+let lastAtkStartT = -99;
+const BUF = { kind: null, t: -99 };
+function bufferInput(kind) { BUF.kind = kind; BUF.t = gameT; }
+function bufferAlive(now) { return BUF.kind && (now - BUF.t) < BUFFER_WINDOW; }
+function clearBuffer() { BUF.kind = null; BUF.t = -99; }
+let heavy = false;                 // 일격기 중이면 궤적이 커진다
+
+// ---------------------------------------------------------------- 이동 캔슬 (2차 QA S1)
+// ★2차 QA 1순위. "Z 한 번에 최장 1.36초 정지. 포위당하면 이게 사망 원인 1위다."
+//   실측(headed 60fps, 이동키를 누른 채 Z 한 번):
+//     Z 실효 정지 1213ms / X 1808ms / C 1528ms.
+//   원인은 단순하다. `moving = (mx||mz) && !attacking` 이라 **클립이 끝날 때까지**
+//   이동이 통째로 막혔다. 그런데 클립의 뒤쪽 절반은 이미 다 벤 뒤의 회복 동작이다.
+//
+// 규칙:
+//   커밋 구간 = 입력 ~ **첫 스윙의 타격 판정이 끝나는 순간**. 여기는 못 끊는다
+//               (끊을 수 있게 하면 휘두르다 마는 그림이 나온다).
+//   그 뒤     = 이동 입력이 남은 회복을 캔슬한다. 콤보 창은 살려 둬서 Z 를 이으면 다음 타.
+//
+// ★커밋 경계는 추측이 아니라 실측이다. enemy.js 의 타격 게이트(hot: 칼끝 속도
+//   HOT_ON 0.42 에서 켜지고 HOT_OFF 0.16 에서 꺼진다)를 60fps 로 찍어 클립별로 쟀다.
+//   입력 후 경과 ms 기준으로 hot 구간은 이랬다:
+//     Attack : [68.8~137] [190.3~264.3] [366.9~434.3] [726.3~825.3]   (스윙 3개, 클립 1.185초)
+//              ★앞 둘은 enemy.js 가 같은 스윙(SWING_GAP 0.22)으로 묶는다 = 1타는 264ms 에 끝난다.
+//                그 사이 52ms 의 골(137~190)에서 끊으면 1타를 휘두르다 마는 게 되므로
+//                커밋을 264ms 뒤인 0.28 에 둔다.
+//     Heavy  : [842.3~954.6]                                          (한 방, 클립 1.797초)
+//     Wide   : [559.8~679.0]                                          (한 방, 클립 1.500초)
+//   X·C 가 긴 건 모아서 늦게 베는 기술이라 그렇다. "타격 구간 끝 기준"은 셋 다 같다.
+const ATK_COMMIT = { Attack: 0.28, Heavy: 0.94, Wide: 0.68 };
+let atkClip = null;                // 지금 도는 공격 클립 이름. 없으면 공격 중이 아니다
+let atkStartT = 0;                 // 공격이 시작된 **게임시간**(히트스톱 중에는 안 흐른다)
+let atkStruck = false;             // 이번 공격에서 타격 구간(hot)을 한 번이라도 지났나
+let atkHitT = -99;                 // 이번 공격에서 **실제로 벤** 마지막 게임시간(-99 = 헛스윙)
+let atkStarts = 0;                 // 공격 클립이 **새로 시작된** 횟수(검증용. 입력이 몇 번 나갔나)
+
+// ── 후딜 캔슬 (2026-08-10 9차 재작업. 건틀릿 손맛 1위 격차) ──
+// 심사 실측: Z 310~400ms · C 856ms · X 1254ms 발묶임, 그동안 취소 불가.
+// 옛 규칙은 조건이 하나였다 — "커밋 경과 + `!enemies.hot`". 그런데 hot 은
+// 히스테리시스(켜짐 0.42 / 꺼짐 0.16)라 **베고 난 뒤에도 칼이 느려질 때까지 안 꺼진다.**
+// 실측하면 X 는 타격이 954ms 에 끝나는데 hot 꼬리가 300ms 를 더 물고 있었다.
+// 그래서 규칙을 셋으로 나눈다(하나라도 참이면 끊을 수 있다):
+//   1) 명중 확정 캔슬 — 실제로 벤 뒤 HIT_CANCEL(0.12초). 이게 근접 전투의 리듬이다.
+//      "때렸으면 바로 다음 행동"이 되는 순간 연타·치고빠지기가 성립한다.
+//   2) 커밋 경과 + 칼이 지금 타격 구간이 아님 — 옛 규칙 그대로(헛스윙 경로).
+//   3) 꼬리 상한 — 커밋 + TAIL_SLACK 이 지나면 hot 이 안 꺼져도 끊는다.
+//      hot 히스테리시스가 회복 동작까지 물고 늘어지는 것을 막는 안전판이다.
+// ★1·3 을 더해도 "휘두르다 마는 그림"은 안 나온다. 셋 다 atkStruck(= 타격 구간을
+//   한 번이라도 지났다)을 전제로 하므로, 칼이 나가기 전에는 어떤 경로로도 안 끊긴다.
+const HIT_CANCEL = 0.12;
+// ★0.06 인 이유: 커밋은 이미 '타격 구간이 끝나는 순간'이라, 그 뒤로 hot 이 아직
+//   안 꺼진 건 히스테리시스 꼬리(칼이 느려지는 중)뿐이다. 실측하면 그 꼬리가 X 에서
+//   300ms 를 물고 있었다. 0.06 은 "한 프레임 지나침"을 흡수할 만큼만 남긴 값이다.
+const TAIL_SLACK = 0.06;
+// ★검증 전용 스위치. 'old' 로 두면 9차 이전 규칙(커밋 + !hot 하나)으로 되돌아간다.
+//   같은 빌드·같은 측정 방법으로 개선 전/후를 재려고 둔 것이다(게임은 늘 'new').
+let cancelMode = 'new';
+const ATK_COMMIT_OLD = { Attack: 0.28, Heavy: 0.97, Wide: 0.70 };
+// 지금 스윙의 커밋 길이. 3연타는 **단수마다 다르다**(2·3타는 진입점이 스윙 코앞이라 짧다).
+function commitNow() {
+  if (cancelMode === 'old') return ATK_COMMIT_OLD[atkClip] || 0.28;
+  if (atkClip === 'Attack') return ATK_STEP_COMMIT[comboStep] || ATK_STEP_COMMIT[0];
+  return ATK_COMMIT[atkClip] || 0.28;
+}
+function canCancelAttack(now) {
+  if (!atkClip) return false;
+  if (!atkStruck) return false;              // 아직 한 번도 안 휘둘렀으면 커밋 유지
+  const cm = commitNow();
+  const since = now - atkStartT;
+  if (cancelMode === 'old') return since >= cm && !enemies.hot;
+  if (atkHitT > -90 && now - atkHitT >= HIT_CANCEL) return true;          // 1
+  if (since >= cm && !enemies.hot) return true;                          // 2
+  if (since >= cm + TAIL_SLACK) return true;                             // 3
+  return false;
+}
+
+// ── 대시(퀵스텝) — 2026-08-10 9차 신설 ──
+// 건틀릿 심사 결론: "회피기 부재 + 후딜 루트는 근접 전투의 리듬이 성립할 수 없는
+// 구조적 결함". 보스 장판(내려찍기 반경 4m, 예고 1.2초)을 **물리적으로** 벗어날
+// 수단이 걷기(1.8m/s)·달리기(3.2m/s)뿐이라 11트라이 0킬이 나왔다.
+//
+// 배치: **이동키를 누른 채 Space**. 아무것도 안 누르고 Space 면 예전대로 점프다.
+//   ★새 키를 안 만든 이유: 방향키+Shift(달리기)+Z/X/C 로 왼손이 이미 꽉 차 있다.
+//     점프는 이 게임에서 이동 수단이 아니라 몸짓이라(높이 0.95m) 자리를 내줄 수 있다.
+// 수치의 근거 — 전부 이 레포의 실측값에서 역산했다:
+//   거리 3.5m : 내려찍기 반경 4.0m. 보스 앞 교전 거리 2.8m 에서 한 번이면 6.3m 로
+//               벗어난다(예고 1.2초 안에 여유 2.3m). 후려치기(부채꼴 3.4m)도 한 번이면 빠진다.
+//   시간 0.18s: 달리기 3.2m/s 의 6배 속도. 예고 1.2초 안에 두 번도 넣을 수 있다(쿨 1.2s 라
+//               연속은 못 하지만, 예고를 보고 반응할 시간이 1초 남는다).
+//   무적 0.20s: 대시 구간(0.18)보다 0.02 길다. 나가는 순간부터 착지까지 다 덮는다.
+//               ★잡몹 타격은 enemy.js 가 자기 안에서 damagePlayer 를 직접 부르므로
+//                 창구(setIframe)가 있어야 먹는다. 없는 빌드에서는 조용히 건너뛰고
+//                 **자리 이동으로만** 피한다(보스 장판은 명중 순간 좌표를 다시 재므로
+//                 창구 없이도 100% 피해진다 — 그게 이번 파도의 증명 대상이다).
+//   쿨 1.2s   : 후려치기 경직 1.30초보다 짧다. "한 대 피하고 붙어서 한 대"가 성립한다.
+const DASH_DIST = 3.5, DASH_DUR = 0.18, DASH_IFRAME = 0.20, DASH_CD = 1.2;
+let dashLeft = 0, dashDX = 0, dashDZ = 0, dashGone = 0;
+let dashReadyT = -99;              // 이 게임시간이 지나면 다시 쓸 수 있다
+let dashIfUntil = -99;             // 무적 종료 게임시간(보스 경로는 여기서 직접 막는다)
+const dashEase = t => 1 - (1 - t) * (1 - t) * (1 - t);   // ease-out cubic. 튀어나갔다 멎는다
+function dashReady(now) { return dashLeft <= 0 && now >= dashReadyT; }
+
+// ---------------------------------------------------------------- 전진 스텝 (2차 QA S3)
+// "스냅 반경 2.6인데 2.8에서 적중이 급락한다."
+// 실측하면 원인이 둘로 갈린다:
+//   1) 스냅이 2.6 밖을 아예 안 잡는다  -> 반경을 3.0 으로 올린다(아래 SNAP_R)
+//   2) 잡아 돌려도 **칼이 안 닿는다**. 칼날 선분과 요괴 캡슐로 잰 실제 사거리는
+//      중심간 1.88m 다(2.0m 에서 이미 0.12m 모자란다).
+// 그래서 각도만 고쳐선 안 되고 거리도 조금 좁혀야 한다. 공격 시작에 짧은 전진을 섞는다.
+// ★거리에 비례해 준다. 이미 붙어 있는 놈에게 또 밀면 그게 "빨려 들어간다"로 읽힌다.
+//   STEP_KEEP 1.75m 는 실측 사거리(1.88m) 바로 안쪽이라, 이미 닿는 거리면 스텝이 0 이다.
+// ★9차: 스냅 반경 = **판정 리치**(3.2m)로 맞춘다. 둘이 어긋나면 "몸은 돌았는데 안 닿는"
+//   (반경 > 리치) 또는 "닿는데 안 돌아보는"(반경 < 리치) 구멍이 생긴다. 한 값에서 나온다.
+const SNAP_R = 3.2;
+// ── 등 뒤로는 안 돌아본다 (9차) ──
+// 심사의 "밀착하면 등 뒤도 베인다"의 **진짜 기전**이 여기였다(실측으로 잡았다):
+//   스냅이 몸을 0.09초에 걸쳐 돌리는데 3연타 1타의 타격은 0.069초에 들어간다.
+//   즉 **몸이 아직 등을 보인 상태에서 판정이 도는 프레임**이 있고, 정확히 180도
+//   뒤의 요괴가 8회 중 7회 베였다(backhit.json).
+// 정면 부채꼴 게이트(makeHitSeg)가 그 프레임을 잘라내지만, enemy.js 가 직전 프레임
+// 선분과 이번 프레임 선분 사이를 보간하기 때문에 급회전 중에는 한 프레임분(최대 33도)이
+// 새어 나온다. 그래서 **애초에 그런 회전을 안 만든다** — 이 각도보다 뒤에 있는 표적에는
+// 스냅도 전진 스텝도 걸지 않는다(그 자리에서 헛스윙이 나는 게 정직하다).
+const SNAP_BACK_DEG = 110;
+// ★STEP_KEEP 도 리치를 따라 올린다(1.75 -> 2.9). 옛 값이면 3.2m 표적마다 0.40m 를
+//   전부 밀어붙여서, 이미 닿는 거리인데도 매번 한 발 들어가 "빨려 들어간다"가 된다.
+//   2.9 는 리치(3.2) 바로 안쪽이라 정말 아슬아슬한 거리에서만 최대 0.30m 붙는다.
+const STEP_MAX = 0.40, STEP_KEEP = 2.90, STEP_DUR = 0.14;
+let stepLeft = 0, stepDist = 0;
+const stepEase = t => 1 - (1 - t) * (1 - t);   // ease-out. 앞이 빠르고 끝에서 멎는다 = 한 발 내딛는 그림
+function stepDistFor(d) {
+  return Math.max(0, Math.min(STEP_MAX, d - STEP_KEEP));
+}
+// 공격 입력 순간의 방향 스냅. 등 뒤(SNAP_BACK_DEG 밖) 표적은 아예 건너뛴다.
+// ★세 공격 함수가 **같은 함수**를 지난다. 한 군데만 고치면 규칙이 갈라진다.
+function snapTarget() {
+  const t = enemies.nearestTo(root.position.x, root.position.z, SNAP_R);
+  if (!t) return null;
+  let d = t.yaw - root.rotation.y;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  if (Math.abs(d) > SNAP_BACK_DEG * Math.PI / 180) return null;
+  return enemies.snapFacing(root, SNAP_R);
+}
+// t 는 enemies.snapFacing 이 돌려준 표적(없으면 null). 클립이 실제로 시작되는 자리에서만 부른다.
+function startStep(t) {
+  stepLeft = 0; stepDist = 0;
+  if (!t) return;
+  const s = stepDistFor(t.d);
+  if (s < 0.02) return;
+  stepDist = s; stepLeft = STEP_DUR;
+}
+// 점프. 수직 이동은 여기서 만들고 클립은 다리 모양만 담당한다.
+// 높이 h 와 중력 g 로 초속을 정하면 체공시간이 2*v0/g 로 딱 떨어진다.
+const JUMP_H = 0.95, GRAV = 18.0;
+const JUMP_V0 = Math.sqrt(2 * GRAV * JUMP_H);
+let vy = 0, grounded = true, jumping = false;
+
+// ── 지금 눌린 이동키를 카메라 기준 방향으로 ──
+// ★루프와 대시가 **같은 함수**를 지난다. 두 벌이 되면 "화면에서 위로 갔는데
+//   대시는 옆으로 나가는" 어긋남이 반드시 생긴다.
+const _mvDir = new THREE.Vector3();
+function moveDirFromKeys() {
+  let mx = 0, mz = 0;
+  if (keys.KeyW || keys.ArrowUp) mz -= 1;
+  if (keys.KeyS || keys.ArrowDown) mz += 1;
+  if (keys.KeyA || keys.ArrowLeft) mx -= 1;
+  if (keys.KeyD || keys.ArrowRight) mx += 1;
+  if (!mx && !mz) return null;
+  // yaw 는 고정이지만 상수로 박지 않는다(카메라 규칙이 한 군데서만 정해져야 한다)
+  _mvDir.set(Math.sin(yaw) * mz + Math.cos(yaw) * mx, 0,
+             Math.cos(yaw) * mz - Math.sin(yaw) * mx).normalize();
+  return _mvDir;
+}
+
+// Space = 이동키를 누르고 있으면 대시, 아니면 점프.
+function tryDash() {
+  if (isCleared() || preview.on) return false;
+  if (enemies.dead) return false;
+  if (!grounded) return false;                 // 공중 대시는 없다(점프와 구분이 안 된다)
+  const now = gameT;
+  if (attacking && !canCancelAttack(now)) { bufferInput('dash'); return false; }
+  if (!dashReady(now)) { deny('dash'); return false; }
+  const d = moveDirFromKeys();
+  if (!d) return false;                        // 방향이 없으면 대시가 아니다(점프로 간다)
+  // 공격 중이었으면 회복 동작을 끊고 나간다(위 canCancelAttack 을 이미 통과했다)
+  if (attacking) { attacking = false; heavy = false; atkClip = null; }
+  dashDX = d.x; dashDZ = d.z;
+  dashLeft = DASH_DUR; dashGone = 0;
+  dashReadyT = now + DASH_CD;
+  dashIfUntil = now + DASH_IFRAME;
+  // 잡몹 타격은 enemy.js 안에서 직접 들어간다. 창구가 있으면 거기에 무적을 심는다.
+  // ★없는 빌드에서도 게임은 그대로 돈다(자리 이동만으로 피한다).
+  if (typeof enemies.setIframe === 'function') enemies.setIframe(DASH_IFRAME);
+  root.rotation.y = Math.atan2(d.x, d.z);      // 나가는 쪽을 본다(옆으로 미끄러지면 안 읽힌다)
+  clearBuffer();
+  sfx.dash();
+  // 달리기 클립을 빠르게 돌려 "한 발 크게 내딛는" 그림을 만든다.
+  // ★회피 전용 클립은 없다(모션은 다른 파일의 몫이다). 여기서는 있는 것으로 읽히게만 한다.
+  // ★★timeScale 을 덮어쓰기 전에 **원래 값을 적어 둔다.** 걷기/달리기 재생속도는
+  //   캐릭터마다 CHAR_CFG 에서 한 번 박아 넣는 값이라(activateChar), 1 로 되돌리면
+  //   그 뒤 달리기가 통째로 느려진다(캐릭터를 바꿔도 안 돌아온다).
+  const a = actions.Run || actions.Walk;
+  if (a) {
+    if (dashTsSaved === null) { dashTsAct = a; dashTsSaved = a.timeScale; }
+    _lowHist.length = 0;
+    a.reset(); a.timeScale = dashTsSaved * 1.9; a.play();
+    if (current && current !== a) current.crossFadeTo(a, 0.04, false);
+    current = a;
+  }
+  return true;
+}
+let dashTsAct = null, dashTsSaved = null;   // 대시가 잠시 덮어쓴 재생속도의 원본
+function restoreDashTs() {
+  if (dashTsAct && dashTsSaved !== null) dashTsAct.timeScale = dashTsSaved;
+  dashTsAct = null; dashTsSaved = null;
+}
+
+function tryJump() {
+  if (!grounded || attacking) return;
+  if (isCleared()) return;         // 층 돌파 뒤에는 안 받는다
+  vy = JUMP_V0;
+  grounded = false;
+  jumping = true;
+  const a = actions.Jump;
+  if (a) {
+    _lowHist.length = 0;
+    a.reset(); a.setEffectiveTimeScale(1); a.play();
+    // 웅크림 구간은 건너뛴다. 게임은 누르는 즉시 떠오르므로 그 사이 공중에서 웅크리게 된다.
+    a.time = (curCfg.jump || DEF_CFG.jump).start;
+    if (current && current !== a) current.crossFadeTo(a, 0.05, false);
+    current = a;
+  }
+}
+
+const clock = new THREE.Clock();
+const loader = new GLTFLoader();
+// 칼날이 손 본 로컬에서 어느 쪽으로 뻗는지 "실측"한다.
+// 예전에는 손 본의 +Y 를 칼날이라 가정했는데 실제 그립은 거의 반대쪽(-Y 계열)
+// 이라 궤적이 칼과 148 도 어긋난 허공에 그려지고 있었다. 칼 정점(손 본에
+// 100% 웨이트)들을 바인드 로컬로 되돌려 직접 재면 그립을 바꿔도 따라온다.
+const bladeA = new THREE.Vector3(), bladeB = new THREE.Vector3();
+const bladePath = [];      // 휜 칼날 중심선(손 본 로컬). 리본이 이걸 따라 감는다
+let bladeOK = false;
+// ★glTF 는 머티리얼마다 메시를 쪼갠다(SW_baekah_1,_2,...). 한 자루가 여러 메시라
+// 배열로 받아 전부 훑어야 칼끝을 놓치지 않는다.
+function measureBlade(meshes) {
+  bladeOK = false;
+  const v = new THREE.Vector3();
+  const pts = [];
+  for (const mesh of meshes) {
+    const hi = mesh.skeleton.bones.findIndex(b => /r[_ ]hand/i.test(b.name));
+    if (hi < 0) continue;
+    const ibm = mesh.skeleton.boneInverses[hi];
+    const pos = mesh.geometry.attributes.position;
+    const si = mesh.geometry.attributes.skinIndex, sw = mesh.geometry.attributes.skinWeight;
+    for (let i = 0; i < pos.count; i++) {
+      let w = 0;
+      for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === hi) w += sw.getComponent(i, k);
+      if (w > 0.99) pts.push(v.fromBufferAttribute(pos, i).applyMatrix4(ibm).clone());
+    }
+  }
+  if (pts.length < 20) { if (DEV) console.warn('칼 정점 못 찾음'); return; }
+  let far = pts[0];
+  for (const p of pts) if (p.lengthSq() > far.lengthSq()) far = p;
+  const dir = far.clone().normalize();
+  let pmax = 0;
+  for (const p of pts) pmax = Math.max(pmax, p.dot(dir));
+  bladeA.copy(dir).multiplyScalar(pmax * 0.18);   // 코등이 조금 앞
+  bladeB.copy(dir).multiplyScalar(pmax * 0.98);   // 칼끝
+  // ★칼이 초승달로 휘어서 직선 축만으로는 리본이 날에서 떠버린다.
+  // 정점을 날 방향으로 구간별로 묶어 평균을 내면 **휜 중심선**이 나온다.
+  const NSEG = 16;
+  const bins = [];
+  for (let i = 0; i < NSEG; i++) bins.push({ s: new THREE.Vector3(), n: 0 });
+  for (const p of pts) {
+    const d0 = p.dot(dir);
+    const t = (d0 - pmax * 0.16) / (pmax * 0.84);
+    if (t < 0 || t > 1) continue;
+    const i = Math.min(NSEG - 1, Math.max(0, Math.floor(t * NSEG)));
+    bins[i].s.add(p); bins[i].n++;
+  }
+  bladePath.length = 0;
+  for (const b of bins) if (b.n > 2) bladePath.push(b.s.divideScalar(b.n));
+  bladeOK = true;
+  // ★평시 콘솔은 비어 있어야 한다(건틀릿 연출UI S10 "개발 흔적"). ?dev 에서만 남긴다.
+  if (DEV) console.log('[blade]', meshes[0].name, dir.toArray().map(n => n.toFixed(3)).join(','), 'len', pmax.toFixed(2));
+}
+
+// ---------- 칼 교체 ----------
+// 7자루를 전부 glb 에 넣고 visible 만 토글한다(자루당 수백 삼각형).
+// 칼마다 길이/실루엣이 달라서 바꿀 때마다 칼날 축을 다시 재야 궤적이 맞는다.
+const SWORDS = [
+  { key: 'nokseun', name: '녹슨 칼', el: 'plain' },     // 봉인칼 = 평범한 검기만
+  { key: 'baekah', name: '백아', el: 'water' },
+  { key: 'hongyeom', name: '홍염', el: 'fire' },
+  { key: 'seorikkot', name: '서리꽃', el: 'ice' },
+  { key: 'imugi', name: '이무기 비늘', el: 'poison' },
+  { key: 'bawigyeol', name: '바위결', el: 'earth' },
+  { key: 'eoduk', name: '어둑', el: 'dark' },
+];
+const swordMesh = {};
+let swordIdx = 1;
+
+// ---------------------------------------------------------------- 자체발광 칼날
+// 레퍼런스 Red_Tessaiga 를 픽셀로 실측한 결과(칼폭 120px 가로 단면):
+//   · 색상이 355~359 도에 **고정**돼 있다. 어디에도 주황으로 안 간다.
+//   · 명도는 0.63~0.82 로 거의 안 변하고, 음영이 전부 **채도**로 진다.
+//     밝은 심 S 0.44 <-> 어두운 결 S 0.76. 금속 칼(하이라이트=밝기)과 정반대다.
+//   · 실루엣 바로 안쪽이 가장 진하고(S 0.72, V 0.63) 그게 테두리선 역할을 한다.
+//   · 바깥 후광은 칼폭의 10~15% 로 **아주 좁다**. 28px 떨어지면 이미 원래 하늘색이라
+//     화면 전체 블룸이 아니라 실루엣에 붙은 얇은 띠다. 칼끝만 조금 더(25px) 번진다.
+// 그래서 구현은 (1) 채도 계단 자체발광 + (2) 뒤집힌 껍질 2겹 가산 후광 이다.
+const _sc = new THREE.Color();
+const LIN = h => { _sc.setStyle('#' + h, THREE.SRGBColorSpace); return [_sc.r, _sc.g, _sc.b]; };
+const GLOW = {
+  fire: {
+    tones: ['D17677', 'CF666C', 'C7575D', 'BA343D', 'A12D3B'],   // 밝은 심 -> 어두운 결
+    vein: 'A12D3B', core: 'D17677',
+    halo: ['5E100C', '2E0808'],       // 하늘색을 빼고 남은 순수 가산분(실측)
+    out: [0.06, 0.14],                // 칼폭 대비 껍질 두께
+  },
+};
+
+function bladeGlowMat(g, ax) {
+  const m = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  m.userData.u = { uT: { value: 0 } };
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uT = m.userData.u.uT;
+    sh.uniforms.uCen = { value: ax.cen };
+    sh.uniforms.uLen = { value: ax.len };     // 길이 방향 단위벡터 / 반길이
+    sh.uniforms.uWid = { value: ax.wid };     // 폭 방향 단위벡터 / 반폭
+    g.tones.forEach((h, i) => { sh.uniforms['uC' + i] = { value: new THREE.Vector3(...LIN(h)) }; });
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>',
+        '#include <common>\nvarying vec3 vLoc; varying vec3 vN; varying vec3 vV;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vLoc = position;')
+      .replace('#include <project_vertex>',
+        '#include <project_vertex>\n  vN = normalize(normalMatrix * objectNormal);'
+        + '\n  vV = normalize(-mvPosition.xyz);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>',
+        '#include <common>\nuniform float uT; uniform vec3 uC0,uC1,uC2,uC3,uC4;'
+        + '\nuniform vec3 uCen; uniform vec4 uLen; uniform vec4 uWid;'
+        + '\nvarying vec3 vLoc; varying vec3 vN; varying vec3 vV;')
+      .replace('#include <opaque_fragment>', [
+        // ★칼은 캐릭터 메시에 병합돼 있어서 position 이 칼 기준이 아니다.
+        // 칼 정점으로 주축을 뽑아 넘겨받은 축으로 (길이, 폭) 좌표를 만든다.
+        // 이걸 안 하면 결이 칼을 **가로질러** 그어진다(실제로 그랬다).
+        'vec3 d = vLoc - uCen;',
+        'float al = dot(d, uLen.xyz) / uLen.w;',        // -1(자루) ~ +1(칼끝)
+        'float u  = dot(d, uWid.xyz) / uWid.w;',        // -1(날) ~ +1(등)
+        // 레퍼런스 구조: 가운데보다 살짝 날 쪽에 밝은 심, 그 옆으로 어두운 결,
+        // 양 끝(실루엣)이 가장 진하다. 명도는 그대로 두고 채도만 오르내린다.
+        // 밝은 심은 **좁은 줄기 하나**다. 가운데를 넓게 밝히면 연분홍 수박이 된다
+        // (실측: 그렇게 했더니 채도 중앙값 0.45, 레퍼런스는 0.59).
+        'float t = smoothstep(0.06, 0.86, abs(u + 0.10));',
+        'float vein = sin(al * 9.0 + u * 2.4) * 0.5 + 0.5;',
+        'vein *= sin(al * 3.1 + 0.7) * 0.5 + 0.5;',
+        't += vein * 0.24 - 0.03;',
+        't += sin(uT * 0.5 + al * 2.0) * 0.035;',       // 아주 느린 흐름. 번쩍이면 안 된다
+        // 실루엣 바로 안쪽이 제일 진한 테두리(실측 S 0.72 / V 0.63)
+        'float fr = 1.0 - abs(dot(normalize(vN), normalize(vV)));',
+        't = mix(t, 1.05, smoothstep(0.52, 0.94, fr));',
+        't = clamp(t, 0.0, 1.0);',
+        // 5 단 계단(셀). 명도가 아니라 **채도**가 오르는 색들이다.
+        'vec3 c = t < 0.10 ? uC0 : t < 0.26 ? uC1 : t < 0.52 ? uC2 : t < 0.80 ? uC3 : uC4;',
+        'gl_FragColor = vec4(c, 1.0);',
+      ].join('\n'));
+  };
+  return m;
+}
+
+function bladeAxes(geom) {
+  // 칼 정점의 주축(PCA). 가장 긴 축 = 칼 길이, 그 다음 = 칼 폭.
+  const p = geom.attributes.position, n = p.count;
+  const cen = new THREE.Vector3();
+  for (let i = 0; i < n; i++) cen.x += p.getX(i), cen.y += p.getY(i), cen.z += p.getZ(i);
+  cen.divideScalar(n);
+  const cov = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const d = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    d.set(p.getX(i) - cen.x, p.getY(i) - cen.y, p.getZ(i) - cen.z);
+    const a = [d.x, d.y, d.z];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) cov[r * 3 + c] += a[r] * a[c];
+  }
+  const mul = (M, v) => new THREE.Vector3(
+    M[0] * v.x + M[1] * v.y + M[2] * v.z,
+    M[3] * v.x + M[4] * v.y + M[5] * v.z,
+    M[6] * v.x + M[7] * v.y + M[8] * v.z);
+  const power = M => {
+    let v = new THREE.Vector3(0.53, 0.31, 0.79).normalize();
+    for (let k = 0; k < 60; k++) { v = mul(M, v); if (v.length() < 1e-12) break; v.normalize(); }
+    return v;
+  };
+  const e0 = power(cov);
+  const lam = mul(cov, e0).dot(e0);
+  const cov2 = cov.slice();
+  const a0 = [e0.x, e0.y, e0.z];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) cov2[r * 3 + c] -= lam * a0[r] * a0[c];
+  const e1 = power(cov2);
+  // 반길이/반폭: 각 축으로 투영한 최대 절댓값
+  let hl = 0, hw = 0;
+  for (let i = 0; i < n; i++) {
+    d.set(p.getX(i) - cen.x, p.getY(i) - cen.y, p.getZ(i) - cen.z);
+    hl = Math.max(hl, Math.abs(d.dot(e0)));
+    hw = Math.max(hw, Math.abs(d.dot(e1)));
+  }
+  return {
+    cen,
+    len: new THREE.Vector4(e0.x, e0.y, e0.z, hl || 1),
+    wid: new THREE.Vector4(e1.x, e1.y, e1.z, hw || 1),
+    width: hw * 2,
+  };
+}
+
+function flatGlowMat(hex) {
+  // 결/등줄기처럼 이미 형상으로 갈라져 있는 부분은 같은 팔레트의 한 단으로 칠한다
+  const m = new THREE.MeshBasicMaterial();
+  m.color.setStyle('#' + hex, THREE.SRGBColorSpace);
+  return m;
+}
+
+function shellMat(hex, outset) {
+  // 뒤집힌 껍질: 앞면을 버리고 뒷면만 그리면 실루엣 밖으로 삐져나온 부분만 남는다.
+  // = 화면 전체 블룸이 아니라 칼에 붙은 얇은 후광. 실측한 좁은 띠와 맞다.
+  const m = new THREE.MeshBasicMaterial({
+    color: new THREE.Color().setStyle('#' + hex, THREE.SRGBColorSpace),
+    side: THREE.BackSide, blending: THREE.AdditiveBlending,
+    depthWrite: false, transparent: true,
+  });
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uOut = { value: outset };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uOut;\nattribute vec3 aSmooth;')
+      // ★법선이 갈라진(하드 에지) 메시라 그냥 normal 로 밀면 모서리가 벌어진다.
+      // 같은 위치의 법선을 평균낸 aSmooth 로 밀어야 껍질이 안 찢어진다.
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed += aSmooth * uOut;');
+  };
+  return m;
+}
+
+function smoothNormals(geom) {
+  if (geom.getAttribute('aSmooth')) return;
+  const p = geom.attributes.position, n = geom.attributes.normal;
+  const map = new Map();
+  const key = i => (Math.round(p.getX(i) * 8192) + ',' + Math.round(p.getY(i) * 8192)
+    + ',' + Math.round(p.getZ(i) * 8192));
+  for (let i = 0; i < p.count; i++) {
+    const k = key(i); let e = map.get(k);
+    if (!e) { e = [0, 0, 0]; map.set(k, e); }
+    e[0] += n.getX(i); e[1] += n.getY(i); e[2] += n.getZ(i);
+  }
+  const out = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const e = map.get(key(i));
+    const l = Math.hypot(e[0], e[1], e[2]) || 1;
+    out[i * 3] = e[0] / l; out[i * 3 + 1] = e[1] / l; out[i * 3 + 2] = e[2] / l;
+  }
+  geom.setAttribute('aSmooth', new THREE.BufferAttribute(out, 3));
+}
+
+const glowMats = [];
+const glowDone = new Set();
+function setupGlow(key, g) {
+  if (glowDone.has(key)) return;      // 캐릭터를 오갈 때 껍질이 겹겹이 쌓인다
+  glowDone.add(key);
+  const parts = swordMesh[key] || [];
+  const blade = parts.find(o => o.userData.mn.startsWith('bd_'));
+  if (!blade) return;
+  const ax = bladeAxes(blade.geometry);
+  const w = ax.width;
+  for (const o of parts) {
+    const mn = o.userData.mn;
+    if (mn.startsWith('bd_') || mn.startsWith('bv_')) {
+      const m = bladeGlowMat(g, ax); o.material = m; glowMats.push(m);
+    } else if (mn.startsWith('ht_')) {
+      o.material = flatGlowMat(g.vein);        // 빗금 = 어두운 결
+    } else if (mn.startsWith('sp_')) {
+      o.material = flatGlowMat(g.core);        // 등줄기 잉걸 = 밝은 심
+    }
+  }
+  smoothNormals(blade.geometry);
+  g.out.forEach((f, i) => {
+    const sh = new THREE.SkinnedMesh(blade.geometry, shellMat(g.halo[i], w * f));
+    sh.name = 'GLOWSHELL_' + key + i;
+    sh.bind(blade.skeleton, blade.bindMatrix);
+    sh.frustumCulled = false;
+    sh.renderOrder = 2 + i;
+    blade.add(sh);
+  });
+}
+const swordEl = document.getElementById('sword');
+function equipSword(i) {
+  if (!SWORDS[i] || !swordMesh[SWORDS[i].key]) return;
+  swordIdx = i;
+  setElement(SWORDS[i].el);
+  for (const k in swordMesh) for (const m of swordMesh[k]) m.visible = (k === SWORDS[i].key);
+  measureBlade(swordMesh[SWORDS[i].key]);
+  trailBuf.length = 0; spray.length = 0;      // 이전 칼의 궤적/조각이 남으면 어색하다
+  if (swordEl) {
+    // ★번호 접두사('2. 백아')를 뺐다(건틀릿 연출UI S4). 그 숫자는 **내부 목록 순서**라
+    //   플레이어에게 아무 뜻이 없다. ui.js 가 화면에서 떼어내던 것을 원본에서 없앤다.
+    // ★불투명도 0.45 로 흐려지는 연출도 뺐다. 이름이 안 읽혔다는 판정이 나와서
+    //   ui.js 가 opacity:1 로 눌러 두고 있었다(= 연출은 이미 안 먹고 있었다).
+    //   "방금 바꿨다"는 신호가 필요하면 opacity 말고 다른 채널로 다시 붙일 것.
+    swordEl.textContent = SWORDS[i].name;
+  }
+}
+
+// ?char=archer 로 캐릭터를 갈아끼운다. Meshy 로 받은 모델을 붙일 때 씀.
+// ---------------------------------------------------------------- 캐릭터 로드/교체
+// 여러 캐릭터를 **동시에 올려두고** 활성 하나만 보여준다.
+// 전역(model/mixer/actions/handBone/...)은 '지금 활성인 캐릭터'를 가리키는
+// 포인터로 쓰고, 교체할 때 통째로 갈아끼운다.
+// footBones/swordMesh 는 const 라 재대입이 안 되므로 내용만 비우고 다시 채운다.
+const CHARS = {};
+// 캐릭터 명단. 여기에 이름만 추가하면 F 키 순환에 들어간다(web/<이름>.glb).
+// 맨 앞이 시작 캐릭터다.
+// ★basic / basic2 는 목록에서 뺐다(2026-08-10 QA). 이 둘은 Attack/Jump 클립이 없어
+//   Z·Space 를 눌러도 아무 일이 안 일어나 게임이 멈춘 것처럼 보이고, 훈도시 차림이라
+//   톤도 어긋난다. glb 와 아래 CHAR_CFG 항목은 그대로 두었으니 개발용으로 되살릴 때는
+//   여기에 이름만 다시 넣으면 된다:  'basic', 'basic2'
+// ★2026-08-10 2차 QA(S4). **평시에는 검사(kensa) 하나만 쓴다.**
+//   병사는 2차대전 철모, 탱커는 로마식 망토라 한국 요괴 세계관을 정면으로 깬다.
+//   지우지는 않는다(모션 이식·리깅 검증에 계속 쓴다). ?dev 로 열면 예전처럼 5종이 다 뜨고
+//   F 순환도 그때만 돈다. 평시에 F 는 아무 일도 안 한다(안내에도 안 나온다).
+//   부수효과: 평시 로딩이 glb 5개 -> 1개다(첫 화면이 그만큼 빨리 뜬다).
+const CHAR_ALL = ['kensa', 'slayer', 'tank', 'archer', 'soldier'];
+const CHAR_LIST = DEV ? CHAR_ALL : ['kensa'];
+// ★라벨에 '(구)' 같은 개발 표기를 넣지 않는다(S5). 평시 화면에 새면 그대로 개발 흔적이 된다.
+//   개발용 구분은 라벨이 아니라 **키 이름**으로 한다(?dev 에서만 ' (slayer)' 처럼 붙는다).
+const CHAR_LABEL = { kensa: '검사', slayer: '검사', tank: '탱커', archer: '궁수', soldier: '병사', basic: '기본', basic2: '기본2' };
+let charIdx = 0;
+// 지금 활성인 캐릭터 이름. charIdx 는 최초 로드 때 ?char= 보다 늦게 맞춰져서 믿을 수 없다.
+let curChar = null;
+
+function loadChar(name, onDone) {
+  loader.load('./' + name + '.glb' + location.search, gltf => {
+    const m = gltf.scene;
+    m.updateMatrixWorld(true);
+    // ★키 기준은 **몸통 메시만**. 칼 7자루가 박스에 들어가면 바인드 포즈에서
+    // 위아래로 삐져나와 키가 부풀고, 캐릭터가 작아져 바닥에 파묻힌다.
+    // 방패(SH_)도 같은 이유로 뺀다. 탱커 방패는 레스트(T포즈) 기준으로 구워져 있어
+    // 손 옆 허공에 세로로 서 있다. 지금 치수로는 마침 몸통 높이 안에 들어가 있지만,
+    // 방패를 조금만 키우거나 내리면 바로 박스를 밀어 키 정규화가 통째로 틀어진다.
+    // (칼은 SW_, 방패는 SH_. 아래 swords 수집/발광 셸은 칼 전용이라 SH_ 를 넣지 말 것)
+    // ★setFromObject 를 메시마다 부르기 전에 월드행렬을 갱신할 것(스케일이 튄다).
+    const box = new THREE.Box3();
+    const _tb = new THREE.Box3();
+    m.traverse(o => {
+      if (o.isMesh && !o.name.startsWith('SW_') && !o.name.startsWith('SH_')) {
+        box.union(_tb.setFromObject(o));
+      }
+    });
+    if (box.isEmpty()) box.setFromObject(m);
+    const cfg = CHAR_CFG[name] || DEF_CFG;
+    let h = box.max.y - box.min.y;
+    const s = cfg.h / h;                   // 캐릭터별 목표 키로 정규화
+    m.scale.setScalar(s);
+    m.position.y = -box.min.y * s;
+    root.add(m);
+    h *= s;
+
+    const feet = [];
+    const swords = {};
+    let hand = null;
+    m.traverse(o => {
+      if (o.isMesh) {
+        o.frustumCulled = false;
+        o.castShadow = true;
+        o.receiveShadow = true;
+        const old = o.material;
+        o.userData.mn = (old && old.name) || '';   // 재질 이름은 여기서만 알 수 있다
+        o.material = new THREE.MeshToonMaterial({
+          map: old && old.map ? old.map : null,
+          color: old && old.map ? 0xffffff : (old ? old.color : 0x888888)
+        });
+      }
+      if (o.isBone && /r[_ ]hand/i.test(o.name)) hand = o;
+      if (o.isBone && /(foot|toe)/i.test(o.name)) feet.push(o);
+      if (o.isSkinnedMesh && o.name.startsWith('SW_')) {
+        const k = o.name.slice(3).replace(/_\d+$/, '');
+        (swords[k] = swords[k] || []).push(o);
+      }
+    });
+
+    const mx = new THREE.AnimationMixer(m);
+    const acts = {};
+    gltf.animations.forEach(c => {
+      const a = mx.clipAction(c);
+      acts[c.name] = a;
+      if (c.name === 'Run') a.timeScale = cfg.run.ts;
+      if (c.name === 'Walk') a.timeScale = cfg.walk.ts;
+      if (c.name === 'Attack' || c.name === 'Heavy' || c.name === 'Wide') {
+        a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true;
+      }
+    });
+
+    CHARS[name] = { model: m, mixer: mx, actions: acts, handBone: hand,
+                    feet, swords, charH: h, clips: gltf.animations.map(c => c.name) };
+    m.visible = false;
+    if (onDone) onDone(name);
+  }, (ev) => {
+    // ★진행률. index.html 인라인이 window.__loadProgress(0~1) 를 첫 바이트부터 깔아 둔다
+    //   (handoff_ui A-1). 호출이 하나도 없으면 그쪽이 가짜 크리프로 기어가므로,
+    //   실제 바이트 진도를 흘려 주는 게 언제나 낫다. 캐릭터 구간은 0.35~0.90 을 쓴다.
+    if (ev && ev.lengthComputable && ev.total > 0) {
+      loadProgress(0.35 + 0.55 * (ev.loaded / ev.total));
+    }
+  }, err => {
+    if (DEV) console.warn('로드 실패', name, err);
+    if (onDone) onDone(null);
+  });
+}
+
+function activateChar(name) {
+  const c = CHARS[name];
+  if (!c) return false;
+  // ★미리보기는 옛 캐릭터의 액션을 붙들고 있다(LoopOnce -> LoopRepeat 로 바꿔둔 상태).
+  //   전역 포인터를 갈아끼우기 **전에** 정리해야 옛 캐릭터의 공격 클립이 복구된다.
+  //   resume=false: 아래에서 어차피 current 를 비우고 Idle 을 다시 튼다.
+  exitPreview(false);
+  for (const k in CHARS) CHARS[k].model.visible = (k === name);
+  // 전역 포인터 교체
+  curCfg = CHAR_CFG[name] || DEF_CFG;
+  model = c.model;
+  mixer = c.mixer;
+  handBone = c.handBone;
+  charH = c.charH;
+  current = null;
+  bladeOK = false;
+  for (const k in actions) delete actions[k];
+  for (const k in c.actions) actions[k] = c.actions[k];
+  footBones.length = 0;
+  for (const b of c.feet) footBones.push(b);
+  for (const k in swordMesh) delete swordMesh[k];
+  for (const k in c.swords) swordMesh[k] = c.swords[k];
+  // 상태 초기화(전 캐릭터의 공격/점프가 남으면 새 캐릭터가 굳는다)
+  attacking = false; jumping = false; heavy = false;
+  atkClip = null; stepLeft = 0;
+  trailBuf.length = 0; spray.length = 0; _lowHist.length = 0;
+  if (Object.keys(c.swords).length) {
+    for (const k in GLOW) {
+      const sw = SWORDS.find(v => v.el === k);
+      if (sw && c.swords[sw.key]) setupGlow(sw.key, GLOW[k]);
+    }
+    equipSword(swordIdx);
+    if (swordEl) swordEl.style.display = '';
+  } else if (swordEl) {
+    // ★칼이 없는 캐릭터(궁수 등)로 바꿔도 우하단에 앞 캐릭터의 칼 이름이 그대로
+    //   남아 있었다(v72 QA #16 "2. 백아"). 들고 있지도 않은 칼 이름은 거짓말이라 감춘다.
+    //   판단은 목록이 아니라 **실제 SW_ 메시 유무**로 한다(캐릭터가 늘어도 안 깨진다).
+    swordEl.style.display = 'none';
+  }
+  play('Idle');
+  curChar = name;
+  // 우상단 상태줄. ★2026-08-10 2차 QA(S5): "검사 (kensa) · 클립 7개" 는 **개발 정보**다.
+  //   내부 이름과 클립 수는 플레이어에게 아무 뜻이 없고, 게임이 아직 만들다 만 것처럼 읽힌다.
+  //   ?dev 에서만 쓴다. 평시에는 비워서 화면에서 아예 없앤다(공간도 안 먹게 display 를 끈다).
+  const el = document.getElementById('stat');
+  if (el) {
+    el.textContent = DEV ? (CHAR_LABEL[name] || name) + ' (' + name + ') · 클립 ' + c.clips.length + '개' : '';
+    el.style.display = DEV ? '' : 'none';
+  }
+  refreshPanel();
+  window.__dbg = { mixer, actions, model, root, CHARS,
+                   get cur(){return current;}, get atk(){return attacking;} };
+  return true;
+}
+
+function cycleChar() {
+  for (let i = 1; i <= CHAR_LIST.length; i++) {
+    const n = CHAR_LIST[(charIdx + i) % CHAR_LIST.length];
+    if (CHARS[n]) { charIdx = CHAR_LIST.indexOf(n); activateChar(n); return; }
+  }
+}
+
+// ---------------------------------------------------------------- 클립 미리보기 패널(개발용)
+// 캐릭터마다 클립 구성이 다르다(검사 7개 / 병사 4개, 병사는 Jump 자체가 없다).
+// 이름만 봐선 뭐가 뭔지 모르니 눌러서 돌려보게 만든다.
+// ★HUD(.hud) 는 pointer-events:none 이라 그 안에 버튼을 넣으면 클릭이 안 먹는다.
+//   그래서 패널은 별도 div 로 body 에 직접 붙이고, CSS 도 파일 추가 없이 여기서 주입한다.
+const STD_CLIPS = ['Idle', 'Walk', 'Run', 'Attack', 'Jump'];   // 표준 5종. 없는 걸 알려주려고 둔다
+const PREVIEW_FPS = 30;                                        // 프레임 표시·스텝 기준
+const preview = {
+  on: false,          // 켜져 있으면 렌더 루프의 상태 기계를 통째로 건너뛴다
+  name: null,         // 재생 중인 클립 이름
+  act: null,          // 그 클립의 AnimationAction
+  last: 'Idle',       // P 로 다시 켤 때 마지막으로 보던 클립
+  rate: 1,            // 재생속도 배수(0.25 / 0.5 / 1)
+  paused: false,
+  // ★Attack/Heavy/Wide 는 게임에선 LoopOnce + clampWhenFinished 다. 미리보기에선
+  //   반복 재생해야 보이므로 잠깐 바꾸고, 나갈 때 반드시 원래대로 되돌린다.
+  //   안 되돌리면 정상 모드에서 공격 모션이 영원히 반복된다.
+  saved: new Map(),
+};
+// 매 프레임 DOM 을 다시 쓰지 않으려고 마지막 값을 들고 비교한다(선언이 먼저 와야 TDZ 가 없다).
+let cpLastCur, cpLastTxt = '';
+
+const cp = (() => {
+  const st = document.createElement('style');
+  st.textContent =
+  '#cp{position:fixed;right:14px;top:42px;width:244px;z-index:8;max-height:calc(100vh - 128px);' +
+  'overflow-y:auto;padding:10px 11px 11px;border:1px solid #24455f;border-radius:9px;' +
+  'background:rgba(5,10,17,0.84);color:#a9c4d8;font-size:12px;line-height:1.45;letter-spacing:.2px;' +
+  'font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif;user-select:none}' +
+  '#cp::-webkit-scrollbar{width:6px}#cp::-webkit-scrollbar-thumb{background:#24455f;border-radius:3px}' +
+  '#cp .t{color:#7fd8ff;font-weight:700;font-size:12.5px;letter-spacing:.6px}' +
+  '#cp .miss{margin-top:3px;font-size:11px;color:#6f8496}#cp .miss b{color:#ff9a7a;font-weight:600}' +
+  '#cp .sec{margin-top:8px;padding-top:8px;border-top:1px solid #18324a}' +
+  '#cp .cb{display:flex;align-items:center;width:100%;gap:7px;margin-top:4px;padding:5px 8px;' +
+  'border:1px solid #23405a;border-radius:6px;background:#0b1622;color:#bcd6ea;font:inherit;' +
+  'font-size:12px;cursor:pointer;text-align:left}' +
+  '#cp .cb:hover{background:#12283c;border-color:#356e94}' +
+  '#cp .cb .n{flex:0 0 12px;color:#5f7d94;font-size:10.5px}' +
+  '#cp .cb .nm{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+  '#cp .cb .d{flex:0 0 auto;color:#6f8496;font-size:10.5px}' +
+  '#cp .cb.on{background:#12405e;border-color:#7fd8ff;color:#eaf8ff}' +
+  '#cp .cb.on .n,#cp .cb.on .d{color:#9fe0ff}' +
+  '#cp .cb.cur{border-color:#3f7ca3;color:#dff1ff}' +
+  '#cp .cb.no{opacity:.38;cursor:default}' +
+  '#cp .r{display:flex;gap:4px;margin-top:5px;align-items:center}' +
+  '#cp .r .lb{flex:0 0 36px;color:#6f8496;font-size:10.5px}' +
+  '#cp .sb{flex:1 1 0;padding:4px 0;border:1px solid #23405a;border-radius:5px;background:#0b1622;' +
+  'color:#bcd6ea;font:inherit;font-size:11px;cursor:pointer}' +
+  '#cp .sb:hover{background:#12283c}#cp .sb.on{background:#12405e;border-color:#7fd8ff;color:#eaf8ff}' +
+  '#cp .tm{margin-top:7px;font-size:11px;color:#8fb4cc;font-variant-numeric:tabular-nums}' +
+  '#cp .bar{height:3px;margin-top:4px;border-radius:2px;background:#16293a;overflow:hidden}' +
+  '#cp .bar i{display:block;height:100%;width:0;background:#7fd8ff}' +
+  '#cp .ex{width:100%;margin-top:7px;padding:5px 0;border:1px solid #3a5b74;border-radius:6px;' +
+  'background:#122232;color:#9fd8ff;font:inherit;font-size:11.5px;cursor:pointer}' +
+  '#cp .ex:hover{background:#1a3247}' +
+  '#cp .hint{margin-top:8px;font-size:10.5px;color:#5d7386;line-height:1.65}' +
+  '#cp .hint b{color:#8fb4cc;font-weight:600}' +
+  '#cp.off .ctl{opacity:.42}';       // 미리보기가 아니면 제어부는 흐리게(눌리기는 한다)
+  document.head.appendChild(st);
+
+  const el = document.createElement('div');
+  el.id = 'cp';
+  el.className = 'off';
+  // 정적 뼈대만 innerHTML 로. 클립 이름(glb 에서 온 값)은 아래에서 textContent 로 넣는다.
+  el.innerHTML =
+    '<div class="t" id="cpT">클립</div>' +
+    '<div class="miss" id="cpM"></div>' +
+    '<div class="sec" id="cpL"></div>' +
+    '<div class="sec ctl">' +
+      '<div class="r"><span class="lb">속도</span>' +
+        '<button class="sb" data-rate="0.25">0.25x</button>' +
+        '<button class="sb" data-rate="0.5">0.5x</button>' +
+        '<button class="sb" data-rate="1">1x</button></div>' +
+      '<div class="r"><span class="lb">프레임</span>' +
+        '<button class="sb" id="cpPause">일시정지</button>' +
+        '<button class="sb" id="cpPrev">◀ ,</button>' +
+        '<button class="sb" id="cpNext">. ▶</button></div>' +
+      '<div class="tm" id="cpTm">정상 모드</div>' +
+      '<div class="bar"><i id="cpBar"></i></div>' +
+      '<button class="ex" id="cpExit">정상 모드로 (ESC)</button>' +
+    '</div>' +
+    '<div class="hint">클립을 눌러 미리보기 · 미리보기 중 <b>1~9</b> 로 선택<br>' +
+      '<b>P</b> 켜고끄기 · <b>,</b> <b>.</b> 한 프레임 · <b>ESC</b> 나가기</div>';
+  document.body.appendChild(el);
+
+  const q = id => el.querySelector('#' + id);
+  const o = { root: el, title: q('cpT'), miss: q('cpM'), list: q('cpL'), tm: q('cpTm'),
+              bar: q('cpBar'), pause: q('cpPause'), btns: [],
+              rates: Array.prototype.slice.call(el.querySelectorAll('[data-rate]')) };
+  // ★버튼에 포커스가 남으면 그 뒤에 누른 Space(점프)가 그 버튼을 다시 클릭한다.
+  //   mousedown 을 막아 아예 포커스를 안 준다. 나중에 만드는 클립 버튼도 같은 처리를 한다.
+  el.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+  o.rates.forEach(b => b.addEventListener('click', () => { preview.rate = +b.dataset.rate; syncCtl(); }));
+  o.pause.addEventListener('click', () => { preview.paused = !preview.paused; syncCtl(); });
+  q('cpPrev').addEventListener('click', () => stepFrame(-1));
+  q('cpNext').addEventListener('click', () => stepFrame(1));
+  q('cpExit').addEventListener('click', () => exitPreview());
+  return o;
+})();
+
+// 클립 하나를 골라 미리보기로 들어간다(이미 미리보기면 클립만 갈아탄다).
+function previewClip(name) {
+  const a = actions[name];
+  // ★없는 클립 방어. 병사에는 Jump 가 없다. 예전에 actions.Jump 가 undefined 인데
+  //   a.time 을 건드려 TypeError 로 렌더 루프가 통째로 멈춘 사고가 있었다. 여기서 끊는다.
+  if (!a) { refreshPanel(); return false; }
+  if (window.__freeze) window.__freeze = false;   // DEV 굽기 함수가 세워둔 상태면 안 움직인다
+  if (!preview.on) {
+    preview.on = true;
+    // 공격·점프 중에 눌렀을 수 있다. 남은 상태를 털어야 클립만 깨끗이 보인다.
+    attacking = false; heavy = false; jumping = false;
+    trailBuf.length = 0; spray.length = 0;
+  }
+  _lowHist.length = 0;                            // 클립이 바뀌면 접지 기준을 새로 잡는다
+  for (const k in actions) if (actions[k] !== a) actions[k].stop();
+  if (!preview.saved.has(a)) {
+    preview.saved.set(a, { loop: a.loop, reps: a.repetitions, clamp: a.clampWhenFinished });
+  }
+  a.setLoop(THREE.LoopRepeat, Infinity);
+  a.clampWhenFinished = false;
+  a.reset();                    // reset 은 timeScale 을 안 건드린다(걷기/달리기 ts 가 살아 있다)
+  a.setEffectiveWeight(1);
+  a.play();
+  current = a;
+  preview.name = name; preview.act = a; preview.last = name; preview.paused = false;
+  if (mixer) mixer.update(0);
+  refreshPanel();
+  return true;
+}
+
+// 패널 버튼 순서 = 숫자키 순서. 없는 번호를 눌러도 조용히 무시한다.
+function previewClipAt(i) {
+  const it = cp.btns[i];
+  if (!it || !it.act) return;
+  previewClip(it.name);
+}
+
+function togglePreview() {
+  if (preview.on) { exitPreview(); return; }
+  const c = curChar ? CHARS[curChar] : null;
+  if (!c || !c.clips.length) return;            // 아직 로딩 중이면 아무 일도 안 한다
+  previewClip(c.actions[preview.last] ? preview.last : c.clips[0]);
+}
+
+// resume=false 는 캐릭터 교체용. activateChar 가 어차피 current 를 비우고 Idle 을 다시 트니
+// 여기서 옛 캐릭터의 액션을 또 건드리지 않는다.
+function exitPreview(resume = true) {
+  if (!preview.on) { return; }
+  const a = preview.act;
+  preview.on = false; preview.name = null; preview.act = null; preview.paused = false;
+  // 바꿔놨던 루프 설정을 되돌린다. Map 이 액션 참조를 직접 들고 있어서
+  // 이미 다른 캐릭터로 넘어간 뒤에 불려도 옛 액션이 제대로 복구된다.
+  preview.saved.forEach((s, act) => { act.setLoop(s.loop, s.reps); act.clampWhenFinished = s.clamp; });
+  preview.saved.clear();
+  if (a) a.stop();
+  _lowHist.length = 0;
+  if (resume) {
+    current = null;              // 비워야 play('Idle') 가 크로스페이드 없이 바로 먹는다
+    play('Idle');
+    if (mixer) mixer.update(0);
+  }
+  refreshPanel();
+}
+
+// 정지 상태에서 한 프레임씩. 어느 프레임에서 자세가 깨지는지 짚으려고 만든 것이다.
+function stepFrame(dir) {
+  const a = preview.act;
+  if (!preview.on || !a) return;                 // 미리보기 밖에서는 a.time 을 절대 안 건드린다
+  preview.paused = true;
+  const dur = a.getClip().duration;
+  let t = a.time + dir / PREVIEW_FPS;
+  if (dur > 0) { while (t < 0) t += dur; while (t >= dur) t -= dur; } else t = 0;
+  a.time = t;
+  if (mixer) mixer.update(0);                    // 세워둔 상태라 여기서 직접 포즈를 갱신한다
+  syncCtl();
+  updateCpLive();
+}
+
+// 캐릭터가 바뀌거나 미리보기 상태가 바뀔 때만 부른다(매 프레임 아님).
+function refreshPanel() {
+  const c = curChar ? CHARS[curChar] : null;
+  cp.root.className = preview.on ? '' : 'off';
+  // ★평소에는 숨긴다. 개발 패널이 화면 오른쪽 15% 를 늘 먹고 있으면 게임 화면을
+  //   판단할 수가 없다(시점·이펙트 스크린샷마다 이게 절반을 가렸다).
+  //   P(미리보기)를 누르면 뜨고, ?dev 로 열면 예전처럼 늘 떠 있다.
+  cp.root.style.display = (preview.on || DEV) ? '' : 'none';
+  cp.btns.length = 0;
+  cp.list.textContent = '';
+  if (!c) { cp.title.textContent = '클립 (불러오는 중)'; return; }
+  const names = [];
+  for (const n of c.clips) if (names.indexOf(n) < 0) names.push(n);   // 이름이 겹치면 액션도 하나다
+  // ★내부 이름(kensa/slayer)은 ?dev 에서만 붙인다. 미리보기(P)는 평시에도 열리는 화면이라
+  //   여기에 개발 표기를 그대로 두면 S5 게이트에 구멍이 난다.
+  cp.title.textContent = (CHAR_LABEL[curChar] || curChar)
+                       + (DEV ? ' (' + curChar + ')' : '')
+                       + ' · 클립 ' + names.length + '개'
+                       + (preview.on ? '  [미리보기]' : '');
+  const missing = STD_CLIPS.filter(n => !c.actions[n]);
+  if (missing.length) cp.miss.innerHTML = '없는 표준 클립: <b>' + missing.join(' / ') + '</b>';
+  else cp.miss.textContent = '표준 5종(Idle Walk Run Attack Jump) 모두 있음';
+  names.forEach((n, i) => {
+    const a = c.actions[n];
+    const b = document.createElement('button');
+    b.className = 'cb' + (a ? '' : ' no');
+    const num = document.createElement('span');
+    num.className = 'n';
+    num.textContent = i < 9 ? String(i + 1) : '';
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = n;
+    const du = document.createElement('span');
+    du.className = 'd';
+    // 길이는 THREE.AnimationClip.duration. 액션이 없으면 눌리지도 않게 막는다.
+    du.textContent = a ? a.getClip().duration.toFixed(2) + 's' : '액션 없음';
+    b.appendChild(num); b.appendChild(nm); b.appendChild(du);
+    if (a) b.addEventListener('click', () => previewClip(n));
+    cp.list.appendChild(b);
+    cp.btns.push({ name: n, el: b, act: a });
+  });
+  syncCtl();
+}
+
+function syncCtl() {
+  cp.rates.forEach(b => b.classList.toggle('on', +b.dataset.rate === preview.rate));
+  cp.pause.classList.toggle('on', preview.paused);
+  cp.pause.textContent = preview.paused ? '재생' : '일시정지';
+  // current 와 절대 같을 수 없는 값을 넣어 다음 프레임에 강조를 한 번 다시 칠하게 한다.
+  cpLastCur = undefined;
+}
+
+// 매 프레임: 재생 시각 표시 + '지금 재생 중' 강조. DOM 쓰기는 값이 바뀔 때만 한다.
+function updateCpLive() {
+  if (current !== cpLastCur) {
+    cpLastCur = current;
+    for (const it of cp.btns) {
+      it.el.classList.toggle('on', preview.on && preview.name === it.name);
+      it.el.classList.toggle('cur', !preview.on && !!it.act && it.act === current);
+    }
+  }
+  const a = preview.act;
+  let txt = '정상 모드';
+  let pct = 0;
+  if (preview.on && a) {
+    const dur = a.getClip().duration;
+    const t = a.time;
+    pct = dur > 0 ? (t / dur) * 100 : 0;
+    // 예: 0.83 / 1.92s · f25/58 · x0.5 · ts1.84(클립에 박힌 재생속도) · 정지
+    txt = t.toFixed(2) + ' / ' + dur.toFixed(2) + 's · f' + (Math.floor(t * PREVIEW_FPS) + 1) +
+          '/' + Math.max(1, Math.round(dur * PREVIEW_FPS)) + ' · x' + preview.rate +
+          (a.timeScale !== 1 ? ' · ts' + a.timeScale : '') + (preview.paused ? ' · 정지' : '');
+  }
+  if (txt !== cpLastTxt) {
+    cpLastTxt = txt;
+    cp.tm.textContent = txt;
+    cp.bar.style.width = pct.toFixed(1) + '%';
+  }
+}
+
+{
+  // 기본 시작 캐릭터는 CHAR_LIST 맨 앞이다(예전엔 'slayer' 가 박혀 있어 목록 순서를
+  // 바꿔도 시작 캐릭터가 안 바뀌었다). ?char= 로 덮어쓸 수 있다.
+  // ★단 평시 CHAR_LIST 는 ['kensa'] 뿐이라(S4) ?char= 는 **?dev 와 같이** 써야 먹는다.
+  //   못 찾으면 아래 폴백이 조용히 검사로 돌아간다(에러 없음).
+  const want = (new URLSearchParams(location.search).get('char') || CHAR_LIST[0]);
+  let left = CHAR_LIST.length;
+  const total = CHAR_LIST.length;
+  loadProgress(0.35);              // 맵(level1.glb)은 여기 오기 전에 이미 끝났다
+  CHAR_LIST.forEach(n => loadChar(n, () => {
+    loadProgress(0.35 + 0.55 * (total - left + 1) / total);
+    if (--left === 0) {
+      if (!activateChar(want)) activateChar(CHAR_LIST.find(k => CHARS[k]));
+      charIdx = Math.max(0, CHAR_LIST.indexOf(want));
+      // ★#load 를 여기서 바로 감추지 않는다(9차. 연출UI S1 "타이틀 카드 미발화").
+      //   에셋 파싱이 메인 스레드를 1~8초 물고 있는 동안 카드를 띄우면, CSS 애니는
+      //   **문서 타임라인(벽시계)** 을 타므로 화면에 한 프레임도 안 그려진 채로 다 지나간다.
+      //   그래서 "프레임이 실제로 흐르기 시작한 뒤"에 감춘다(아래 bootGate).
+      bootAssetsDone = true;
+    }
+  }));
+}
+// ── 부팅 게이트 ──
+// #load 를 감추는 그 순간이 곧 ui.js 의 입장 카드 신호다(waitSpawn 이 display 를 본다).
+// 그래서 **연속 3프레임이 매끄럽게 흐른 뒤**에 감춘다. 기준 0.10초는 "10fps 보다
+// 빠르다"는 뜻이고, 셋을 연달아 요구하므로 파싱 히치 한 방으로는 안 열린다.
+let bootAssetsDone = false, bootShown = false, bootSmooth = 0, bootDoneAt = 0;
+function loadProgress(p) {
+  // ui.js 가 로딩 진행 셸을 정의하면 그쪽이 받는다. 없으면 아무 일도 안 한다.
+  try { if (typeof window.__loadProgress === 'function') window.__loadProgress(Math.max(0, Math.min(1, p))); }
+  catch (e) { /* 진행 표시가 게임을 멈출 이유는 없다 */ }
+}
+function bootGate(rawDt) {
+  if (bootShown || !bootAssetsDone) return;
+  if (!bootDoneAt) bootDoneAt = performance.now();
+  // ★0.06초 = 16fps 보다 빠른 프레임. 카드의 CSS 애니는 **문서 타임라인(벽시계)** 을
+  //   타므로, 이보다 느린 상태에서 띄우면 애니 앞부분이 화면에 한 장도 안 그려진 채
+  //   지나간다(그게 심사의 "40초간 불투명도 0" 이었다). 셋을 연달아 요구한다.
+  if (rawDt > 0 && rawDt < 0.06) bootSmooth++; else bootSmooth = 0;
+  // ★백스톱. 느린 기계(또는 다른 프로그램이 물고 있는 기계)에서는 매 프레임이
+  //   0.12초를 넘어 게이트가 **영영 안 열릴 수 있다.** 그러면 로딩 화면에 갇힌다.
+  //   에셋이 다 온 뒤 3초가 지나면 매끄럽든 말든 연다. 카드가 좀 끊겨 보이는 것보다
+  //   게임이 안 시작되는 게 훨씬 나쁘다.
+  if (bootSmooth < 3 && performance.now() - bootDoneAt < 3000) return;
+  bootShown = true;
+  loadProgress(1);
+  const el = document.getElementById('load');
+  if (el) el.style.display = 'none';
+}
+
+function play(name, fade = 0.18) {
+  const a = actions[name];
+  if (!a || current === a) return;
+  _lowHist.length = 0;               // 클립이 바뀌면 접지 기준을 새로 잡는다
+  a.reset().play();
+  if (current) current.crossFadeTo(a, fade, false);
+  else a.fadeIn(fade);
+  current = a;
+}
+
+// 3연타 클립의 단수별 진입점(초)과 그 단수의 커밋 길이(초).
+// ★근거는 enemy.js 의 타격 게이트(hot)를 60fps 로 찍은 실측이다(위 ATK_COMMIT 주석).
+//   입력 후 경과 ms 기준 hot 구간 [68.8~137][190.3~264.3] / [366.9~434.3] / [726.3~825.3]
+//   을 클립초(=ms/1000*1.35)로 환산하면 스윙 셋이 클립 0.093~0.357 / 0.495~0.586 /
+//   0.980~1.114 에 있다. 진입점은 각 스윙의 예비동작 0.09초 앞이고,
+//   커밋은 "그 스윙의 타격이 끝나는 순간"까지다(= (hot끝 - 진입)/1.35).
+const ATK_STEP_T = [0, 0.40, 0.89];
+const ATK_STEP_COMMIT = [0.28, 0.14, 0.17];
+
+function tryAttack() {
+  if (!actions.Attack) return;
+  if (isCleared()) return;         // 층 돌파 뒤에는 안 받는다(입력 버퍼로 새는 경로까지 막는다)
+  if (dashLeft > 0) { bufferInput('atk'); return; }   // 대시 중에 누른 Z 는 착지에 이어진다
+  // ★공격 방향 스냅. 반경 SNAP_R(3.0m) 안에 적이 있으면 그쪽으로 몸을 돌리고 벤다.
+  //   v72 QA: 요괴 넷이 몸에 겹쳐 있어도 각이 어긋나면 Z 12번에 1킬이었다.
+  //   판정을 넓히는 게 아니라 **입력한 방향을 고쳐 주는** 것이라 헛스윙의 자유는 남는다
+  //   (반경 안에 아무도 없으면 아무것도 안 한다). 규칙과 보간은 enemy.js 가 갖는다.
+  //   ★반경은 main.js 가 넘긴다. enemy.js 기본값(2.6)은 그 파일의 소유라 안 건드린다.
+  const now = gameT;
+  // ── 9차: 누른 만큼 나간다 ──
+  // 옛 규칙은 "이미 휘두르는 중이면 단수만 올리고 return" 이었다. 3연타가 클립 하나에
+  // 스윙 셋으로 들어 있어서, **입력 세 번이 스윙 하나로 뭉개졌다**(심사의 "3연타 중
+  // 2회만 발동"). 이제 캔슬 가능한 시점이면 다음 타를 **그 자리에서 다시 시작**한다.
+  //   · 커밋 안(칼이 나가는 중)  -> 버퍼에 적어 두고 캔슬 프레임에 자동으로 이어진다
+  //   · 캔슬 가능                -> 클립을 다음 단수 지점부터 다시 튼다
+  if (attacking && !canCancelAttack(now)) { bufferInput('atk'); return; }
+  if (now - lastAtkStartT < ATK_MIN_GAP) { bufferInput('atk'); return; }   // 연타 바닥(위 주석)
+  // ★콤보 창이 살아 있으면 다음 단수로 잇는다. 창 밖이면 새 연격이라 단수를 끊는다.
+  //   이 분기가 "치고 빠졌다가 다시 붙어도 2타·3타로 이어진다"를 만든다.
+  //   ★수면참·횡일섬에서 이어 나온 Z 는 **새 연격**이다(기술 이름이 남으면 안 된다).
+  const fromSkill = attacking && atkClip && atkClip !== 'Attack';
+  if (!fromSkill && (attacking || now < comboWindow)) comboStep = Math.min(2, comboStep + 1);
+  else { comboStep = 0; resetCombo(null); }
+  const tgt = snapTarget();
+  attacking = true;
+  heavy = false;
+  clearBuffer();
+  released = false; coil = 1;
+  const a = actions.Attack;
+  _lowHist.length = 0;
+  a.reset(); a.setEffectiveTimeScale(1.35); a.play();
+  // ★클립 진입점을 단수에 맞춘다. 그냥 0 부터 다시 틀면 세 번 눌러도 **같은 1타**만
+  //   세 번 나간다. 진입점은 enemy.js 의 타격 게이트(hot)를 60fps 로 찍어 잰
+  //   스윙 시작 시각(경과 ms -> 클립초 = ms/1000*1.35)에서 예비동작 0.09초를 뺀 값이다:
+  //     1타 hot 68.8ms  -> 클립 0.093s -> 진입 0
+  //     2타 hot 366.9ms -> 클립 0.495s -> 진입 0.40
+  //     3타 hot 726.3ms -> 클립 0.980s -> 진입 0.89
+  a.time = ATK_STEP_T[comboStep] || 0;
+  if (current && current !== a) current.crossFadeTo(a, 0.06, false);
+  current = a;
+  const dur = (a.getClip().duration - a.time) / 1.35;
+  attackEnd = now + dur;
+  comboWindow = now + dur * 0.75 + 0.25;   // 다음 단수를 이을 수 있는 창(캔슬 뒤 여유 포함)
+  atkClip = 'Attack'; atkStartT = now; atkStruck = false; atkHitT = -99; atkStarts++; lastAtkStartT = now;   // 커밋 구간 시작(S1)
+  startStep(tgt);                                          // 붙는 전진 스텝(S3)
+  // ★여기서 표시를 안 한다. 이 자리가 곧 "허공을 베어도 1 HIT" 의 원인이었다.
+}
+
+// 일격기: 3연타와 달리 느리게 모아서 한 번에 크게 벤다. 콤보로 이어지지 않는다.
+function tryHeavy() {
+  if (!actions.Heavy) return;
+  if (isCleared()) return;
+  if (dashLeft > 0) { bufferInput('heavy'); return; }
+  // ★9차: "휘두르는 중이면 무시"가 곧 심사의 "씹힘인지 버그인지 모르겠다"였다.
+  //   커밋 안이면 **버퍼에 담고**(캔슬 프레임에 자동으로 나간다), 회복 구간이면
+  //   그 자리에서 끊고 나간다. 어느 쪽도 아니면 그때만 거부 피드백을 낸다.
+  if (attacking) {
+    if (!canCancelAttack(gameT)) { bufferInput('heavy'); return; }
+    attacking = false; atkClip = null;
+  }
+  const tgt = snapTarget();   // 공격 방향 스냅(tryAttack 주석 참고)
+  const now = gameT;
+  clearBuffer();
+  sfx.heavySwing();
+  attacking = true; heavy = true; comboStep = 0;
+  resetCombo('수면참');      // 이번 연격의 이름. 명중하면 옆에 누적 수가 붙는다
+  released = false; coil = 1;
+  const a = actions.Heavy;
+  _lowHist.length = 0;
+  a.reset(); a.setEffectiveTimeScale(1.15); a.play();
+  if (current && current !== a) current.crossFadeTo(a, 0.08, false);
+  current = a;
+  const dur = a.getClip().duration / 1.15;
+  attackEnd = now + dur;
+  comboWindow = 0;                       // 콤보 입력 안 받음
+  atkClip = 'Heavy'; atkStartT = now; atkStruck = false; atkHitT = -99; atkStarts++; lastAtkStartT = now;   // 커밋 구간 시작(S1)
+  startStep(tgt);                                         // 붙는 전진 스텝(S3)
+  showSkill(comboLabel);                 // 기술 이름은 지금 뜬다. 명중하면 옆에 수가 붙는다
+}
+
+// 횡일섬: 45도로 눕힌 칼을 가로로 크게 쓸어 벤다. 골반까지 돌아서 사거리가 넓다.
+function tryWide() {
+  if (!actions.Wide) return;
+  if (isCleared()) return;
+  if (dashLeft > 0) { bufferInput('wide'); return; }
+  if (attacking) {                            // 규칙은 tryHeavy 와 같다
+    if (!canCancelAttack(gameT)) { bufferInput('wide'); return; }
+    attacking = false; atkClip = null;
+  }
+  const tgt = snapTarget();   // 공격 방향 스냅(tryAttack 주석 참고)
+  const now = gameT;
+  clearBuffer();
+  sfx.heavySwing();
+  attacking = true; heavy = true; comboStep = 0;   // heavy 플래그 = 궤적 확대
+  resetCombo('횡일섬');      // 이번 연격의 이름. 명중하면 옆에 누적 수가 붙는다
+  released = false; coil = 1;
+  const a = actions.Wide;
+  _lowHist.length = 0;
+  a.reset(); a.setEffectiveTimeScale(1.2); a.play();
+  if (current && current !== a) current.crossFadeTo(a, 0.08, false);
+  current = a;
+  const dur = a.getClip().duration / 1.2;
+  attackEnd = now + dur;
+  comboWindow = 0;
+  atkClip = 'Wide'; atkStartT = now; atkStruck = false; atkHitT = -99; atkStarts++; lastAtkStartT = now;   // 커밋 구간 시작(S1)
+  startStep(tgt);                                        // 붙는 전진 스텝(S3)
+  showSkill(comboLabel);                 // 기술 이름은 지금 뜬다. 명중하면 옆에 수가 붙는다
+}
+
+// ---------- 콤보 · 명중 표시 ----------
+// ★v72 QA #10 이 두 가지를 한꺼번에 잡아냈다.
+//   (1) 허공을 베어도 "1 HIT" 이 떴다. 스윙을 **시작할 때** 띄우고 있었기 때문이다.
+//       HIT 은 "맞았다"는 주장이므로 **칼이 닿은 프레임**에만 떠야 한다.
+//   (2) 3연타의 2·3타에서 표시가 안 바뀌었다. tryAttack 의 콤보 진행 분기가
+//       showCombo 앞에서 return 했다. 이제 표시는 명중 쪽이 하므로 그 분기와 무관하다.
+//
+// 표시 규칙
+//   큰 글자 = 콤보 단수(1·2·3 HIT) 또는 기술 이름(수면참·횡일섬).
+//   작은 글자 = 이번 연격에서 실제로 벤 **누적 명중 수**. 단수보다 많을 때만 붙는다
+//               (광역타로 한 번에 여럿 베면 "2 HIT 명중 5" 처럼 읽힌다).
+const comboEl = document.getElementById('combo');
+let comboT = 0;
+let comboHits = 0;                 // 이번 연격에서 누적된 명중 수
+let comboLabel = null;             // 기술 이름. 평타 연격은 null
+// 새 연격이 시작될 때 누적을 끊는다. 이걸 안 하면 숫자가 판 내내 불어난다.
+function resetCombo(label) {
+  comboHits = 0;
+  comboLabel = label || null;
+}
+// 기술 이름은 **입력한 순간** 뜬다. "이 기술이 나갔다"는 알림이라 허공에 그어도 거짓이 아니다.
+function showSkill(label) {
+  comboEl.textContent = label;
+  comboT = 0.9;
+}
+// 칼이 닿은 그 프레임에 부른다(잡몹 onHit · 보스 hit 둘 다).
+function showHit() {
+  comboHits++;
+  atkHitT = gameT;                 // 명중 확정 캔슬의 기준점(canCancelAttack 1번 규칙)
+  const step = comboStep + 1;
+  const head = comboLabel || (step + ' HIT');
+  const base = comboLabel ? 1 : step;
+  comboEl.innerHTML = head + (comboHits > base ? '<i>명중 ' + comboHits + '</i>' : '');
+  comboT = 0.9;
+}
+
+// ---------------------------------------------------------------- 화면 되먹임 (9차 신설)
+// 심사 격차 두 개를 한 덩어리로 처리한다.
+//   7위 "어디서 맞았는지 모른다"  -> 맞은 **방향**으로 붉은 비네트가 쏠린다
+//   8위 "씹힘인지 버그인지 모른다" -> 못 쓰는 입력에 칩 흔들림 + 낮은 거부음
+// ★DOM 은 여기서 만든다(ui.js 는 다른 파일 소유다). 스타일도 여기 한 장에 담는다.
+//   ui.js 가 만든 스킬 칩(#uiSkills .sk)에는 **클래스만 얹는다**(구조를 안 건드린다).
+const fxStyle = document.createElement('style');
+fxStyle.id = 'mainFxStyle';
+fxStyle.textContent = [
+  // 방향 비네트: 화면 전체를 덮는 판 하나를 돌려 쓴다(맞을 때마다 각도만 바꾼다).
+  '#hurtDir{position:fixed;inset:0;z-index:8;pointer-events:none;opacity:0;',
+  '  transition:opacity .26s ease-out;mix-blend-mode:normal}',
+  '#hurtDir.on{opacity:1;transition:opacity .06s linear}',
+  // 거부 흔들림. 칩을 좌우로 두 번 튕긴다(0.22초). 색은 안 건드린다 - 흔들림만으로 읽힌다.
+  '@keyframes mainDeny{0%{transform:translateX(0)}18%{transform:translateX(-4px)}',
+  '  42%{transform:translateX(4px)}66%{transform:translateX(-2px)}100%{transform:translateX(0)}}',
+  '#uiSkills .sk.deny{animation:mainDeny .22s ease-out}',
+].join('\n');
+document.head.appendChild(fxStyle);
+
+const hurtDirEl = document.createElement('div');
+hurtDirEl.id = 'hurtDir';
+document.body.appendChild(hurtDirEl);
+let hurtDirT = 0;
+// 맞은 방향(월드 x,z)을 화면 각도로 바꿔 그쪽 가장자리를 붉게 물들인다.
+// ★화면 각도로 바꾸는 이유: 쿼터뷰라 월드 방향과 화면 방향이 다르다. 월드 그대로 쓰면
+//   "왼쪽에서 맞았는데 화면은 위가 붉어지는" 어긋남이 난다. screenAngle 은 아래
+//   요괴 블록에서 이미 쓰는 함수와 같은 것을 쓴다(두 벌이 되면 반드시 갈라진다).
+function hurtFrom(sx, sz) {
+  const p = root.position;
+  const sa = screenAngle(p.x, p.y + charH * 0.5, p.z, sx - p.x, 0, sz - p.z);
+  // CSS linear-gradient 의 0deg 는 "아래에서 위로"다. 화면 각(오른쪽 0, 위 +90)에서
+  // 90 을 빼면 그대로 맞는다.
+  const deg = 90 - sa.ang * 180 / Math.PI;
+  hurtDirEl.style.background =
+    'linear-gradient(' + deg.toFixed(1) + 'deg, rgba(150,16,16,0.68) 0%, ' +
+    'rgba(150,16,16,0.34) 18%, rgba(150,16,16,0) 50%)';
+  hurtDirEl.classList.add('on');
+  hurtDirT = 0.42;
+}
+// 방향을 모르는 피격(출처가 사라진 경우)은 사방으로 옅게. 없던 일로 하지 않는다.
+function hurtNoDir() {
+  hurtDirEl.style.background =
+    'radial-gradient(ellipse at 50% 50%, rgba(150,16,16,0) 42%, rgba(150,16,16,0.55) 100%)';
+  hurtDirEl.classList.add('on');
+  hurtDirT = 0.42;
+}
+
+// ── 거부 피드백 ──
+// kind: 'heavy' | 'wide' | 'dash'
+let lastDenyT = -99;
+function deny(kind) {
+  const now = performance.now();
+  if (now - lastDenyT < 140) return;      // 연타로 누르면 소리가 뭉친다
+  lastDenyT = now;
+  sfx.deny();
+  const sel = kind === 'heavy' ? '[data-k="Heavy"]' : kind === 'wide' ? '[data-k="Wide"]' : '[data-k="Dash"]';
+  const el = document.querySelector('#uiSkills ' + sel);
+  if (!el) return;
+  el.classList.remove('deny');
+  void el.offsetWidth;                    // 같은 프레임에 뺐다 붙이면 애니가 다시 안 돈다
+  el.classList.add('deny');
+}
+
+// ── 대시 칩 ──
+// ★ui.js 가 만든 #uiSkills 안에 한 장을 더 붙인다(구조·CSS 를 그쪽 것과 공유한다).
+//   ui.js 의 updateSkills 는 Heavy/Wide 두 노드만 만지므로 서로 안 밟는다.
+//   ui.js 가 아직 칩을 안 만들었을 수 있어 잠깐 기다렸다 붙인다(없으면 조용히 포기).
+let dashChip = null;
+(function mountDashChip(tries = 0) {
+  const host = document.getElementById('uiSkills');
+  if (!host) { if (tries < 40) setTimeout(() => mountDashChip(tries + 1), 150); return; }
+  const d = document.createElement('div');
+  d.className = 'sk rdy';
+  d.dataset.k = 'Dash';
+  // ★첫 자식은 쿨다운 표시다(ui.js 가 <i class="cd"> 라디얼을 쓰면 그 규칙을 그대로 탄다).
+  //   ui.js 가 표기 방식을 바꾸면 여기도 같이 봐야 한다 - handoff_combat.md 에 적어 두었다.
+  d.innerHTML = '<i class="cd"></i><span class="key">Space</span><span class="nm">회피</span>';
+  host.appendChild(d);
+  dashChip = d;
+})();
+
+// ---------- 루프 ----------
+const fwd = new THREE.Vector3(), rightv = new THREE.Vector3(), move = new THREE.Vector3();
+const swordA = new THREE.Vector3(), swordB = new THREE.Vector3();
+const camTarget = new THREE.Vector3();
+
+// ── 카메라 놓기 ──
+// ★한 군데서만 놓는다. 루프도, 검증 프로브도 이 함수를 지난다. 두 벌이 되면
+//   "프로브가 재는 카메라"와 "화면에 보이는 카메라"가 갈라진다.
+// lerpK <= 0 이면 보간 없이 그 자리에 딱 놓는다(프로브·스크린샷용).
+const _camWant = new THREE.Vector3();
+function placeCamera(lerpK) {
+  // 바라보는 지점을 캐릭터보다 lead 만큼 **앞으로** 민다. 카메라가 보는 방향의
+  // 수평 성분이 (-sin yaw, 0, -cos yaw) 라 그 쪽으로 밀면 캐릭터가 화면 아래로 내려간다.
+  camTarget.set(root.position.x - Math.sin(yaw) * lead,
+                charH * 0.62,
+                root.position.z - Math.cos(yaw) * lead);
+  _camWant.set(camTarget.x + Math.sin(yaw) * Math.cos(pitch) * dist,
+               camTarget.y + Math.sin(pitch) * dist,
+               camTarget.z + Math.cos(yaw) * Math.cos(pitch) * dist);
+  if (lerpK > 0 && lerpK < 1) camera.position.lerp(_camWant, lerpK);
+  else camera.position.copy(_camWant);
+  camera.lookAt(camTarget);
+  // 흔들림은 lookAt **뒤에** 얹는다. 앞에 얹으면 흔드는 만큼 시선이 되돌아와 상쇄된다.
+  camera.position.add(feel.shakeOffset());
+  camera.updateMatrixWorld();
+  // ★project/unproject 가 쓰는 역행렬까지 여기서 맞춰 둔다. 렌더러가 render() 안에서
+  //   갱신하기 때문에, 이걸 안 하면 프로브가 **한 프레임 전 카메라**를 재고
+  //   붓질 슬래시 각도도 한 프레임 어긋난다.
+  camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+}
+
+// ── 시점 검증 프로브 ──
+// "전방 몇 m / 폭 몇 m / 캐릭터가 화면의 몇 % / 원근왜곡비" 를 **화면에서 직접** 잰다.
+// 손으로 푼 식이 아니라 실제 투영행렬로 재기 때문에 fov·해상도·종횡비가 다 반영된다.
+// ?dev 없이도 열어 둔다(읽기 전용이고, 60fps 로 실제로 도는 판에서 재야 의미가 있다).
+const _pv = new THREE.Vector3();
+function probeCam() {
+  placeCamera(0);
+  const gy = level.groundY(root.position.x, root.position.z);
+  // 화면의 한 점(NDC)이 지면과 만나는 자리
+  const hitGround = (nx, ny) => {
+    _pv.set(nx, ny, 0.5).unproject(camera).sub(camera.position);
+    if (Math.abs(_pv.y) < 1e-6) return null;
+    const t = (gy - camera.position.y) / _pv.y;
+    if (t <= 0) return null;                       // 하늘을 보는 픽셀
+    return { x: camera.position.x + _pv.x * t, z: camera.position.z + _pv.z * t, t };
+  };
+  // 전방축(-sin yaw, -cos yaw) 위의 좌표
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  const along = p => (p.x - root.position.x) * fx + (p.z - root.position.z) * fz;
+  const side = p => (p.x - root.position.x) * rx + (p.z - root.position.z) * rz;
+  const top = hitGround(0, 1), bot = hitGround(0, -1);
+  // 캐릭터가 화면 세로의 몇 %
+  const foot = _pv.copy(root.position).setY(gy).project(camera).clone();
+  const head = _pv.copy(root.position).setY(gy + charH).project(camera).clone();
+  const charPct = Math.abs(head.y - foot.y) / 2 * 100;
+  // 폭: 플레이어가 선 줄(화면 세로 위치)에서 좌우 끝까지
+  const lw = hitGround(-1, foot.y), rw = hitGround(1, foot.y);
+  // ── 원근 왜곡비 ──
+  // 화면 위끝과 아래끝에 **같은 크기의 것**을 놓았을 때 픽셀 크기가 몇 배 차이 나는가.
+  // ★세로 막대로 재면 안 된다. 쿼터뷰에서 세로 막대는 화면 위쪽일수록 카메라 쪽으로
+  //   눕는 각이 커져서 오히려 늘어난다(실측 0.89 가 나왔다. 눈에 보이는 왜곡과 반대다).
+  //   바닥에 놓인 1m 자(가로)로 재야 벽·바닥이 기우는 정도와 일치하고,
+  //   이 값이 레포에 기록된 옛 시점 1.33 과도 맞는다.
+  const stick = p => {
+    if (!p) return null;
+    const a = _pv.set(p.x - rx * 0.5, gy, p.z - rz * 0.5).project(camera).x;
+    const b = _pv.set(p.x + rx * 0.5, gy, p.z + rz * 0.5).project(camera).x;
+    return Math.abs(b - a);
+  };
+  const sTop = stick(top), sBot = stick(bot);
+  return {
+    yaw: +yaw.toFixed(3), pitch: +pitch.toFixed(3), deg: +(pitch * 180 / Math.PI).toFixed(1),
+    dist: +dist.toFixed(2), fov: camera.fov, lead: +lead.toFixed(2),
+    fwd: top ? +along(top).toFixed(2) : null,
+    back: bot ? +(-along(bot)).toFixed(2) : null,
+    width: (lw && rw) ? +Math.abs(side(rw) - side(lw)).toFixed(2) : null,
+    charPct: +charPct.toFixed(2),
+    footPct: +((foot.y + 1) / 2 * 100).toFixed(1),
+    bodyPct: +((foot.y + 1) / 2 * 100 + charPct / 2).toFixed(1),
+    warp: (sTop && sBot) ? +(sBot / sTop).toFixed(3) : null,
+    camY: +camera.position.y.toFixed(2),
+    aspect: +camera.aspect.toFixed(3),
+  };
+}
+window.__probe = probeCam;
+// 검증용 창구. ?dev 없이도 열어 둔다. 헤디드 브라우저에서 실제 60fps 로 도는 판에
+// 플레이어를 원하는 자리에 세워 놓고 찍어야 시점·이펙트를 눈으로 판단할 수 있다.
+window.__root = root;
+window.__put = (x, z, yaw) => {
+  root.position.set(x, level.groundY(x, z), z);
+  if (yaw !== undefined) root.rotation.y = yaw;
+};
+// ── 월드 한 점이 화면 어디에 있나 ──
+// ui.js 의 목표 방향 나침반이 쓴다. 손으로 푼 삼각함수가 아니라 **이번 프레임의 실제
+// 카메라 행렬**로 재기 때문에 fov·해상도·줌이 바뀌어도 화살표가 안 어긋난다.
+// x/y 는 NDC(-1..1, y 는 위가 +), behind 는 카메라 뒤쪽인가. 읽기 전용이다.
+const _scrV = new THREE.Vector3();
+window.__screen = (x, z, y) => {
+  _scrV.set(x, y === undefined ? level.groundY(x, z) + 1.0 : y, z);
+  _scrV.applyMatrix4(camera.matrixWorldInverse);
+  // 카메라 공간에서 z 가 0 보다 크면 등 뒤다. 이때 투영하면 w 가 음수라 좌우가
+  // 뒤집혀 나오므로 부르는 쪽이 뒤집어 써야 한다(그래서 이 값을 같이 준다).
+  const behind = _scrV.z > -0.02;
+  _scrV.applyMatrix4(camera.projectionMatrix);
+  return { x: _scrV.x, y: _scrV.y, behind };
+};
+window.__feel = feel;
+window.__sfx = sfx;
+// 프레임 기록. 열 = [벽시계ms, rawDt ms, 게임dt ms, 공격중, 콤보단계,
+//                    Attack 클립시각, 스윙번호, 처치수, 콤보창까지 남은시간(음수=열려있음)]
+let __rec = null;
+window.__recStart = () => { __rec = []; return true; };
+window.__recDump = () => { const r = __rec; __rec = null; return r; };
+window.__camSet = (o) => {
+  if (o.yaw !== undefined) yaw = o.yaw;
+  if (o.pitch !== undefined) pitch = o.pitch;
+  if (o.dist !== undefined) { dist = o.dist; applyDist(); }   // 안개·그림자 상자도 같이 간다
+  if (o.lead !== undefined) lead = o.lead;
+  if (o.fov !== undefined) { camera.fov = o.fov; camera.updateProjectionMatrix(); }
+  return probeCam();
+};
+
+let __frames = 0;
+let lastFrameWall = performance.now();   // 부팅 게이트가 보는 벽시계(프레임 간격)
+// DEV 는 파일 맨 위에서 한 번만 정한다(위 '개발 모드 스위치' 절).
+const nextFrame = DEV ? (fn => setTimeout(fn, 16)) : (fn => requestAnimationFrame(fn));
+if (DEV) {
+  // 검증용. 캔버스는 preserveDrawingBuffer 없이 만들어져서 그냥 toDataURL 하면
+  // 빈 이미지가 나온다. 읽기 직전에 한 번 더 그려서 같은 태스크 안에서 뽑는다.
+  window.__cap = () => { composer.render(); return cv.toDataURL('image/jpeg', 0.86); };
+  window.__view = (y, p, d) => { yaw = y; pitch = p; dist = d; applyDist(); };
+  // 시점 검증용. 카메라와 현재 값을 그대로 노출한다(고정 쿼터뷰 튜닝에 쓴다).
+  window.__cam = camera;
+  // 맵·충돌 검증용. 플레이어를 원하는 자리에 세워놓고 벽을 밀어볼 수 있어야 한다.
+  window.__root = root;
+  window.__put = (x, z) => { root.position.set(x, level.groundY(x, z), z); };
+  window.__camState = () => ({ yaw, pitch, dist, fov: camera.fov,
+    deg: +(pitch * 180 / Math.PI).toFixed(1) });
+  // 셰이더가 실제로 갱신됐는지 브라우저에서 확인하기 위한 창구.
+  window.__fx = { scene, renderer, trailMat, wrapMat, sprayMat, ELEMENTS,
+                  el: () => curEl, trailN: () => trailBuf.length, buf: trailBuf,
+                  update: () => updateTrail(true), burst: spawnBurst };
+  window.__atkTime = () => (actions.Attack ? actions.Attack.time : -1);
+  // 칼날 판정 선분(월드). 요괴 캡슐 판정을 숫자로 검증할 때 쓴다.
+  // ★루프가 enemy.js 에 넘기는 것과 **똑같은 식**으로 계산한다(bladeA/B 를 손 본
+  //   월드행렬로 옮긴다). __freeze 중에는 swordA/B 가 안 갱신되므로 여기서 직접 뽑는다.
+  window.__blade = () => {
+    if (!handBone || !bladeOK) return null;
+    handBone.updateWorldMatrix(true, false);
+    return { a: bladeA.clone().applyMatrix4(handBone.matrixWorld).toArray(),
+             b: bladeB.clone().applyMatrix4(handBone.matrixWorld).toArray() };
+  };
+  // 실시간 캡처는 toDataURL 이 느려서 애니메이션이 굶는다. 프레임을 찍어 세우고 뽑는다.
+  window.__size = (w, h) => {
+    renderer.setPixelRatio(1);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  };
+  // 백그라운드 탭은 setTimeout 이 초당 2회로 throttle 돼서 실시간 재생 검증이 안 된다.
+  // 클립을 직접 훑어 궤적 버퍼를 채운 뒤 한 장 뽑는다(프로덕션 코드 경로 그대로).
+  window.__bakeTrail = (t0, t1, n = TRAIL_MAX, clip = 'Attack', gain = 1.0) => {
+    const a = actions[clip];
+    trailGain = gain;
+    if (!a || !handBone || !bladeOK) return 'no blade';
+    window.__freeze = true;
+    for (const k in actions) if (actions[k] !== a) actions[k].stop();
+    if (!a.isRunning()) { a.reset(); a.play(); }
+    a.setEffectiveWeight(1); a.paused = true; a.setEffectiveTimeScale(1);
+    trailBuf.length = 0;
+    for (let i = 0; i < n; i++) {
+      a.time = t0 + (t1 - t0) * (i / (n - 1));
+      mixer.update(0);
+      groundFeet();
+      handBone.updateWorldMatrix(true, false);
+      trailBuf.push({
+        a: bladeA.clone().applyMatrix4(handBone.matrixWorld),
+        b: bladeB.clone().applyMatrix4(handBone.matrixWorld),
+        t: 1
+      });
+    }
+    // ★force. 이 창구는 게임시간을 안 흘리고 클립만 손으로 미는 경로라
+    //   1/24 홀드에 걸리면 첫 호출 말고는 아무것도 안 그린다.
+    updateTrail(true);
+    return trailBuf.length;
+  };
+  // 감기는 리본은 매 프레임 누적이라 프레임을 세우면 안 보인다.
+  // 클립을 t0~t1 로 밀면서 실제 updateTrail/updateWrap 을 그대로 돌린다.
+  window.__bakeWrap = (clip, t0, t1, steps = 40, dtStep = 1 / 60) => {
+    const a = actions[clip];
+    if (!a || !handBone || !bladeOK) return 'no blade';
+    window.__freeze = true;
+    for (const k in actions) if (actions[k] !== a) actions[k].stop();
+    if (!a.isRunning()) { a.reset(); a.play(); }
+    a.setEffectiveWeight(1); a.paused = true; a.setEffectiveTimeScale(1);
+    trailBuf.length = 0; lastTip = null; released = false; coil = 1;
+    spray.length = 0;
+    trailGain = (clip === 'Heavy') ? 1.9 : 1.0;
+    for (let i = 0; i < steps; i++) {
+      a.time = t0 + (t1 - t0) * (i / (steps - 1));
+      mixer.update(0);
+      groundFeet();
+      handBone.updateWorldMatrix(true, false);
+      const pa = bladeA.clone().applyMatrix4(handBone.matrixWorld);
+      const pb = bladeB.clone().applyMatrix4(handBone.matrixWorld);
+      if (lastTip) tipSpeed = _spd.copy(pb).sub(lastTip).length() / Math.max(dtStep, 1e-3);
+      lastTip = (lastTip || new THREE.Vector3()).copy(pb);
+      swordFast = Math.min(1, Math.max(0, (tipSpeed / FAST_REF - 0.12) / 0.55));
+      if (swordFast > 0.55) released = true;
+      const dec = Math.pow(0.86, dtStep * 60);
+      for (const e of trailBuf) e.t *= dec;
+      trailBuf.push({ a: pa, b: pb, t: Math.max(0, (swordFast - 0.38) / 0.62) });
+      while (trailBuf.length > TRAIL_MAX) trailBuf.shift();
+      updateTrail(true);            // ★force. 위 __bakeTrail 과 같은 이유
+      updateWrap(dtStep, pa, pb, true);
+      const wk = Math.max(0, (swordFast - 0.38) / 0.62);
+      if (wk > 0.15 && curEl.spray > 0) spawnSpray(pa, pb, _spd.clone().normalize(),
+                                Math.round(2 + wk * 7), clip === 'Heavy' ? 1.5 : 1.0);
+      updateSpray(dtStep);
+    }
+    return { coil: +coil.toFixed(2), tipSpeed: +tipSpeed.toFixed(2), n: trailBuf.length };
+  };
+  // ── 판정 리치·각도 프로브 (9차) ──
+  // 비평가의 "거리 실측 35회" 를 사람 손 없이 재현한다. 클립을 프레임마다 세워
+  // **실제 판정 선분**(makeHitSeg 를 지난 값)을 만들고, 가상의 요괴 캡슐에 대고
+  // enemy.js 의 capsuleDist 로 물어본다. 즉 게임과 완전히 같은 계산이다.
+  //   clip  : 'Attack' | 'Heavy' | 'Wide'
+  //   dists : 잴 거리 목록(플레이어 중심 ~ 요괴 중심, m)
+  //   angs  : 잴 각도 목록(도. 0 = 정면, 180 = 등 뒤)
+  //   ext / cone : 규칙을 덮어써 **개선 전/후를 한 빌드에서** 잰다(-1 = 지금 값)
+  // 반환: [{ang, hits:[{d, hit}]}] 와 각도별 최대 명중 거리
+  window.__reach = (o = {}) => {
+    const clip = o.clip || 'Attack';
+    const a = actions[clip];
+    if (!a || !handBone || !bladeOK) return 'no blade';
+    const dists = o.dists || [1.0, 1.4, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.1, 3.2, 3.3, 3.4, 3.6, 4.0];
+    const angs = o.angs || [0, 30, 60, 75, 90, 120, 180];
+    const steps = o.steps || 90;
+    const extSave = _hitOverride.ext, coneSave = _hitOverride.cone;
+    if (o.ext !== undefined) _hitOverride.ext = o.ext;
+    if (o.cone !== undefined) _hitOverride.cone = o.cone;
+    // 플레이어를 정면(yaw 0)으로 세우고 클립을 훑는다
+    const yaw0 = root.rotation.y;
+    root.rotation.y = 0;
+    window.__freeze = true;
+    for (const k in actions) if (actions[k] !== a) actions[k].stop();
+    if (!a.isRunning()) { a.reset(); a.play(); }
+    a.setEffectiveWeight(1); a.paused = true; a.setEffectiveTimeScale(1);
+    const dur = a.getClip().duration;
+    const out = angs.map(ang => ({ ang, max: null, hits: [] }));
+    const px = root.position.x, pz = root.position.z, py = root.position.y;
+    const _pa = new THREE.Vector3(), _pb = new THREE.Vector3();
+    let prevTip = null;
+    const frames = [];
+    for (let i = 0; i < steps; i++) {
+      a.time = dur * (i / (steps - 1));
+      mixer.update(0);
+      groundFeet();
+      handBone.updateWorldMatrix(true, false);
+      _pa.copy(bladeA).applyMatrix4(handBone.matrixWorld);
+      _pb.copy(bladeB).applyMatrix4(handBone.matrixWorld);
+      // 타격 게이트(hot). enemy.js 와 **같은 식**이다: 칼끝 속도 -> swordFast,
+      // 히스테리시스 HOT_ON 0.42 / HOT_OFF 0.16. (그 상수는 enemy.js 소유라 여기 복사본이다.
+      //  값이 바뀌면 이 프로브도 같이 고쳐야 한다 - handoff_combat.md 에 적어 두었다.)
+      const dtF = dur / (steps - 1);
+      let fast = 0;
+      if (prevTip) fast = Math.min(1, Math.max(0, (_pb.distanceTo(prevTip) / dtF / FAST_REF - 0.12) / 0.55));
+      prevTip = _pb.clone();
+      frames.push({ a: _pa.clone(), b: _pb.clone(), fast });
+    }
+    let hotState = false;
+    for (const f of frames) {
+      hotState = hotState ? f.fast > 0.16 : f.fast > 0.42;
+      f.hot = hotState;
+    }
+    for (const rec of out) {
+      const th = rec.ang * Math.PI / 180;
+      for (const d of dists) {
+        // 정면(yaw 0)이 +z 다. 각도는 +z 에서 시계 반대로 돈다.
+        const ex = px + Math.sin(th) * d, ez = pz + Math.cos(th) * d;
+        let hit = false;
+        for (const f of frames) {
+          if (!f.hot) continue;
+          makeHitSeg(f.a, f.b);
+          if (enemies.capsuleDist(hitA, hitB, ex, ez, py, 1).hit) { hit = true; break; }
+        }
+        rec.hits.push({ d, hit });
+        if (hit) rec.max = d;
+      }
+    }
+    _hitOverride.ext = extSave; _hitOverride.cone = coneSave;
+    root.rotation.y = yaw0;
+    a.paused = false;
+    window.__freeze = false;
+    return { clip, ext: o.ext !== undefined ? o.ext : HIT_EXT,
+             cone: o.cone !== undefined ? o.cone : HIT_CONE_DEG, out };
+  };
+  window.__setAttackFrame = (f, fps = 30) => {
+    const a = actions.Attack;
+    if (!a) return -1;
+    window.__freeze = true;
+    for (const k in actions) if (actions[k] !== a) actions[k].stop();
+    if (!a.isRunning()) { a.reset(); a.play(); }
+    a.setEffectiveWeight(1);
+    a.paused = true;
+    a.time = Math.max(0, (f - 1) / fps);
+    current = a;
+    mixer.update(0);
+    groundFeet();
+    return a.time;
+  };
+}
+// ---------- 요괴 ----------
+// 판정용 히트박스를 새로 만들지 않는다. measureBlade() 가 실측한 칼날 선분
+// (swordA=코등이 / swordB=칼끝, 둘 다 월드 좌표)을 그대로 넘겨준다.
+// ── 벤 방향을 화면 각도로 ──
+// 붓질 슬래시도 초승달도 **화면에서** 벤 방향으로 누워야 한다. 월드 방향을 그대로
+// 쓰면 쿼터뷰에서 각이 죽어 전부 가로줄처럼 보인다. 투영해서 각을 낸다.
+const swingDir = new THREE.Vector3(0, 1, 0);
+let lastSwingHeard = -1;
+const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3();
+function screenAngle(x, y, z, dx, dy, dz) {
+  _s1.set(x, y, z).project(camera);
+  _s2.set(x + dx, y + dy, z + dz).project(camera);
+  const ax = (_s2.x - _s1.x) * camera.aspect, ay = _s2.y - _s1.y;
+  if (ax * ax + ay * ay < 1e-9) return { ang: 0, x: _s1.x * camera.aspect, y: _s1.y };
+  return { ang: Math.atan2(ay, ax), x: _s1.x * camera.aspect, y: _s1.y };
+}
+
+// ---------------------------------------------------------------- 판정 = 보이는 것 (9차)
+// 건틀릿 손맛 1위 격차: "이펙트는 화면에서 200~300px 인데 실제 판정은 2~3유닛.
+//   3~5배 괴리." + "밀착하면 yaw 0 · π · -π/2 어느 쪽을 봐도 맞는다 = 등 뒤도 베인다."
+//
+// 판정을 새로 만들지 않는다. enemy.js 에 넘기는 **칼날 선분**을 두 번 손보고 넘긴다.
+// (판정 코드는 enemy.js 소유라 안 건드린다. 넘기는 값만 바꾸면 잡몹·보스가 같이 따라온다.)
+//
+//   1) 리치 — 칼끝을 칼날 방향으로 HIT_EXT 만큼 늘린다. "긴 칼"과 같은 모양이라
+//      스윙 궤적을 그대로 따라간다(원 모양 판정을 덧대면 궤적과 어긋난다).
+//      값은 아래 __reach 프로브로 정면 명중 상한이 3.2m 가 되게 맞춘 것이다.
+//   2) 각도 게이트 — 플레이어 중심에서 **정면 ±HIT_CONE_DEG** 부채꼴 밖은 잘라낸다.
+//      2D 에서 반각 90도 미만인 원뿔은 **반평면 두 장의 교집합**과 정확히 같으므로,
+//      선분을 두 번 자르면 끝난다(결과는 언제나 부분선분 하나).
+//      다 잘려 나가면 플레이어 몸 안(정면 0.05m)의 점으로 접는다. 요괴는 몸 충돌
+//      때문에 0.81m 보다 가까이 못 오고 캡슐 반경은 0.54m 라, 그 점은 누구에게도 안 닿는다.
+//      ★null 을 넘기면 안 된다. enemy.js 가 직전 선분(hasPrevBlade)을 버려서
+//        스윕 판정이 한 프레임 끊긴다.
+// 보스가 마지막으로 친 벽시계 시각. 피격 방향을 되짚을 때 "범인이 보스인가"를 가른다.
+let lastBossFireAt = -99999;
+const HIT_EXT = 1.45;              // 칼끝 연장(m). 정면 상한 3.2m 가 나오는 값(프로브 실측)
+const HIT_CONE_DEG = 75;           // 정면 부채꼴 반각(도)
+// ★검증 프로브(__reach)가 **개선 전/후를 한 빌드에서** 재려고 잠시 덮어쓰는 자리다.
+//   -1 이면 위 상수를 쓴다. 게임 경로는 늘 -1 이라 실제 판정에는 영향이 없다.
+const _hitOverride = { ext: -1, cone: -1 };
+const hitA = new THREE.Vector3(), hitB = new THREE.Vector3();
+const _hx = new THREE.Vector3();
+// 반평면 하나로 선분 [P0,P1] 을 자른다. n 은 안쪽을 가리키는 법선(원점 = 플레이어).
+// 반환: 잘린 뒤에도 남아 있으면 true
+function clipHalf(p0, p1, nx, nz, ox, oz) {
+  const d0 = (p0.x - ox) * nx + (p0.z - oz) * nz;
+  const d1 = (p1.x - ox) * nx + (p1.z - oz) * nz;
+  if (d0 >= 0 && d1 >= 0) return true;
+  if (d0 < 0 && d1 < 0) return false;
+  const t = d0 / (d0 - d1);
+  if (d0 < 0) p0.lerp(p1, t); else p1.lerp(p0, t);
+  return true;
+}
+// ── 각도 게이트 검증 창구 ──
+// 실제로 벤 **타격 지점**이 몸에서 몇 도였는지 쌓는다. "등 뒤가 베였나"는 요괴 위치를
+// 추측할 게 아니라 이 값으로 답해야 한다(요괴는 계속 움직이므로 추측은 늘 흔들린다).
+// ?dev 에서만 쌓는다(평시에는 함수 한 번 호출하고 바로 나간다).
+function logHitAngle(x, z) {
+  if (!DEV) return;
+  const p = root.position;
+  let d = Math.atan2(x - p.x, z - p.z) - root.rotation.y;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  const arr = (window.__hitAng = window.__hitAng || []);
+  arr.push([+(d * 180 / Math.PI).toFixed(1), +Math.hypot(x - p.x, z - p.z).toFixed(2)]);
+  if (arr.length > 400) arr.shift();
+}
+
+// a,b = 실제 칼날(월드). 결과는 hitA/hitB 에 담아 그대로 반환한다.
+function makeHitSeg(a, b) {
+  const ext = _hitOverride.ext >= 0 ? _hitOverride.ext : HIT_EXT;
+  const coneDeg = _hitOverride.cone >= 0 ? _hitOverride.cone : HIT_CONE_DEG;
+  hitA.copy(a); hitB.copy(b);
+  // 1) 연장
+  _hx.copy(b).sub(a);
+  const L = _hx.length();
+  if (L > 1e-4 && ext > 0) hitB.addScaledVector(_hx.multiplyScalar(1 / L), ext);
+  if (coneDeg >= 180) return hitA;      // 게이트 없음(개선 전 비교용)
+  // 2) 정면 부채꼴로 자르기
+  const ox = root.position.x, oz = root.position.z;
+  const fx = Math.sin(root.rotation.y), fz = Math.cos(root.rotation.y);
+  // 부채꼴 경계 두 줄의 **안쪽 법선**. 경계는 정면을 ±(90-각)만큼 돌린 방향이다.
+  const rad = coneDeg * Math.PI / 180;
+  const s = Math.sin(rad), c = Math.cos(rad);
+  //   n1 = 정면을 -(90-각) 회전, n2 = +(90-각) 회전.  (원뿔 반각 < 90 이라 둘 다 안쪽을 본다)
+  const n1x = fx * s - fz * c, n1z = fx * c + fz * s;
+  const n2x = fx * s + fz * c, n2z = -fx * c + fz * s;
+  let ok = clipHalf(hitA, hitB, n1x, n1z, ox, oz);
+  if (ok) ok = clipHalf(hitA, hitB, n2x, n2z, ox, oz);
+  if (!ok) {                       // 칼이 통째로 뒤에 있다 = 이번 프레임은 아무도 안 벤다
+    hitA.set(ox + fx * 0.05, root.position.y + 0.9, oz + fz * 0.05);
+    hitB.copy(hitA);
+  }
+  return hitA;
+}
+
+const enemies = createEnemySystem({
+  scene, camera,
+  // 무리 자리는 맵이 정한다(level1.json 의 mobs[]). 마릿수·반경은 enemy.js 가 정한다.
+  mobs: level.mobs(),
+  getPlayerPos: () => root.position,
+  onRespawn: () => {
+    toSpawn();
+    vy = 0; grounded = true; jumping = false;
+    attacking = false; heavy = false;
+    atkClip = null; stepLeft = 0;   // 커밋·전진 스텝도 끊는다(죽은 자리의 관성이 남으면 안 된다)
+    dashLeft = 0; dashReadyT = -99; dashIfUntil = -99;   // 대시도 같이(쿨은 풀어 준다)
+    clearBuffer();               // 죽는 순간 눌러 둔 입력이 부활 프레임에 튀어나오면 안 된다
+    resetCombo(null);            // 죽고 되살아나면 누적 명중 수도 끊는다
+    // ★타격 지점 참격(feel.impactSlash)은 여기서 안 지운다. 한 장이 0.17~0.25초라
+    //   되살아나기(초 단위)까지 어차피 다 지나가 있다.
+    trailBuf.length = 0; spray.length = 0;
+  },
+  // ── 칼이 닿는 그 프레임 ──
+  // 여기 한 줄 한 줄이 "처치하는 맛"이다. 순서에 뜻이 있다:
+  //   멈춘다(히트스톱) -> 소리 -> 화면(참격 한 장·붓질·먹물). 소리가 늦으면 다 어긋난다.
+  onHit: (h) => {
+    const sa = screenAngle(h.x, h.y, h.z, swingDir.x, swingDir.y, swingDir.z);
+    // ★"N HIT" 은 여기서만 뜬다. 칼이 실제로 닿은 프레임이다.
+    showHit();
+    logHitAngle(h.x, h.z);           // 각도 게이트 검증(?dev 에서만 쌓인다)
+    if (h.kill) {
+      feel.kill(h.swing);
+      sfx.kill();
+      // ★5번째 인자 kind. 안 넘기면 feel.js 가 window.__dbg 를 훔쳐보며 기술을 **추측**한다.
+      //   heavy 는 수면참·횡일섬일 때만 켜지는 플래그라 그게 곧 감청(water)이다.
+      feel.slash(sa.ang, sa.x, sa.y, h.wiped, heavy ? 'water' : 'kill');
+      // ★맞은 자리에 참격 한 장(v92. 옛 spawnImpact = 가산합성 초승달 자리).
+      //   붓자국이 화면에 앉는 큰 획이라면 이건 요괴 가슴께에 서는 작은 획이다.
+      //   종류는 붓자국과 같은 규칙 - 수면참·횡일섬은 감청, 그 밖의 처치는 진홍.
+      feel.impactSlash(h.x, h.y, h.z, sa.ang, 0.95, heavy ? 'water' : 'kill');
+      spawnInk(h.x, h.y, h.z, swingDir.x, swingDir.y, swingDir.z, 26, 1.35);
+      // ★무리 전멸의 먹링은 **마지막으로 벤 자리**에 편다. 좌표를 안 넘기면 feel.js 가
+      //   직전 붓자국의 화면 좌표를 월드로 되짚는다(한 프레임만 지나도 못 찾고 버린다).
+      if (h.wiped) { feel.wipe(h.x, h.y, h.z); sfx.wipe(); }
+    } else {
+      // ★2~5번째 인자(v91). 안 죽인 한 대에도 **작은 참격 한 획**이 그어진다.
+      //   각도·자리는 처치와 같은 sa 를 쓴다. 크기·알파는 feel.js 가 줄인다
+      //   (임팩트 프레임과 찢김선은 안 붙는다 - 그건 처치의 몫이다).
+      feel.hit(h.swing, sa.ang, sa.x, sa.y, heavy ? 'water' : 'kill');
+      sfx.hit(1);
+      // ★안 죽인 명중은 감청 고정이다. 붉은색은 처치·피격 전용(오너 지시).
+      feel.impactSlash(h.x, h.y, h.z, sa.ang, 0.72, 'water');
+    }
+  },
+  // ── 맞은 방향 (9차. 손맛 7위 "어디서 맞았는지 모른다") ──
+  // ★enemy.js 는 출처 좌표를 콜백으로 안 넘긴다(넘기는 건 피해량뿐이다). 그래서
+  //   "지금 나를 때릴 수 있는 자리에 있는 놈"을 여기서 되짚는다. 보스가 방금 쳤으면
+  //   보스가 범인이고(0.35초 안), 아니면 제일 가까운 잡몹이다. 둘 다 없으면 무방향.
+  onPlayerHurt: () => {
+    feel.hurt(); sfx.hurt();
+    const p = root.position;
+    const B = window.__boss;
+    if (B && B.pos && performance.now() - lastBossFireAt < 350) hurtFrom(B.pos.x, B.pos.z);
+    else {
+      const t = enemies.nearestTo(p.x, p.z, 0);
+      if (t) hurtFrom(t.x, t.z); else hurtNoDir();
+    }
+  },
+});
+window.__enemy = enemies;
+// 은신 모듈에 플레이어 몸을 넘긴다. 숨으면 몸이 반투명해지고 그림자가 꺼진다.
+// ★root 는 캐릭터를 바꿔도 그대로 남는 그룹이다(F 로 바꾸면 자식만 갈린다).
+//   stealth 쪽이 자식 수 변화를 보고 재질 목록을 다시 훑는다.
+stealth.attachPlayer(root);
+window.__stealth = stealth;
+// 검증용 창구. ?dev 없이도 켜 둔다(읽기 전용이라 게임 동작에 영향이 없고, 실제
+// 60fps 로 도는 판에서 플레이어가 어디 있는지 봐야 한 판을 끝까지 몰아볼 수 있다).
+window.__pos = () => ({ x: +root.position.x.toFixed(2), y: +root.position.y.toFixed(2),
+                        z: +root.position.z.toFixed(2), yaw: +root.rotation.y.toFixed(3),
+                        hp: enemies.hp, kills: enemies.kills });
+// ── 이동 캔슬·전진 스텝 검증 창구 (S1·S3) ──
+// 읽기 전용이다. "지금 커밋 구간인가 / 언제부터 끊을 수 있나"를 숫자로 봐야
+// 정지 시간을 실측할 수 있다. ?dev 없이도 열어 두는 이유는 __pos 와 같다
+// (실제 60fps 로 도는 판에서 재야 의미가 있다).
+window.__atk = () => ({
+  clip: atkClip, attacking,
+  since: atkClip ? +(gameT - atkStartT).toFixed(3) : -1,
+  commit: atkClip ? commitNow() : 0,
+  step2: comboStep,
+  struck: atkStruck, hot: enemies.hot,
+  sinceHit: atkHitT > -90 ? +(gameT - atkHitT).toFixed(3) : -1,
+  cancelable: canCancelAttack(gameT),
+  step: +stepDist.toFixed(3), stepLeft: +stepLeft.toFixed(3),
+  snapR: SNAP_R,
+  buf: BUF.kind, bufAge: BUF.kind ? +(gameT - BUF.t).toFixed(3) : -1,
+  starts: atkStarts,               // 클립이 새로 시작된 누적 횟수(= 입력이 실제로 나간 수)
+});
+// ── 대시 검증 창구 (9차) ──
+// 쿨·무적·남은 시간을 숫자로 본다. ?dev 없이도 연다(__atk 와 같은 이유).
+window.__dash = () => ({
+  left: +dashLeft.toFixed(3), ready: dashReady(gameT),
+  cdLeft: +Math.max(0, dashReadyT - gameT).toFixed(3),
+  ifLeft: +Math.max(0, dashIfUntil - gameT).toFixed(3),
+  dist: DASH_DIST, dur: DASH_DUR, cd: DASH_CD, iframe: DASH_IFRAME,
+  gone: +dashGone.toFixed(3),
+});
+// ── 판정 리치 창구 (9차) ──
+// 지금 프레임에 enemy.js 로 넘어간 **판정 선분**과 그 규칙 값.
+window.__reachCfg = () => ({ ext: HIT_EXT, coneDeg: HIT_CONE_DEG,
+  segA: hitA.toArray().map(v => +v.toFixed(3)),
+  segB: hitB.toArray().map(v => +v.toFixed(3)) });
+// ── 규칙 A/B 창구 (9차) ──
+// ★?dev 밖에 두는 이유는 __atk 와 같다. **실제 60fps 로 도는 판**에서 재야 의미가 있는데
+//   ?dev 는 루프가 setTimeout(16) 이라 게임시계가 벽시계보다 느리게 흐른다(측정이 왜곡된다).
+//   부르지 않으면 아무 일도 안 하는 읽기/설정 창구라 평시 동작에 영향이 없다.
+// 후딜 캔슬 규칙: 'old'(9차 이전) | 'new'(지금)
+window.__cancelMode = (m) => { if (m) cancelMode = m; return cancelMode; };
+// 판정 규칙: ext(칼끝 연장 m) · cone(정면 부채꼴 반각. 180 = 게이트 없음). -1 = 기본값
+window.__hitRule = (o = {}) => {
+  if (o.ext !== undefined) _hitOverride.ext = o.ext;
+  if (o.cone !== undefined) _hitOverride.cone = o.cone;
+  return { ext: _hitOverride.ext, cone: _hitOverride.cone, defExt: HIT_EXT, defCone: HIT_CONE_DEG };
+};
+// 표적 거리 d 에서 전진 스텝이 몇 m 인지(사거리 검증 스크립트가 쓴다)
+window.__atkStep = d => +stepDistFor(d).toFixed(3);
+
+// ---------- 보스 · 증표 · 탈출 ----------
+// 층을 "깨는" 부분이다. 자리(보스 마당·아레나·탈출구)는 전부 맵이 정한다.
+// ★플레이어 체력은 enemy.js 가 한 군데서 관리한다. 보스는 그 문(damagePlayer)만 쓴다.
+//   여기서 체력을 따로 들면 체력바가 두 개가 되고 무적 시간이 갈라진다.
+const boss = createBossSystem({
+  scene,
+  getPlayerPos: () => root.position,
+  // ★대시 무적은 여기서 막는다. 보스 피해는 **반드시** 이 콜백을 지나므로,
+  //   enemy.js 에 무적 창구가 없어도 보스 쪽은 이 한 줄로 온전히 막힌다.
+  //   (잡몹은 enemy.js 안에서 자기 damagePlayer 를 직접 불러서 여기를 안 지난다.
+  //    그쪽은 setIframe 창구가 붙으면 같이 먹는다 - handoff_combat.md 참고.)
+  damagePlayer: (n) => (gameT < dashIfUntil ? 0 : enemies.damagePlayer(n)),
+  isPlayerDead: () => enemies.dead,
+  getKills: () => enemies.kills,
+  // 보스는 "무슨 일이 났는지"만 알린다. 소리·연출은 여기서 붙인다.
+  // ★예고음은 예고 시작 그 프레임에, 예고 시간(dur)을 그대로 받아 올라간다.
+  //   소리 쪽에서 시간을 다시 재면 언젠가 반드시 어긋난다.
+  onEvent: (name, d) => {
+    if (name === 'tell') sfx.bossTell(d.dur, d.atk);
+    else if (name === 'tellEnd') sfx.stopTell();
+    else if (name === 'fire') {
+      sfx.bossHit(); feel.shake(0.10, 0.24); lastBossFireAt = performance.now();
+      // 판정이 나가는 **그 프레임**의 보스-플레이어 거리. "예고 안에 장판을 벗어났는가"는
+      // 이 값으로만 답할 수 있다(몇 프레임 뒤에 재면 보스가 이미 움직인 뒤다). ?dev 전용.
+      if (DEV) {
+        const bp = window.__boss ? window.__boss.pos : null;
+        const arr = (window.__fireLog = window.__fireLog || []);
+        arr.push({ atk: d.atk, t: +performance.now().toFixed(0),
+                   dist: bp ? +Math.hypot(root.position.x - bp.x, root.position.z - bp.z).toFixed(2) : -1 });
+        if (arr.length > 200) arr.shift();
+      }
+    }
+    else if (name === 'hit') {
+      showHit();                 // 보스도 맞으면 콤보 단수가 뜬다(잡몹과 같은 규칙)
+      logHitAngle(d.x, d.z);     // 각도 게이트 검증(잡몹과 같은 창구)
+      feel.hit(d.swing);
+      sfx.hit(d.heavy ? 1.25 : 1);
+      const sa = screenAngle(d.x, d.y, d.z, swingDir.x, swingDir.y, swingDir.z);
+      // 보스 타격도 같은 한 장을 쓴다(크기만 크다). 감청 - 처치가 아니다.
+      feel.impactSlash(d.x, d.y, d.z, sa.ang, d.heavy ? 1.35 : 0.9, 'water');
+    } else if (name === 'die') {
+      // 보스가 쓰러진 자리에 먹링을 편다. 좌표를 안 넘기면 붓자국이 없어서
+      // feel.js 가 되짚기에 실패하고 링이 아예 안 뜬다(그 경로를 안 쓰게 만든다).
+      const bp = window.__boss ? window.__boss.pos : null;
+      if (bp) feel.wipe(bp.x, 0, bp.z); else feel.wipe();
+      sfx.wipe();
+    }
+    else if (name === 'token') sfx.token();
+    else if (name === 'clear') sfx.clear();
+  },
+});
+window.__boss = boss;
+
+// ---------- 연출 껍데기 ----------
+// 입장 타이틀 카드·보스 조우 배너·사망/클리어 화면·조작 안내·HUD 톤. 전부 DOM 이라
+// 게임 로직과 안 섞인다. 상태는 window.__boss / window.__enemy 를 읽기만 한다.
+// 쿼리(?v=..)를 물려주는 이유는 위 모듈들과 같다.
+const ui = await import('./ui.js' + location.search);
+ui.initUI();
+
+function tick() {
+  nextFrame(tick);
+  __frames++;
+  window.__tickN = __frames;
+  window.__hasHand = !!handBone;
+  // ── 시간 ──
+  // ★여기서 dt 를 **한 번만** 스케일한다. 아래로 흐르는 dt 는 전부 게임시간이라
+  //   mixer·요괴·보스·궤적이 같은 값으로 멈춘다. 카메라 이동과 흔들림만 rawDt 를 쓴다.
+  // ★__slow 는 **검증 전용** 배속이다(기본 1). 0.15 로 두면 게임·연출·흔들림이
+  //   통째로 6배 느려져서 60~200ms 짜리 타격 연출을 스크린샷으로 잡을 수 있다.
+  //   게임 로직은 그대로 도므로 "느리게 재생한 실제 판"이지 별도 데모가 아니다.
+  const rawDt = Math.min(0.05, clock.getDelta()) * (window.__slow || 1);
+  // ★부팅 게이트는 **클램프 전 값**을 봐야 한다. rawDt 는 0.05 로 잘려 있어서
+  //   1.3초짜리 파싱 히치도 0.05 로 보인다. clock.getDelta 는 이미 소비됐으므로
+  //   프레임 사이 벽시계 간격을 따로 잰다.
+  const _wall = performance.now();
+  bootGate((_wall - lastFrameWall) / 1000);
+  lastFrameWall = _wall;
+  const dt = rawDt * feel.step(rawDt);
+  gameT += dt;
+  const now = gameT;                 // 게임 안의 모든 "지금"은 이 시계를 본다
+  for (const m of glowMats) m.userData.u.uT.value = now;
+  trailMat.uniforms.uT.value = now;
+
+  // 이동
+  let mx = 0, mz = 0;
+  if (keys.KeyW || keys.ArrowUp) mz -= 1;
+  if (keys.KeyS || keys.ArrowDown) mz += 1;
+  if (keys.KeyA || keys.ArrowLeft) mx -= 1;
+  if (keys.KeyD || keys.ArrowRight) mx += 1;
+  const running = !!(keys.ShiftLeft || keys.ShiftRight);
+  // 미리보기 중에는 이동 입력을 무시한다. 걸어가 버리면 모션을 볼 수가 없다.
+  // (카메라·조명은 그대로 두므로 마우스 시점·휠 줌은 계속 된다)
+  // ★층 돌파 뒤에도 같다. 키가 이미 눌린 채로 판이 끝나면 keydown 게이트를 안 지나므로
+  //   여기서 한 번 더 끊어야 "패널 뜬 채로 걸어다니는" 그림이 안 나온다.
+  const cleared = !!boss.cleared;
+  if (preview.on || cleared) { mx = 0; mz = 0; }
+  if (dashLeft > 0) { mx = 0; mz = 0; }      // 대시 중에는 방향키가 궤도를 못 휜다
+  // ── 선입력 풀기 (9차) ──
+  // ★이동 캔슬보다 **먼저** 본다. 예약해 둔 공격이 있으면 그게 이번 프레임의 답이다.
+  //   (뒤에 두면 방향키를 누른 채 연타할 때 이동 캔슬이 먼저 먹어서 예약이 버려진다.)
+  if (bufferAlive(now) && dashLeft <= 0 && !cleared && !preview.on &&
+      (!attacking || canCancelAttack(now))) {
+    const k = BUF.kind;
+    clearBuffer();
+    if (k === 'atk') tryAttack();
+    else if (k === 'heavy') tryHeavy();
+    else if (k === 'wide') tryWide();
+    else if (k === 'dash') tryDash();
+  } else if (BUF.kind && !bufferAlive(now)) {
+    // ★예약이 만료됐다 = 그 입력은 끝내 안 나갔다. **그때만** 거부 피드백을 낸다
+    //   (손맛 8위 "씹힘인지 버그인지 구분 불가"). Z 는 뺀다 - 연타로 누르는 키라
+    //   흘린 입력마다 소리를 내면 그게 잡음이 된다.
+    if (BUF.kind === 'heavy' || BUF.kind === 'wide' || BUF.kind === 'dash') deny(BUF.kind);
+    clearBuffer();
+  }
+  // ── 이동 캔슬 (S1) ──
+  // ★위 두 줄 **뒤에** 있어야 한다. 미리보기·층 돌파에서는 mx/mz 가 이미 0 이라
+  //   여기서 저절로 안 걸린다(게이트를 또 적을 필요가 없다).
+  // 타격이 끝난 회복 동작만 끊는다. 판단 근거는 canCancelAttack(= enemy.js 의 hot).
+  if (attacking && (mx || mz) && canCancelAttack(now)) {
+    attacking = false; heavy = false; atkClip = null;
+    clearBuffer();                   // 이동을 택한 프레임이다. 예약해 둔 Z 를 자동으로 잇지 않는다
+    // 캔슬한 그 프레임에 바로 걸음으로 넘긴다. 아래 상태 기계가 다음 프레임에 해도
+    // 되지만, 한 프레임이라도 Attack 포즈로 미끄러지면 "밀린다"로 읽힌다.
+    // 크로스페이드를 기본(0.18)보다 짧게 주는 이유도 같다.
+    // ★comboWindow 는 **일부러 안 건드린다.** 캔슬 뒤에 Z 를 이으면 다음 타로 이어져야 한다.
+    play(running ? 'Run' : 'Walk', 0.12);
+  }
+  const moving = (mx || mz) && !attacking && dashLeft <= 0;
+  if (moving) {
+    fwd.set(Math.sin(yaw), 0, Math.cos(yaw));
+    rightv.set(Math.cos(yaw), 0, -Math.sin(yaw));
+    move.set(0, 0, 0).addScaledVector(fwd, mz).addScaledVector(rightv, mx).normalize();
+    const spd = running ? curCfg.run.spd : curCfg.walk.spd;
+    // ★벽에 부딪히면 멈추는 게 아니라 미끄러진다(level.js slide). 이동을 통째로
+    //   취소하면 벽을 스치며 걸을 때마다 딱딱 멈춰서 조작이 답답해진다.
+    //   몸이 향하는 방향(targetYaw)은 밀려난 결과가 아니라 **입력**으로 정한다.
+    //   밀려난 방향으로 돌리면 벽에 붙어 걸을 때 몸이 벽을 향해 홱 돈다.
+    const st = level.slide(root.position.x, root.position.z,
+                           move.x * spd * dt, move.z * spd * dt, level.PLAYER_RADIUS);
+    root.position.x = st.x;
+    root.position.z = st.z;
+    const targetYaw = Math.atan2(move.x, move.z);
+    let d = targetYaw - root.rotation.y;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    root.rotation.y += d * Math.min(1, dt * 14);
+  }
+
+  // ── 대시 (9차) ──
+  // ★게임시간(dt)으로 민다. 히트스톱이 걸려 있으면 대시도 같이 멈춰야 화면과 안 어긋난다.
+  // ★벽 통과는 이동·전진스텝과 **같은 level.slide** 를 지난다(규칙이 갈라지면 안 된다).
+  //   그래서 벽에 막히면 그만큼 덜 간다 = "벽으로는 못 피한다"가 저절로 성립한다.
+  if (dashLeft > 0) {
+    const p0 = dashGone;
+    dashLeft = Math.max(0, dashLeft - dt);
+    dashGone = dashEase(1 - dashLeft / DASH_DUR) * DASH_DIST;
+    const k = dashGone - p0;
+    const st = level.slide(root.position.x, root.position.z,
+                           dashDX * k, dashDZ * k, level.PLAYER_RADIUS);
+    root.position.x = st.x;
+    root.position.z = st.z;
+    if (dashLeft <= 0) { dashGone = 0; restoreDashTs(); }
+  }
+
+  // ── 전진 스텝 (S3) ──
+  // 공격 시작에 섞이는 0.14초짜리 짧은 미끄러짐. 몸이 향한 쪽으로만 간다.
+  // ★몸 방향은 스냅(enemy.js stepSnap, 0.09초)이 매 프레임 돌리고 있으므로,
+  //   여기서 그때그때 root.rotation.y 를 읽으면 스텝이 스냅을 따라 휜다
+  //   = "돌면서 한 발 들어간다". 시작 순간의 방향으로 고정하면 옆으로 새 보인다.
+  // ★벽 통과는 level.slide 가 막는다(이동과 같은 함수라 규칙이 갈라지지 않는다).
+  if (stepLeft > 0) {
+    const p0 = 1 - stepLeft / STEP_DUR;
+    stepLeft = Math.max(0, stepLeft - dt);
+    const k = (stepEase(1 - stepLeft / STEP_DUR) - stepEase(p0)) * stepDist;
+    const yy = root.rotation.y;
+    const st = level.slide(root.position.x, root.position.z,
+                           Math.sin(yy) * k, Math.cos(yy) * k, level.PLAYER_RADIUS);
+    root.position.x = st.x;
+    root.position.z = st.z;
+  }
+
+  // 중력·착지·지면 높이
+  // ★바닥은 더 이상 y=0 평면이 아니다. 맵 평지가 0.02 이고 대웅전 단 위는 0.22 다.
+  //   groundFeet() 가 root.position.y 를 기준으로 발을 붙이므로 여기만 맞추면 된다.
+  const gy = level.groundY(root.position.x, root.position.z);
+  if (!grounded || vy !== 0) {
+    vy -= GRAV * dt;
+    root.position.y += vy * dt;
+    if (root.position.y <= gy) { root.position.y = gy; vy = 0; grounded = true; }
+  } else if (root.position.y !== gy) {
+    // 단을 오르내릴 때. 20cm 를 한 프레임에 순간이동하면 눈에 띄니 0.1초쯤 걸려 따라간다.
+    // (완전한 지형 추종은 아니다. 맵에 올라설 수 있는 건 20~26cm 단 셋뿐이라 이걸로 족하다)
+    root.position.y += (gy - root.position.y) * Math.min(1, dt * 18);
+    if (Math.abs(gy - root.position.y) < 0.002) root.position.y = gy;
+  }
+
+  if (attacking && now > attackEnd) {
+    attacking = false; heavy = false; atkClip = null;
+    // ★예약(선입력)을 푸는 자리는 이제 루프 위쪽 한 군데다(캔슬 프레임 포함).
+    //   여기서 또 풀면 같은 입력이 두 번 나간다.
+  }
+  // 그림자 카메라가 캐릭터를 따라가야 범위를 좁게 유지할 수 있다(= 선명한 그림자).
+  key.target.position.copy(root.position);
+  key.position.set(root.position.x + 5, 9, root.position.z + 4);
+
+  if (mixer && !window.__freeze && preview.on) {
+    // ── 미리보기 모드 ──
+    // ★아래 상태 기계 블록을 통째로 건너뛴다. 저 블록은 매 프레임 play('Idle') /
+    //   play('Walk') 를 부르기 때문에, 안 건너뛰면 고른 클립이 다음 프레임에 바로 덮인다.
+    //   점프 보정(actions.Jump.time 조작)도 여기선 안 돈다. 점프 클립이 없는 캐릭터에서
+    //   undefined.time 으로 루프가 죽던 그 코드 경로를 아예 안 밟는다는 뜻이다.
+    //   재생속도는 액션의 timeScale 을 안 건드리고 mixer 에 먹이는 dt 로만 조절한다.
+    //   (걷기/달리기는 timeScale 이 캐릭터마다 다르게 박혀 있어서 손대면 게임이 틀어진다)
+    mixer.update(preview.paused ? 0 : dt * preview.rate);
+    if (grounded) groundFeet();
+  } else if (mixer && !window.__freeze) {
+    if (attacking) { /* Attack 유지 */ }
+    else if (dashLeft > 0) { /* 대시 클립 유지. 안 막으면 아래 play('Idle') 이 매 프레임 덮는다 */ }
+    else if (jumping) { /* Jump 유지 */ }
+    else if (moving) play(running ? 'Run' : 'Walk');
+    else play('Idle');
+    mixer.update(dt);
+    if (jumping && !actions.Jump) {
+      // ★점프 클립이 없는 캐릭터(Meshy 임포트 등)에서 여기서 a.time 을 건드려
+      // TypeError 가 나면 렌더 루프가 통째로 멈춘다(스페이스 누르면 정지).
+      if (grounded) jumping = false;
+    } else if (jumping) {
+      const a = actions.Jump;
+      const J = curCfg.jump || DEF_CFG.jump;
+      const RISE = J.rise, FALL = J.fall, LAND = J.land, END = J.end;
+      if (!grounded) {
+        // 체공시간이 상황마다 다르므로 구간마다 버틴다.
+        // 올라갈 땐 무릎을 당긴 채, 내려올 땐 발을 내린 채.
+        // 상한만 걸어 시간이 자연히 흐르게 한다. 특정 프레임에 강제 대입하면
+        // 정점에서 7 -> 13 으로 건너뛰어 다리가 툭 펴지는 스냅이 생긴다.
+        a.time = Math.min(a.time, vy > 0 ? RISE : FALL);
+      } else {
+        if (a.time < LAND) a.time = LAND;          // 착지 구간부터 이어붙인다
+        if (a.time >= END - 1e-3) jumping = false;
+      }
+      mixer.update(0);
+    }
+    if (grounded) groundFeet();      // 공중에선 접지를 끄지 않으면 다리 접기가 상쇄된다
+  }
+
+  // 칼 궤적 기록 (칼날 축은 measureBlade 가 실측한 값)
+  // __freeze 중에는 건드리지 않는다 - __bakeTrail 이 구워둔 궤적이 덮어써진다.
+  // ── 궤적 크기 ──
+  // ★오너: "일반 Z 3연타에도 물의 호흡 궤적을 크고 또렷하게. 3타는 특히 크게."
+  //   귀멸에서 잡졸을 벨 때도 물결이 화면을 쓸고 지나간다. 예전 값(일반 1.15)은
+  //   일격기(2.4)와 격차가 너무 커서 3연타가 "그냥 칼질"로 보였다.
+  //   한 클립 안에서 1타 1.55 -> 2타 1.80 -> 3타 2.20 으로 **점점 커지게** 한다.
+  //   마무리가 제일 커야 3연타가 하나의 문장으로 읽힌다.
+  let gainTarget = 1.15;
+  if (heavy) gainTarget = 2.4;
+  else if (attacking) {
+    gainTarget = 1.55;
+    if (current && current === actions.Attack) {
+      const cdur = current.getClip().duration;
+      const u = cdur > 0 ? current.time / cdur : 0;
+      gainTarget = u > 0.58 ? 2.05 : (u > 0.30 ? 1.75 : 1.50);
+    }
+  }
+  trailGain += (gainTarget - trailGain) * Math.min(1, dt * 9);
+  if (handBone && bladeOK && !window.__freeze) {
+    handBone.updateWorldMatrix(true, false);
+    const a = swordA.copy(bladeA).applyMatrix4(handBone.matrixWorld).clone();
+    const b = swordB.copy(bladeB).applyMatrix4(handBone.matrixWorld).clone();
+    // 칼끝 속도 하나로 둘을 함께 몬다:
+    //   느리다(들어올릴 때) -> 리본이 칼을 감고, 궤적은 거의 안 생긴다
+    //   빠르다(벨 때)       -> 리본이 풀려 꼬리가 되고, 궤적(파도)이 터진다
+    if (lastTip) tipSpeed = _spd.copy(b).sub(lastTip).length() / Math.max(dt, 1e-3);
+    lastTip = (lastTip || new THREE.Vector3()).copy(b);
+    // ★이번 프레임 칼끝 진행 방향. onHit 이 붓질·초승달을 이 방향으로 눕힌다.
+    //   _spd 는 아래에서 여러 번 재사용되므로 여기서 따로 떠 둔다.
+    if (_spd.lengthSq() > 1e-9) swingDir.copy(_spd).normalize();
+    swordFast = Math.min(1, Math.max(0, (tipSpeed / FAST_REF - 0.12) / 0.55));
+    // ★3연타는 **마지막 3타**에서 터져야 한다.
+    // 이펙트는 "칼끝이 제일 빨라지는 순간" 한 번 터지는데, 2026-08-08 에 베기 모션을
+    // 되돌리면서 1타가 3타보다 빨라졌다(1타 43.8 / 3타 39.6 m/s). 그래서 첫 방에
+    // 다 터지고 나머지 두 방이 밋밋해졌다. 속도만 보면 안 되고 **클립 진행도**를 같이 본다.
+    // 수면참·횡일섬은 한 방짜리라 게이트를 안 건다.
+    let burstOK = true;
+    if (current && current === actions.Attack) {
+      const cd = current.getClip().duration;
+      burstOK = cd > 0 && current.time > cd * 0.58;   // 3타 구간
+    }
+    if (attacking && swordFast > 0.55 && burstOK) {
+      if (!released) spawnBurst(a, b, _spd);   // 타격 순간 한 번: 충격 링 + 물보라
+      released = true;
+    }
+    // 모으는 동안(느릴 때)엔 물자국을 아예 안 남긴다. 조금이라도 남기면
+    // 어두운 판때기가 칼 뒤에 붙어 '기를 모으는' 그림을 망친다.
+    const wake = Math.max(0, (swordFast - 0.28) / 0.72);
+    // ★별똥별 꼬리: 기록된 순간부터 계속 삭는다. 예전엔 저장된 26개를 전부
+    // 살려둬서, 칼이 호를 다 그리고 나면 지나간 자국이 통째로 남아 "그려놓은 호"가 됐다.
+    // 실제 꼬리는 머리 쪽만 진하고 뒤는 이미 흩어져 있다.
+    // ★"자유로운 물결": 물은 칼 궤적에 붙박이가 아니라 **칼을 떠나 날아간다.**
+    // 각 샘플에 기록 순간의 칼끝 속도를 심어두고 매 프레임 그 방향으로 흘려보낸다.
+    // 곡률(회전)을 살짝 줘서 뻗어나가며 말리게 한다. 이게 없으면 스윙 폭 그대로의
+    // 짧은 호로 끝난다(오너: "칼도 시원하게, 지금 너무 짧아").
+    // ★v92. 0.90 -> 0.92. 알파 계단의 밑을 잘라(0.05 -> 0.13) 반투명 꼬리를 없앴더니
+    //   궤적이 눈에 보이는 시간이 0.47초에서 0.32초로 짧아졌다(오너는 "시원하게" 길기를
+    //   원한다). 삭는 속도를 늦춰 되돌린다: 0.92 면 1.0 -> 0.13 까지 24.5프레임 = 0.41초.
+    //   화면 덮임은 여유가 있다(Z 연타 최악 프레임 1.67%, v91 은 2.06%).
+    const decay = Math.pow(0.92, dt * 60);
+    for (const e of trailBuf) {
+      e.t *= decay;
+      if (e.vb) {
+        e.a.addScaledVector(e.va, dt);
+        e.b.addScaledVector(e.vb, dt);
+        e.vb.applyAxisAngle(_advAxis, 1.3 * dt);
+        e.va.multiplyScalar(Math.pow(0.40, dt));
+        e.vb.multiplyScalar(Math.pow(0.40, dt));
+      }
+    }
+    const invDt = 1 / Math.max(dt, 1e-3);
+    trailBuf.push({ a, b, t: attacking ? wake : 0,
+      va: _spd.clone().multiplyScalar((attacking ? 0.10 : 0) * invDt),
+      vb: _spd.clone().multiplyScalar((attacking ? 0.32 : 0) * invDt) });
+    while (trailBuf.length > TRAIL_MAX) trailBuf.shift();
+    updateTrail();
+    updateWrap(dt, a, b, attacking);
+    // 베는 동안에만 조각이 튄다. 세게 벨수록 많이.
+    if (attacking && wake > 0.15) {
+      sprayAcc += dt * 60 * (2 + wake * 9) * (heavy ? 1.7 : 1.0) * curEl.spray;
+      const nSp = Math.floor(sprayAcc);
+      sprayAcc -= nSp;
+      if (nSp > 0) spawnSpray(a, b, _spd.clone().normalize(), nSp, heavy ? 1.5 : 1.0);
+    }
+    updateSpray(dt);
+    updateBursts(dt);
+  }
+  // ★타격 지점 참격은 이제 feel.js 안에서 돈다(updateOverlay). 게임시계로 늙는
+  //   성질은 그대로 옮겼다 - 히트스톱 중에는 한 장을 붙들고 있다가 풀리면서 이어진다.
+  //   실제 dt 로 돌리면 멈춘 사이에 여섯 장이 혼자 다 지나가 버린다.
+
+  // ── 요괴 ──
+  // 타격 구간은 칼끝 속도(swordFast)로 정한다. 궤적(trail)이 진해지는 구간과
+  // 같은 신호를 쓰므로 "눈에 보이는 칼 궤적 = 판정"이 구조적으로 보장된다.
+  // 칼이 없는 캐릭터(기본·기본2)는 bladeOK 가 false 라 a/b 가 null 로 나가고,
+  // 그러면 판정 자체가 안 돈다(에러 없음).
+  {
+    // ★은신 판정은 요괴보다 **먼저** 돌아야 한다. 요괴가 이번 프레임의 canSee 를
+    //   읽기 때문이다. 순서가 뒤집히면 한 프레임 늦은 상태로 어그로가 걸린다.
+    //   moving/running 은 위 이동 블록이 이번 프레임에 계산한 값 그대로다
+    //   (걷기는 조용하고 달리기는 소리가 샌다 = 수풀에서 달리면 들킨다).
+    stealth.update(dt, { x: root.position.x, z: root.position.z,
+                         moving: !!moving, running: running && !!moving, attacking });
+    const bladeLive = !!(handBone && bladeOK && !window.__freeze);
+    // ★판정에 넘기는 선분은 **보이는 칼 그대로가 아니다**(위 makeHitSeg 주석).
+    //   리치를 조금 늘리고 정면 부채꼴 밖을 잘라 낸 선분이다. 잡몹·보스가 같은 값을 본다.
+    if (bladeLive) makeHitSeg(swordA, swordB);
+    enemies.update(dt, {
+      a: bladeLive ? hitA : null,
+      b: bladeLive ? hitB : null,
+      attacking,
+      fast: bladeLive ? swordFast : 0,
+      // ★층 돌파 뒤에는 요괴도 멈춘다. 입력만 잠그면 "층 돌파" 패널이 뜬 채로 요괴가
+      //   계속 때리고, 그 넉백(enemy.js damagePlayer)이 플레이어를 조금씩 밀어낸다.
+      //   판이 끝난 화면에서 움직이는 건 아무것도 없어야 한다.
+      paused: preview.on || cleared,
+    });
+    // ★이동 캔슬(S1)의 근거를 여기서 적는다. 이번 프레임의 타격 구간(hot)은 방금
+    //   enemies.update 가 정했다. 위쪽 이동 블록은 **한 프레임 전 값**을 보게 되는데,
+    //   그 방향의 오차는 "한 프레임 늦게 끊긴다" 뿐이라 안전한 쪽이다
+    //   (반대로 미리 끊으면 칼이 나가는 중에 걸음으로 넘어간다).
+    if (attacking && enemies.hot) atkStruck = true;
+    // ★보스는 enemies 다음에 돈다. 이유가 두 개다.
+    //   1) 스윙 번호(hot/swing)를 enemy.js 가 이번 프레임에 갱신한 뒤 받아야 한다.
+    //      보스가 임계값을 다시 정의하면 잡몹과 판정 구간이 갈라진다.
+    //   2) 플레이어가 죽는 프레임을 보스가 봐야 증표를 **그 자리에** 떨어뜨린다.
+    boss.update(dt, {
+      a: bladeLive ? hitA : null,
+      b: bladeLive ? hitB : null,
+      hot: enemies.hot,
+      swing: enemies.swing,
+      heavy,
+      paused: preview.on,
+    });
+    // ── 휘두름 소리 ──
+    // ★스윙 번호가 올라가는 그 프레임에 낸다. 키를 누른 순간이 아니다.
+    //   3연타 클립 하나에 스윙이 셋이라 키 입력에 맞추면 소리가 한 번만 나고,
+    //   무엇보다 **칼이 실제로 빨라지는 순간**과 어긋나서 따로 논다.
+    //   공격 클립이 없는 캐릭터(기본·기본2)는 attacking 자체가 안 켜져서 여기 안 온다.
+    if (enemies.swing !== lastSwingHeard) {
+      lastSwingHeard = enemies.swing;
+      if (!heavy) sfx.swing(0.9 + Math.random() * 0.25);
+    }
+  }
+
+  // 카메라
+  // ★카메라 흔들림(피격·처치)은 **실제 dt** 로 돈다. 히트스톱으로 세계가 멈춘
+  //   45~120ms 동안에도 화면은 계속 떨려야 "멈춘 것"이 아니라 "때린 것"으로 읽힌다.
+  feel.updateShake(rawDt);
+  placeCamera(rawDt * 12);
+  // 화면 겹(붓질 슬래시·속도선)도 실제 dt. 카메라와 같은 시계를 쓴다.
+  feel.updateOverlay(rawDt);
+
+  if (comboT > 0) {
+    comboT -= dt;
+    comboEl.style.opacity = Math.max(0, Math.min(1, comboT * 1.6));
+    comboEl.style.transform = 'translateX(-50%) scale(' + (1 + (0.9 - comboT) * 0.12) + ')';
+  } else comboEl.style.opacity = 0;
+
+  // ── 방향 비네트 · 대시 칩 (9차) ──
+  // ★비네트는 **실제 dt(rawDt)** 로 늙는다. 히트스톱으로 세계가 멈춘 동안에도
+  //   화면은 계속 흘러야 "멈춘 것"이 아니라 "맞은 것"으로 읽힌다(feel.updateShake 와 같은 규칙).
+  if (hurtDirT > 0) {
+    hurtDirT -= rawDt;
+    if (hurtDirT <= 0) hurtDirEl.classList.remove('on');
+  }
+  if (dashChip) {
+    const ready = dashReady(now);
+    // 대시 중에도 "불가"로 보여야 한다(쿨이 이미 돌기 시작했다)
+    dashChip.classList.toggle('rdy', ready);
+    dashChip.classList.toggle('off', !ready);
+    const g = dashChip.firstElementChild;
+    if (g) {
+      // ★ui.js 스킬 칩과 **같은 표기**(12시부터 시계방향으로 걷히는 라디얼).
+      //   준비되면 문자열을 지운다(칩이 밝아지면 어차피 안 보이므로 매 프레임 안 쓴다).
+      if (ready) { if (g.style.background) g.style.background = ''; }
+      else {
+        const turn = Math.max(0, Math.min(1, (dashReadyT - now) / DASH_CD)).toFixed(3);
+        g.style.background = 'conic-gradient(from 0deg,rgba(4,4,3,.80) 0turn ' + turn
+          + 'turn,rgba(4,4,3,0) ' + turn + 'turn)';
+      }
+    }
+  }
+
+  updateCpLive();     // 클립 패널: 재생 시각·강조 갱신(값이 바뀔 때만 DOM 을 쓴다)
+
+  // ── 검증 기록 ──
+  // 히트스톱이 실제로 몇 ms 걸렸는지, 그 사이 콤보 창이 살아 있었는지를 **숫자로**
+  // 남긴다. 눈으로 "멈춘 것 같다"는 증거가 아니다. __rec() 로 켜고 __recDump() 로 뽑는다.
+  if (__rec) {
+    __rec.push([+(performance.now()).toFixed(1), +(rawDt * 1000).toFixed(2),
+                +(dt * 1000).toFixed(2), attacking ? 1 : 0, comboStep,
+                (current && current === actions.Attack) ? +current.time.toFixed(3) : -1,
+                enemies.swing, enemies.kills,
+                +(now - comboWindow).toFixed(3)]);
+    if (__rec.length > 1800) __rec.shift();
+  }
+
+  composer.render();
+}
+tick();

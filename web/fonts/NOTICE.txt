@@ -1,0 +1,25 @@
+게임에 번들된 붓 서체 두 벌. 둘 다 SIL Open Font License 1.1 이다.
+
+rf-brush-kr.woff2  한글 벌
+  원본 : Nanum Brush Script (나눔손글씨 붓)
+  저작 : Copyright (c) 2010, NHN Corporation
+  라이선스 : SIL OFL 1.1  →  OFL-NanumBrushScript.txt
+  받은 곳 : https://github.com/google/fonts/tree/main/ofl/nanumbrushscript
+  손댄 것 : 한글 음절 전체(11172자) + 라틴 + 문장부호로 부분집합, woff2 변환
+
+rf-brush-hj.woff2  한자 벌
+  원본 : Yuji Boku (悠々ボク)
+  저작 : Copyright 2021 The Yuji Project Authors
+  라이선스 : SIL OFL 1.1  →  OFL-YujiBoku.txt
+  받은 곳 : https://github.com/google/fonts/tree/main/ofl/yujiboku
+  손댄 것 : 게임에 나오는 한자(落鬼符門一層守 등) + 여유분으로 부분집합, woff2 변환
+
+★내부 서체명을 RF Brush KR / RF Brush HJ 로 갈아 끼웠다.
+  OFL 은 예약서체명(Reserved Font Name: "Nanum", "Yuji")을 **수정본**에 쓰지 못하게 한다.
+  부분집합은 수정본이므로 원래 이름을 그대로 두면 라이선스 위반이 된다.
+  원본 고지(name ID 0)는 서체 안에 그대로 남겨 뒀다.
+
+★한글 벌에 한자를 안 넣은 이유
+  한글 붓 서체에는 한자가 한 자도 없다(나눔·은글꼴 계열 전부 확인). 반대로 중국 붓 서체는
+  간체라 우리가 쓰는 門·層 이 없다(门·层 뿐). 일본 붓 서체가 전통자형을 갖고 있어서 골랐다.
+  두 벌은 CSS 에서 unicode-range 로 갈라 한 패밀리('RFBrush')로 묶는다(web/ui.js).

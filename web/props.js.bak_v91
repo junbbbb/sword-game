@@ -1,0 +1,383 @@
+// ---------------------------------------------------------------------------
+// web/props.js — 맵 소품 5종(바위·절벽바위·덤불·나무·수풀)을 씬에 심는다.
+//
+// 왜 별도 파일인가
+//   이 5종은 맵에 643개가 깔린다. 상세 모델을 level1.glb 에 통째로 구우면
+//   삼각형이 수십만이 되고 파일이 수십 MB 가 된다. 그래서
+//     · 모양  = web/props/<종류>.glb  (blender/s22_props.py 가 한 벌씩 굽는다)
+//     · 배치  = level1.json 의 props[]  (blender/s20_level1.py 가 뽑는다)
+//     · 심기  = 이 파일
+//   로 셋을 갈라 놨다. 콜라이더는 level1.json 의 colliders[] 에 이미 다 들어 있고
+//   이 파일과 아무 관계가 없다(소품을 어떻게 그리든 충돌은 안 변한다).
+//
+// ★수풀만 InstancedMesh 가 아니다
+//   은신 연출(web/stealth.js)은 **BUSH_xx 라는 이름의 메시**를 찾아 그 재질의
+//   투명도를 낮춘다("내가 들어간 수풀만 옅어진다"). InstancedMesh 는 인스턴스마다
+//   다른 투명도를 줄 수 없으므로, 수풀은 구역(16곳)별로 지오메트리를 합쳐
+//   **구역당 메시 하나**로 심고 이름을 BUSH_01..16 으로 붙인다.
+//   = 드로우콜 16, 기존 은신 연출 코드는 한 줄도 안 고쳐도 그대로 돈다.
+//
+// ★인스턴스 단위 컬링
+//   InstancedMesh 는 three.js 가 통째로만 걸러낸다(경계구가 맵 전체를 덮으니
+//   사실상 항상 다 그린다). 96m 맵인데 한 화면에 보이는 건 20m 남짓이라
+//   그대로 두면 안 보이는 바위 200개를 매 프레임 그린다.
+//   그래서 매 프레임 카메라 절두체로 골라 instanceMatrix 를 다시 채운다.
+//   643개 구 판정은 0.1ms 도 안 걸리고, 그린 삼각형은 1/4 로 준다.
+//   ★그림자 패스는 onBeforeRender 를 안 부르므로 **한 프레임 전 목록**으로 그려진다.
+//     그림자 상자가 플레이어 ±10m 라 그 안의 소품은 어차피 화면 안이고,
+//     아래 CULL_PAD 로 여유를 둬서 화면 가장자리에서 튀지 않게 했다.
+//
+// ★크기 기반 2단 LOD (2026-08-10)
+//   설치형으로 방향이 바뀌면서 소품 예산이 4~8배로 올랐다(s22_props.py).
+//   643개를 전부 고폴리로 심으면 씬 삼각형이 53만 -> 266만이 되고, 실측 fps 가
+//   29 -> 20 으로 떨어졌다. 그런데 **작은 소품은 고폴리일 이유가 없다**.
+//   배치 테이블의 scale 은 0.22 ~ 1.33 까지 벌어져 있고, 0.22 짜리 바위는
+//   반지름 0.2m 짜리 자갈이다. 그래서
+//     · 종류별 scale 상위 30% = 고폴리(web/props/<종류>.glb)
+//     · 나머지 70%           = 저폴리(web/props/low/<종류>.glb, 이전에 굽던 것)
+//   로 갈라 InstancedMesh 를 두 벌 만든다. 씬 삼각형 266만 -> 117만.
+//   ★거리가 아니라 **크기**로 가른다. 거리 LOD 는 걸어갈 때 모델이 바뀌는 게
+//     보이지만(파핑), 크기 LOD 는 한 번 정해지면 안 바뀐다.
+//   ★재질은 고폴리 텍스처 한 장을 두 단계가 같이 쓴다. 저폴리 glb 안의 1024
+//     텍스처를 따로 쓰면 같은 종류인데 큰 것과 작은 것의 색이 미묘하게 달라진다.
+//   ★수풀은 구역 메시 하나 안에 두 단계를 **같이 합친다**(아래 mergeParts).
+//     구역당 메시가 둘로 갈라지면 stealth.js 가 이름으로 찾는 메시가 반쪽만 돼서
+//     "내가 들어간 수풀만 옅어진다" 가 절반만 먹는다.
+//   ?lod=off  전부 고폴리 / ?lod=low  전부 저폴리 (성능 비교용)
+// ---------------------------------------------------------------------------
+import * as THREE from './lib/three.module.js';
+import { GLTFLoader } from './lib/GLTFLoader.js';
+
+// 종류별 세로 배율.
+// ★가로는 절대 안 건드린다. 배치 scale 이 콜라이더 반지름과 같은 숫자라
+//   가로를 만지는 순간 보이는 것과 막히는 것이 어긋난다. 세로만 만진다.
+//   crag  : Meshy 모델이 낮아서(정규화하면 2.07m) 그냥 두면 캐릭터 키(1.75)를
+//           겨우 넘는다. 막는 지형 기준 높이 WALL_H=2.6 에 맞춘다(2.07 x 1.25).
+//   thicket: 받은 모델이 납작하다(Y 가 XZ 의 45%). 세워서 덤불로 만든다.
+//   bush   : ★2026-08-10. 1.0 이면 잎 높이가 1.10~1.61m 라 키 1.75 캐릭터의
+//            **무릎만 잠긴다**(v72 QA: "상추 더미 위에 서 있는 그림").
+//            1.35 로 올리면 1.49~2.18m(평균 1.84m)가 되어 가슴~머리가 잎에 걸린다.
+//            ★세로 배율일 뿐이다. 콜라이더도 은신 판정 사각형(level1.json bushes[].rects)도
+//              가로 좌표로만 정의돼 있어서 이 숫자와 무관하다(수풀에는 콜라이더 자체가 없다).
+//              지오메트리 원점이 밑동이라 배율을 올려도 접지는 그대로다.
+const KIND_Y = { rock: 1.0, crag: 1.25, thicket: 1.70, tree: 1.0, bush: 1.35 };
+// InstancedMesh 로 심는 종류(수풀은 위 주석대로 따로 간다)
+const INST_KINDS = ['rock', 'crag', 'thicket', 'tree'];
+// 절두체 판정에 더하는 여유(m). 화면 밖 이만큼까지는 남겨 둔다.
+// 그림자 패스가 한 프레임 늦게 도는 것과 카메라 회전을 같이 덮는 값이다.
+const CULL_PAD = 7.0;
+// 고폴리로 심을 비율(종류별 scale 상위 몇 %)
+const LOD_HI_FRAC = 0.30;
+
+let ROOT = null;                 // 소품을 담는 그룹(맵 root 밑에 붙는다)
+const INST = [];                 // { kind, mesh, all: Float32Array, cen, rad, n }
+const BUSHES = [];               // { id, mesh }
+let culling = true;
+const _frustum = new THREE.Frustum();
+const _pv = new THREE.Matrix4();
+const _sph = new THREE.Sphere();
+
+// ---------------------------------------------------------------------------
+// 지오메트리 합치기 (수풀 구역용)
+// ---------------------------------------------------------------------------
+// ★lib 에 BufferGeometryUtils 가 없다. 필요한 건 "지오메트리를 행렬 여러 개로
+//   복제해 하나로 붙이기" 하나뿐이라 여기 적었다.
+// parts = [{ geo, mats }, ...]. **서로 다른 지오메트리를 한 덩어리로** 합칠 수 있다
+// (수풀 구역 하나 안에 고폴리·저폴리가 섞이는데 메시는 하나여야 하기 때문이다).
+// 두 지오메트리가 같은 텍스처를 쓰므로 UV 를 그대로 이어 붙여도 된다.
+//
+// shade = 정점색을 굽는 설정(수풀 전용, 없으면 색 속성을 안 만든다). 아래 SHADE 참고.
+function mergeParts(parts, shade) {
+  let vcTot = 0, icTot = 0;
+  for (const p of parts) {
+    vcTot += p.geo.attributes.position.count * p.mats.length;
+    icTot += p.geo.index.count * p.mats.length;
+  }
+  const P = new Float32Array(vcTot * 3);
+  const N = new Float32Array(vcTot * 3);
+  const U = new Float32Array(vcTot * 2);
+  const C = shade ? new Float32Array(vcTot * 3) : null;
+  const I = (vcTot > 65535) ? new Uint32Array(icTot) : new Uint16Array(icTot);
+  const v = new THREE.Vector3();
+  const nm = new THREE.Matrix3();
+  let vo = 0, io = 0;
+  for (const part of parts) {
+    const pos = part.geo.attributes.position;
+    const nor = part.geo.attributes.normal;
+    const uv = part.geo.attributes.uv;
+    const idx = part.geo.index;
+    const vc = pos.count, ic = idx.count;
+    // 이 지오메트리 한 포기의 높이(로컬). 잎 높낮이를 0..1 로 재는 자다
+    let lh = 1;
+    if (shade) {
+      part.geo.computeBoundingBox();
+      lh = Math.max(1e-3, part.geo.boundingBox.max.y - part.geo.boundingBox.min.y);
+    }
+    for (const m of part.mats) {
+      nm.getNormalMatrix(m);
+      for (let i = 0; i < vc; i++) {
+        const o3 = (vo + i) * 3;
+        const ly = pos.getY(i);
+        v.fromBufferAttribute(pos, i).applyMatrix4(m);
+        P[o3] = v.x; P[o3 + 1] = v.y; P[o3 + 2] = v.z;
+        if (C) shadeVertex(C, o3, shade, v.x, v.z, ly / lh);
+        v.fromBufferAttribute(nor, i).applyMatrix3(nm).normalize();
+        N[o3] = v.x; N[o3 + 1] = v.y; N[o3 + 2] = v.z;
+        U[(vo + i) * 2] = uv.getX(i);
+        U[(vo + i) * 2 + 1] = uv.getY(i);
+      }
+      for (let i = 0; i < ic; i++) I[io + i] = idx.getX(i) + vo;
+      vo += vc; io += ic;
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(P, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(U, 2));
+  if (C) g.setAttribute('color', new THREE.BufferAttribute(C, 3));
+  g.setIndex(new THREE.BufferAttribute(I, 1));
+  g.computeBoundingSphere();
+  return g;
+}
+
+// ---------------------------------------------------------------------------
+// ★수풀 정점색 — "수풀 속이 텅 비고 균일한 형광 연두" 를 깨는 장치 (2026-08-10)
+// ---------------------------------------------------------------------------
+// v72 QA: 수풀 덩어리가 어디를 봐도 같은 밝기라 **부피가 없고**, 안에 들어가도
+// 안쪽이 어둡지 않아 "숨을 데"로 안 읽혔다. 라이트를 더 넣어 풀 문제가 아니다.
+// 잎 뭉치는 실제로 두 가지 이유로 안쪽이 어둡다.
+//   1) 위에서 오는 빛이 윗잎에 막힌다  -> 밑동이 어둡다
+//   2) 사방이 잎에 둘러싸인다          -> 구역 안쪽이 어둡다 (가장자리는 트여 있다)
+// 이 둘을 정점색으로 구워 둔다. 매 프레임 계산이 아니라 로드 때 한 번이고,
+// 어떤 셰이더도 안 건드린다(MeshToonMaterial.vertexColors 만 켜면 diffuse 에 곱해진다).
+// ★깊이 패스는 정점색을 안 읽으므로 그림자는 그대로다.
+const SHADE_DARK = [0.13, 0.21, 0.18];   // 제일 어두운 구석의 색(차가운 먹빛 초록)
+const SHADE_BOT = 0.62;                  // 밑동이 먹는 어둠의 양
+const SHADE_IN = 0.46;                   // 구역 안쪽이 먹는 어둠의 양
+const SHADE_IN_D = 1.9;                  // 이 거리(m)만큼 안으로 들어가면 최대로 어둡다
+
+function shadeVertex(C, o3, sh, wx, wz, hy) {
+  // hy: 한 포기 안에서의 높이 0(밑동)~1(꼭대기)
+  const up = hy < 0 ? 0 : hy > 1 ? 1 : hy;
+  const bot = Math.pow(1 - up, 1.25);
+  // 구역 경계까지의 거리. 가장자리 잎은 밖에서 빛을 받아 밝다
+  const d = Math.min(wx - sh.x0, sh.x1 - wx, wz - sh.z0, sh.z1 - wz);
+  const inn = d <= 0 ? 0 : d >= SHADE_IN_D ? 1 : d / SHADE_IN_D;
+  let s = 1 - (SHADE_BOT * bot + SHADE_IN * inn);
+  if (s < 0.14) s = 0.14; else if (s > 1) s = 1;
+  C[o3] = SHADE_DARK[0] + (1 - SHADE_DARK[0]) * s;
+  C[o3 + 1] = SHADE_DARK[1] + (1 - SHADE_DARK[1]) * s;
+  C[o3 + 2] = SHADE_DARK[2] + (1 - SHADE_DARK[2]) * s;
+}
+
+// ---------------------------------------------------------------------------
+// 로드
+// ---------------------------------------------------------------------------
+// parent : 맵 root(여기 밑에 붙여야 stealth.js 가 BUSH_xx 를 찾는다)
+// lv     : level1.json
+// q      : 캐시버스팅 쿼리(맵과 같은 값을 물려받는다)
+// groundY: 지면 높이 함수(level.js). 낮은 단 위에 선 소품이 묻히지 않게 한다
+export async function build(parent, lv, q, groundY) {
+  const list = lv.props || [];
+  if (!list.length) { console.warn('[props] level1.json 에 props[] 가 없다'); return null; }
+  ROOT = new THREE.Group();
+  ROOT.name = 'PROPS';
+  parent.add(ROOT);
+
+  const byKind = {};
+  for (const p of list) (byKind[p.kind] = byKind[p.kind] || []).push(p);
+  const kinds = Object.keys(byKind);
+
+  const loader = new GLTFLoader();
+  const assets = {}, low = {};
+  await Promise.all(kinds.map(k => new Promise((ok, bad) => {
+    loader.load('./props/' + k + '.glb' + q, g => { assets[k] = g; ok(); }, undefined, bad);
+  })));
+  // 저폴리 한 벌. **없어도 그냥 돈다**(그 종류는 전부 고폴리로 심는다).
+  const lodMode = new URLSearchParams(q || '').get('lod') || 'on';
+  if (lodMode !== 'off') {
+    await Promise.all(kinds.map(k => new Promise(ok => {
+      loader.load('./props/low/' + k + '.glb' + q,
+        g => { low[k] = g; ok(); }, undefined, () => ok());
+    })));
+  }
+
+  const gy = groundY || (() => lv.floorY || 0);
+  const m4 = new THREE.Matrix4();
+  const qt = new THREE.Quaternion();
+  const ax = new THREE.Vector3(0, 1, 0);
+  const tr = new THREE.Vector3();
+  const sc = new THREE.Vector3();
+  let tri = 0;
+
+  const lodLog = [];
+  for (const kind of kinds) {
+    const src = pickMesh(assets[kind]);
+    if (!src) { console.warn('[props] ' + kind + '.glb 안에 메시가 없다'); continue; }
+    const geoHi = src.geometry;
+    geoHi.computeBoundingSphere();
+    const lowSrc = low[kind] ? pickMesh(low[kind]) : null;
+    const geoLo = lowSrc ? lowSrc.geometry : null;
+    if (geoLo) geoLo.computeBoundingSphere();
+    // ★main.js 관례: 맵·캐릭터 전부 MeshToonMaterial 로 갈아끼운다.
+    //   Meshy 재질(Standard PBR)을 그대로 두면 이 소품만 셀 셰이딩에서 빠진다.
+    // ★재질은 하나뿐이다. 두 LOD 단계가 **같은 텍스처**를 쓴다(위 주석).
+    const mat = new THREE.MeshToonMaterial({
+      map: src.material && src.material.map ? src.material.map : null,
+      color: src.material && src.material.map ? 0xffffff : 0x8a9199,
+    });
+    mat.name = 'MAT_PROP_' + kind.toUpperCase();
+    if (lowSrc && lowSrc.material && lowSrc.material.map) lowSrc.material.map.dispose();
+    const ky = KIND_Y[kind] || 1;
+    const rows = byKind[kind];
+    const mats = rows.map(p => {
+      const s = p.scale || 1;
+      tr.set(p.x, gy(p.x, p.z), p.z);
+      qt.setFromAxisAngle(ax, p.rotY || 0);
+      sc.set(s, s * (p.sy || 1) * ky, s);
+      return new THREE.Matrix4().compose(tr, qt, sc);
+    });
+
+    // ── LOD 가르기 ──
+    // 종류별 scale 을 정렬해 상위 LOD_HI_FRAC 만 고폴리로 보낸다.
+    // 같은 scale 이 여럿이면 경계에서 조금 넘칠 수 있다(그래도 상관없다).
+    let thr = -Infinity;
+    if (geoLo && lodMode === 'on') {
+      const ss = rows.map(p => p.scale || 1).sort((a, b) => a - b);
+      thr = ss[Math.min(ss.length - 1, Math.floor(ss.length * (1 - LOD_HI_FRAC)))];
+    } else if (geoLo && lodMode === 'low') {
+      thr = Infinity;                  // 전부 저폴리(비교용)
+    }
+    const hiRows = [], loRows = [];
+    rows.forEach((p, i) => (((p.scale || 1) >= thr) ? hiRows : loRows).push(i));
+    lodLog.push(kind + ' ' + hiRows.length + '/' + loRows.length);
+
+    if (kind === 'bush') {
+      // 구역별로 합쳐서 BUSH_xx 메시 하나씩 (위 주석 참고).
+      // ★한 구역 안에서도 고·저폴리가 섞이지만 **메시는 하나**로 합친다.
+      // ★정점색(안쪽 그늘)을 굽는다. 재질 하나를 16곳이 같이 쓰므로 여기서 켠다.
+      mat.vertexColors = true;
+      const reg = {};
+      rows.forEach((p, i) => {
+        const id = p.bush || 'BUSH_00';
+        const r = (reg[id] = reg[id] || { hi: [], lo: [], x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9 });
+        (((p.scale || 1) >= thr) ? r.hi : r.lo).push(mats[i]);
+        // 구역 테두리는 심은 포기의 좌표로 잰다. level1.json 의 rects 를 안 읽는 이유는
+        // 맵이 수풀을 옮겨도(맵 에이전트 작업) 이 파일이 따라 도는 게 맞기 때문이다.
+        if (p.x < r.x0) r.x0 = p.x;
+        if (p.x > r.x1) r.x1 = p.x;
+        if (p.z < r.z0) r.z0 = p.z;
+        if (p.z > r.z1) r.z1 = p.z;
+      });
+      for (const id of Object.keys(reg).sort()) {
+        const r = reg[id];
+        const parts = [];
+        if (r.hi.length) parts.push({ geo: geoHi, mats: r.hi });
+        if (r.lo.length && geoLo) parts.push({ geo: geoLo, mats: r.lo });
+        else if (r.lo.length) parts.push({ geo: geoHi, mats: r.lo });
+        const m = new THREE.Mesh(mergeParts(parts, r), mat);
+        m.name = id;
+        m.castShadow = true;
+        m.receiveShadow = true;
+        ROOT.add(m);
+        const t = m.geometry.index.count / 3;
+        BUSHES.push({ id, mesh: m, n: r.hi.length + r.lo.length, hi: r.hi.length });
+        tri += t;
+      }
+      continue;
+    }
+
+    for (const lvl of [{ tag: 'HI', geo: geoHi, idx: hiRows },
+                       { tag: 'LO', geo: geoLo || geoHi, idx: loRows }]) {
+      const n = lvl.idx.length;
+      if (!n) continue;
+      const triOne = lvl.geo.index.count / 3;
+      const im = new THREE.InstancedMesh(lvl.geo, mat, n);
+      im.name = 'PROP_' + kind.toUpperCase() + (geoLo ? '_' + lvl.tag : '');
+      im.castShadow = true;
+      im.receiveShadow = true;
+      im.frustumCulled = false;        // 우리가 인스턴스 단위로 직접 거른다
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      // 전체 목록을 따로 들고 있는다. instanceMatrix 는 "이번 프레임에 보이는 것"만 담는다
+      const all = new Float32Array(n * 16);
+      const cen = new Float32Array(n * 3);
+      const rad = new Float32Array(n);
+      const bs = lvl.geo.boundingSphere;
+      for (let i = 0; i < n; i++) {
+        const m = mats[lvl.idx[i]];
+        m.toArray(all, i * 16);
+        // 경계구는 지오메트리 것을 배치 행렬로 옮긴 것이다(Sphere.applyMatrix4 가
+        // 축별 최대 배율로 반지름을 키워 준다). 거기에 여유를 더한다
+        _sph.copy(bs).applyMatrix4(m);
+        cen[i * 3] = _sph.center.x; cen[i * 3 + 1] = _sph.center.y; cen[i * 3 + 2] = _sph.center.z;
+        rad[i] = _sph.radius + CULL_PAD;
+        im.setMatrixAt(i, m);
+      }
+      im.count = n;
+      im.instanceMatrix.needsUpdate = true;
+      im.onBeforeRender = (renderer, scene, camera) => cull(im, all, cen, rad, n, camera);
+      ROOT.add(im);
+      INST.push({ kind, lod: lvl.tag, mesh: im, all, cen, rad, n, triOne });
+      tri += triOne * n;
+    }
+  }
+
+  console.log('[props] ' + list.length + '개 / 인스턴싱 '
+    + INST.map(o => o.kind + (o.lod ? '.' + o.lod : '') + ' ' + o.n).join(', ')
+    + ' / 수풀 메시 ' + BUSHES.length + '곳'
+    + ' / LOD(고/저) ' + lodLog.join(', ') + ' [' + lodMode + ']'
+    + ' / 삼각형 ' + tri.toLocaleString());
+  return { instanced: INST.length, bushes: BUSHES.length, tri };
+}
+
+function pickMesh(gltf) {
+  let found = null;
+  gltf.scene.traverse(o => { if (!found && o.isMesh) found = o; });
+  return found;
+}
+
+// ---------------------------------------------------------------------------
+// 인스턴스 단위 절두체 컬링
+// ---------------------------------------------------------------------------
+// ★onBeforeRender 안에서 count 와 instanceMatrix 를 바꾼다. three.js 는 이 훅을
+//   부른 **뒤에** object.count 를 읽어 그리므로 이번 프레임에 바로 먹는다.
+function cull(im, all, cen, rad, n, camera) {
+  if (!culling) {
+    if (im.count !== n) { im.instanceMatrix.array.set(all); im.count = n; im.instanceMatrix.needsUpdate = true; }
+    return;
+  }
+  _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  _frustum.setFromProjectionMatrix(_pv);
+  const dst = im.instanceMatrix.array;
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    _sph.center.set(cen[i * 3], cen[i * 3 + 1], cen[i * 3 + 2]);
+    _sph.radius = rad[i];
+    if (!_frustum.intersectsSphere(_sph)) continue;
+    // 앞에서부터 빈틈없이 채운다. 행렬 16개 복사라 조건을 따지는 것보다 그냥 쓰는 게 싸다
+    dst.set(all.subarray(i * 16, i * 16 + 16), k * 16);
+    k++;
+  }
+  im.count = k;
+  im.instanceMatrix.needsUpdate = true;
+}
+
+// ---------------------------------------------------------------------------
+export function root() { return ROOT; }
+export function setCulling(v) { culling = !!v; }
+
+export const debug = {
+  setCulling,
+  // 지금 몇 개가 그려지고 있나(컬링 효과를 콘솔에서 바로 본다)
+  drawn: () => INST.map(o => ({ kind: o.kind, lod: o.lod, drawn: o.mesh.count, total: o.n,
+                                triOne: o.triOne, tri: o.mesh.count * o.triOne })),
+  bushes: () => BUSHES.map(b => ({ id: b.id, n: b.n, hi: b.hi,
+                                   tri: b.mesh.geometry.index.count / 3,
+                                   // 화면 안인지(수풀은 three.js 가 메시 단위로 거른다)
+                                   vis: b.mesh.visible })),
+  // 화면에 실제로 들어간 인스턴싱 삼각형
+  totalTri: () => INST.reduce((a, o) => a + o.mesh.count * o.triOne, 0),
+  // 수풀까지 더한 씬 전체 소품 삼각형(컬링 전)
+  sceneTri: () => INST.reduce((a, o) => a + o.n * o.triOne, 0)
+    + BUSHES.reduce((a, b) => a + b.mesh.geometry.index.count / 3, 0),
+};

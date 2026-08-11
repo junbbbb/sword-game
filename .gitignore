@@ -1,0 +1,7 @@
+renders/
+incoming/
+dist/
+.DS_Store
+__pycache__/
+*.pyc
+.playwright-mcp/

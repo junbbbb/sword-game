@@ -1,0 +1,998 @@
+# -*- coding: utf-8 -*-
+"""3연타 콤보 포즈 정의 + 포즈 적용기 (s5_combo / s6_export_game 공용).
+
+왜 이렇게 바꿨나 (2차 개정):
+  칼이 몸을 감아 도는 문제가 계속 남았다. 근본 원인은 스윙 각도가 아니라
+  **한 손 파지**였다. 한 손이면 팔이 몸 옆/뒤로 돌아가는 게 물리적으로 가능해진다.
+  레퍼런스(water-breathing.mp4)를 프레임 단위로 보면 물의 호흡은 전부
+  **양손으로 자루를 잡고**, 손은 몸 정중선 근처에 머물며, 크게 움직이는 건
+  손이 아니라 **칼날 각도**다. 검도 카마에(中段/上段)가 그대로 들어있다.
+
+  그래서 포즈를 "관절 각도"가 아니라 **검도 자세의 3요소**로 적는다:
+    1. 오른손을 몸 기준 어디에 두는가        -> IK
+    2. 칼날이 어디를 향하는가                 -> BLADE
+    3. 왼손은 자루를 잡는다(항상)             -> GRIP (자동 IK)
+  양손이 자루에 묶여 있으면 팔이 몸을 감을 수가 없다. 이게 핵심.
+
+기준축 (probe_axes.py 실측):
+    RIGHT = (-1, 0, 0)   캐릭터의 오른쪽
+    UP    = ( 0, 0, 1)
+    FWD   = ( 0,-1, 0)   캐릭터가 바라보는 쪽
+(r, u, f) 좌표는 **척추 본 위치 기준**, 키 H 로 정규화. 몸 높이 참고값:
+    어깨 +0.22 / 눈 +0.31 / 정수리 +0.44 / 배꼽 -0.02 / 무릎 -0.35
+
+그 외 회전 부호 (실측):
+    spine Z + -> 오른어깨가 앞으로 (상체가 왼쪽으로 비틀림)
+    spine X + -> 앞으로 숙임
+"""
+import math
+from mathutils import Vector, Matrix
+
+RIGHT = Vector((-1, 0, 0))
+UP = Vector((0, 0, 1))
+FWD = Vector((0, -1, 0))
+
+X, Y, Z = (1, 0, 0), (0, 1, 0), (0, 0, 1)
+AIM = "AIM"        # 본이 향할 월드 방향
+BLADE = "BLADE"    # 칼날이 향할 월드 방향 (손목으로 맞춤)
+IK = "IK"          # 손을 그 자리에 갖다 놓음 (2본 IK)
+GRIP = "GRIP"      # 왼손을 자루에 붙임. 값 = 오른손에서 물미 쪽으로 떨어진 거리(H 단위)
+FACE = "FACE"      # 본을 월드 수직축으로 돌려 **바라보는 방향**을 맞춘다.
+                   # AIM 은 본 축(머리 위쪽)만 맞추므로 좌우로 돌아간 건 못 잡는다.
+                   # 원본 달리기는 병사가 두리번거려서 머리가 35~58도 돌아가 있었다.
+HEAD_FACE_LOCAL = Vector((-0.052, 0.996, 0.070))   # 중단세에서 실측
+ARC = "ARC"        # 손을 **어깨 기준 방향+반지름**으로 놓는다. 값 = (r, u, f, R)
+                   # 팔 흔들기는 어깨 중심 호를 그린다. (r,u,f) 절대좌표로 보간하면
+                   # 어깨와의 거리가 변해 팔꿈치가 접혔다 펴졌다 한다(실측 ROM 96도).
+ELBOW = "ELBOW"
+
+# 칼날이 오른손 본 로컬에서 향하는 방향.
+# convert_to_slayer.py 의 그립 정렬에서 유도:
+#   칼 로컬 +X(칼끝) --q--> 손 본 로컬 -Y, 그 뒤 Z 축으로 KAT_TILT(기본 22도).
+#   Rz(-90) @ Rz(22) @ (1,0,0) = (sin22, -cos22, 0)
+# 웹에서 실측한 값 (0.512,-0.854,0.088) 과 10도 이내로 일치한다.
+# 그립 정렬을 바꾸면 여기도 같이 고쳐야 한다.
+_TILT = math.radians(22.0)
+BLADE_LOCAL = Vector((math.sin(_TILT), -math.cos(_TILT), 0.0))
+
+
+def ruf(r, u, f):
+    """(오른쪽, 위, 앞) 성분 -> 월드 방향 벡터."""
+    return (RIGHT * r + UP * u + FWD * f).normalized()
+
+
+class Poser(object):
+    """armature 하나에 대해 포즈를 적용한다. height = 캐릭터 키(월드 단위)."""
+
+    def __init__(self, arm, height):
+        self.arm = arm
+        self.H = height
+        self.A2W = arm.matrix_world
+        self.W2A = arm.matrix_world.inverted()
+        self.home = arm.location.copy()
+        self.reach_log = []          # IK 가 못 닿은 기록 (검증용)
+        self.palm = {}               # 손 본 로컬에서의 주먹 중심
+        self.fist_r = {}             # 주먹 반지름(월드)
+        self._bind_hands()
+
+    def _bind_hands(self):
+        """주먹 중심을 손 본 로컬 좌표로 재둔다.
+
+        ★칼은 손목 관절이 아니라 **주먹 중심**에 붙어 있다
+        (convert_to_slayer 의 palm_local. 손목에 붙이면 '손목에 칼이 달린' 그림이 된다).
+        그런데 파지 계산을 손목으로 하면 자루 축이 손에서 0.072 H 어긋나고,
+        그 어긋나는 **방향이 포즈마다 달라져서** 손과 자루가 따로 노는 그림이 된다.
+        실측: 왼 주먹이 자루 축에서 주먹 1.1~2.4 개만큼 떨어져 있었다(= 아예 안 쥠).
+        주먹은 손 본에 강체로 묶여 있어(모든 포즈에서 손목→주먹 0.1739 로 일정)
+        이 로컬 좌표는 상수다."""
+        import bpy
+        mesh = None
+        for o in bpy.data.objects:
+            if o.type != "MESH":
+                continue
+            for m in o.modifiers:
+                if m.type == "ARMATURE" and m.object is self.arm:
+                    if mesh is None or len(o.data.vertices) > len(mesh.data.vertices):
+                        mesh = o
+        if mesh is None:
+            return
+        vgn = {g.index: g.name for g in mesh.vertex_groups}
+        idx = {"r": [], "l": []}
+        for v in mesh.data.vertices:
+            best, bw = None, -1.0
+            for g in v.groups:
+                if g.weight > bw:
+                    bw, best = g.weight, vgn.get(g.group, "")
+            if not best:
+                continue
+            nm = best.lower()
+            if "r hand" in nm:
+                idx["r"].append(v.index)
+            elif "l hand" in nm:
+                idx["l"].append(v.index)
+        for s, ids in idx.items():
+            bone = self.pb("%s hand" % s)
+            if not ids or bone is None:
+                continue
+            # 레스트 본 행렬 기준이라 현재 포즈와 무관하다.
+            rest = self.A2W @ self.arm.data.bones[bone.name].matrix_local
+            inv = rest.inverted()
+            pts = [inv @ (mesh.matrix_world @ mesh.data.vertices[i].co) for i in ids]
+            c = sum(pts, Vector((0, 0, 0))) / len(pts)
+            self.palm[s] = c
+            sc = rest.to_scale()
+            self.fist_r[s] = max((p - c).length for p in pts) * abs(sc.x)
+
+    def palm_world(self, side):
+        """주먹 중심의 월드 좌표. 자루는 여기를 통과해야 한다."""
+        p = self.palm.get(side)
+        b = self.pb("%s hand" % side)
+        if p is None or b is None:
+            return None
+        return (self.A2W @ b.matrix) @ p
+
+    # ---- 유틸 ----
+    def pb(self, key):
+        for b in self.arm.pose.bones:
+            if key.lower() in b.name.lower():
+                return b
+        return None
+
+    def _update(self):
+        import bpy
+        bpy.context.view_layer.update()
+
+    def wpos(self, key):
+        b = self.pb(key)
+        return (self.A2W @ b.matrix).translation.copy() if b else None
+
+    def origin(self):
+        """포즈 좌표의 기준점. 척추 본 head 는 spine 회전의 피벗이라 안 움직이고,
+        루트 이동(스텝)은 따라간다."""
+        return self.wpos("spine")
+
+    def _rotate(self, b, axis_world, rad):
+        if abs(rad) < 1e-7:
+            return
+        ax = (self.W2A.to_3x3() @ Vector(axis_world)).normalized()
+        head = b.matrix.translation.copy()
+        b.matrix = (Matrix.Translation(head) @ Matrix.Rotation(rad, 4, ax)
+                    @ Matrix.Translation(-head) @ b.matrix)
+        self._update()
+
+    # ★골반·척추는 자식이 여럿이다(골반 -> 척추 + 양 허벅지).
+    # children[0] 을 쓰면 허벅지 쪽을 뼈 방향으로 잡아 몸이 접힌다(모캡 리타게팅에서 발견).
+    CHILD_HINT = {"pelvis": "spine", "spine": "neck", "neck": "head"}
+
+    def bone_dir(self, key):
+        b = self.pb(key)
+        if b is None or not b.children:
+            return None
+        ch = b.children[0]
+        hint = None
+        for k, v in self.CHILD_HINT.items():
+            if k in b.name.lower():
+                hint = v
+                break
+        if hint:
+            for c in b.children:
+                if hint in c.name.lower():
+                    ch = c
+                    break
+        a = (self.A2W @ b.matrix).translation
+        c = (self.A2W @ ch.matrix).translation
+        d = c - a
+        return d.normalized() if d.length > 1e-6 else None
+
+    def elbow_axis(self, side):
+        d = self.bone_dir("%s upperarm" % side)
+        if d is None:
+            return (1, 0, 0)
+        h = d.cross(FWD)
+        if h.length < 1e-4:
+            h = d.cross(UP)
+        return tuple(h.normalized())
+
+    def blade_dir(self):
+        """칼날이 향하는 현재 월드 방향. 칼 오브젝트 없이 손 본만으로 구한다
+        (s6 는 칼을 메시에 병합해버려서 오브젝트가 남지 않는다)."""
+        b = self.pb("r hand")
+        if b is None:
+            return None
+        return ((self.A2W @ b.matrix).to_3x3() @ BLADE_LOCAL).normalized()
+
+    # ---- 오퍼레이션 ----
+    def aim(self, key, target):
+        b = self.pb(key)
+        d0 = self.bone_dir(key)
+        if b is None or d0 is None:
+            return
+        t = Vector(target)
+        if t.length < 1e-9:
+            return
+        q = d0.rotation_difference(t.normalized())
+        ax, ang = q.to_axis_angle()
+        self._rotate(b, ax, ang)
+
+    def wrist_bend(self, side="r"):
+        """팔뚝 방향과 손 방향의 각도. 0 이면 곧게 편 손목."""
+        fa, hd = self.wpos("%s forearm" % side), self.wpos("%s hand" % side)
+        pw = self.palm_world(side)
+        if fa is None or hd is None or pw is None:
+            return 0.0
+        a = (hd - fa)
+        b = (pw - hd)
+        if a.length < 1e-9 or b.length < 1e-9:
+            return 0.0
+        return math.degrees(a.angle(b))
+
+    # ★손목 꺾임 기본 한계. 사람 손목은 굴곡 80 / 신전 70 도가 끝인데,
+    # 칼날 방향을 무제한으로 맞추면 121~153 도까지 꺾인다(관절 감사에서 발견).
+    #
+    # ★★이 제한은 **조용히 칼날 방향을 바꾼다.** 그게 사고의 원인이었다.
+    # 포즈에 적은 BLADE 방향이 손목 한계를 넘으면 여기서 되돌려지는데, 로그가 안 남아서
+    # "적은 대로 나오고 있다"고 착각하게 된다. 실제로 벌어진 일(probe_swing 실측):
+    #   · 3연타 1타 S1/E1 이 손목 126/151 도를 요구 -> 제한이 물어서 대각선이 옆으로 쓸림
+    #   · 수면참 HS/HE1/HE2 가 152/114/146 도를 요구 -> 내리베기가 가로베기가 됨
+    # 제한을 풀면 성격은 살아나지만 손목이 150 도 꺾인 그림이 된다(둘 다 틀렸다).
+    # **답은 손 위치다.** 팔뚝이 먼저 벨 방향을 가리키게 손을 놓으면 손목은 20~50 도로
+    # 끝나고 적은 칼날 방향이 그대로 나온다. 새 베기 포즈를 만들 때는
+    # probe_swing.py 의 "키포즈별 오른손목" 표에서 * 표시가 없는지 반드시 확인할 것.
+    WRIST_MAX = 78.0
+
+    def aim_blade(self, target, max_wrist="default"):
+        """칼날을 그 방향으로. max_wrist 를 주면 손목이 그 이상 꺾이지 않게 되돌린다.
+        ★칼날 방향을 무조건 맞추면 손목이 77 도까지 꺾인다(달리기에서 실측).
+        사람 손목은 굽힘 80 / 폄 70 도가 한계이고, 칼을 들고 달릴 땐 거의 곧게 편다."""
+        b = self.pb("r hand")
+        d0 = self.blade_dir()
+        if b is None or d0 is None:
+            return
+        q = d0.rotation_difference(Vector(target).normalized())
+        ax, ang = q.to_axis_angle()
+        self._rotate(b, ax, ang)
+        if max_wrist == "default":
+            max_wrist = self.WRIST_MAX
+        if max_wrist is None:
+            return
+        for _ in range(14):
+            w = self.wrist_bend("r")
+            if w <= max_wrist + 0.5:
+                break
+            self._rotate(b, ax, -math.radians(min(8.0, w - max_wrist)))
+
+    def ik(self, side, target_world, label="", lat_mul=1.0, pole_ruf=None):
+        """2본 IK: 어깨-팔꿈치-손목. 팔꿈치는 pole 방향으로 밀어낸다.
+        pole 을 옆+아래로 고정하면 상단세(머리 위)에서 팔꿈치가 아래로 꺾여
+        어색하므로, 손이 어깨보다 높아질수록 팔꿈치도 위로 뜨게 한다."""
+        ua, fa, hd = (self.pb("%s upperarm" % side), self.pb("%s forearm" % side),
+                      self.pb("%s hand" % side))
+        if not (ua and fa and hd):
+            return
+        A = (self.A2W @ ua.matrix).translation.copy()
+        B = (self.A2W @ fa.matrix).translation.copy()
+        C = (self.A2W @ hd.matrix).translation.copy()
+        L1, L2 = (B - A).length, (C - B).length
+        T = Vector(target_world)
+        v = T - A
+        d = v.length
+        if d < 1e-6:
+            return
+        n = v / d
+        reach = L1 + L2
+        if d > reach * 0.999:
+            self.reach_log.append((label or side, round(d / reach, 3)))
+            d = reach * 0.999
+        # 코사인법칙으로 어깨각
+        c = max(-1.0, min(1.0, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d)))
+        ang = math.acos(c)
+        lat = RIGHT * (1.0 if side == "r" else -1.0)
+        rel_u = (T - A).dot(UP) / self.H
+        up_bias = -1.15 + 1.75 * max(0.0, min(1.0, (rel_u + 0.05) / 0.28))
+        if pole_ruf is not None:
+            pr, pu, pf = pole_ruf
+            pole = (lat * pr + UP * pu + FWD * pf)
+        else:
+            pole = (lat * (0.34 * lat_mul) + UP * up_bias + FWD * 0.30)
+        perp = pole - n * pole.dot(n)
+        if perp.length < 1e-5:
+            perp = n.cross(UP)
+        perp.normalize()
+        elbow = A + n * (L1 * math.cos(ang)) + perp * (L1 * math.sin(ang))
+        self.aim("%s upperarm" % side, elbow - A)
+        B2 = (self.A2W @ fa.matrix).translation
+        self.aim("%s forearm" % side, (A + n * d) - B2)
+
+    def hand_rot(self, side):
+        """손 본의 월드 회전(스케일 제거)."""
+        b = self.pb("%s hand" % side)
+        return None if b is None else (self.A2W @ b.matrix).decompose()[1]
+
+    def align_hand(self, side, target_q):
+        """손 본의 월드 회전을 target 으로 맞춘다.
+        ★pb.matrix 에 행렬을 직접 대입하면 아마추어 스케일(0.0254)이 날아가
+        손이 39 배로 부푼다. head 를 피벗으로 **회전만** 건다."""
+        b = self.pb("%s hand" % side)
+        cur = self.hand_rot(side)
+        if b is None or cur is None:
+            return
+        ax, ang = (target_q @ cur.inverted()).to_axis_angle()
+        self._rotate(b, ax, ang)
+
+    def grip(self, back):
+        """왼 **주먹 중심**을 자루 축 위에 올린다. back = 오른 주먹에서 물미 쪽으로
+        떨어진 거리(H 단위). 양손이 자루에 묶이면 팔이 몸을 감아 돌 수가 없다.
+
+        IK 는 '손목'을 목표점에 놓기 때문에, 주먹이 원하는 자리에 오게 하려면
+        오차를 되먹여 몇 번 반복해야 한다(손목→주먹 오프셋의 방향이 팔 자세에
+        따라 달라져서 한 번에 못 맞춘다)."""
+        bd = self.blade_dir()
+        if bd is None:
+            return
+        axis_pt = self.palm_world("r")
+        if axis_pt is None:                      # 주먹 정보가 없으면 옛 방식
+            axis_pt = self.wpos("r hand")
+        if axis_pt is None:
+            return
+        want = axis_pt - bd * (back * self.H)    # 왼 주먹 중심이 있어야 할 곳
+        # ★왼 팔꿈치를 **뒤-아래**로 보낸다. 옆으로 두면 팔뚝이 배 앞을
+        # 거의 수평(14도)으로 가로질러 팔이 교차한 것처럼 보인다(실측).
+        # 검도에서도 왼 팔꿈치는 몸통 옆 아래, 살짝 뒤다.
+        pole = (0.18, -1.00, -0.85)
+        # ★손 **회전**. IK 는 위치만 맞추고 손 본의 자체 회전은 방치돼 있었다.
+        # 그래서 왼 주먹이 자루 위에 얹혀만 있고 "전혀 다른 방향의 칼을 쥔 손"
+        # 모양이었다(실측: 자루 통과축이 평균 64.7 도, 최대 130 도 어긋남.
+        # 오른손은 칼이 강체로 붙어 있어 항상 0 도). 주먹 메시가 본 로컬 Z 로
+        # 정확히 대칭이라 정답은 한 줄이다: **왼손 월드 회전 = 오른손 월드 회전.**
+        tq = self.hand_rot("r")
+        n0 = len(self.reach_log)
+        tgt = want.copy()
+        best, best_d = tgt.copy(), 1e9
+        for _ in range(8):
+            del self.reach_log[n0:]              # 반복 흔적이 쌓이지 않게
+            self.ik("l", tgt, label="l grip", pole_ruf=pole)
+            if tq is not None:
+                self.align_hand("l", tq)         # 손을 돌리면 주먹이 밀리므로 되먹임 안에서
+            got = self.palm_world("l")
+            if got is None:
+                return
+            err = want - got
+            if err.length < best_d:
+                best_d, best = err.length, tgt.copy()
+            if err.length < self.H * 0.002:
+                return
+            tgt = tgt + err
+        if (want - self.palm_world("l")).length > best_d + 1e-9:
+            del self.reach_log[n0:]
+            self.ik("l", best, label="l grip", pole_ruf=pole)
+            if tq is not None:
+                self.align_hand("l", tq)
+
+    def swing(self, key, axis, deg):
+        b = self.pb(key)
+        if b is None:
+            print("!bone", key)
+            return
+        if axis == ELBOW:
+            axis = self.elbow_axis("l" if key.lower().startswith("l") else "r")
+        self._rotate(b, axis, math.radians(deg))
+
+    def reset(self):
+        for b in self.arm.pose.bones:
+            b.rotation_mode = "QUATERNION"
+            b.matrix_basis = Matrix()
+        self._update()
+
+    def apply(self, pose, reset=True):
+        """리스트 순서대로 적용. spine -> 오른팔 IK -> BLADE -> 왼손 GRIP 순서를 지킬 것.
+        GRIP 은 칼날 방향이 정해진 뒤라야 자루 위치를 알 수 있다.
+        reset=False 면 지금 포즈 위에 덧씌운다(원본 에셋 하체 + 우리 팔 조합용)."""
+        if reset:
+            self.reset()
+            self.arm.location = self.home + Vector(pose.get("r", (0, 0, 0))) * self.H
+            self._update()
+        for key, op, val in pose["b"]:
+            if op == AIM:
+                self.aim(key, ruf(*val))
+            elif op == BLADE:
+                if isinstance(val, (list, tuple)) and len(val) == 4:
+                    self.aim_blade(ruf(*val[:3]), max_wrist=val[3])
+                else:
+                    self.aim_blade(ruf(*val))
+            elif op == IK:
+                # 기준점은 매번 다시 잡는다. 골반을 돌리면 척추 head 가 움직인다.
+                org = self.origin()
+                self.ik(key, org + (RIGHT * val[0] + UP * val[1] + FWD * val[2]) * self.H,
+                        label=key)
+            elif op == FACE:
+                b = self.pb(key)
+                if b is not None:
+                    m = (self.A2W @ b.matrix).to_3x3()
+                    fd = (m @ HEAD_FACE_LOCAL).normalized()
+                    td = ruf(*val)
+                    a0 = math.atan2(fd.dot(RIGHT), fd.dot(FWD))
+                    a1 = math.atan2(td.dot(RIGHT), td.dot(FWD))
+                    self._rotate(b, tuple(UP), a0 - a1)
+            elif op == ARC:
+                sh = self.wpos("%s upperarm" % key)
+                if sh is not None:
+                    self.ik(key, sh + ruf(*val[:3]) * (val[3] * self.H), label=key)
+            elif op == GRIP:
+                self.grip(val)
+            else:
+                self.swing(key, op, val)
+
+
+def grip_of(spec):
+    """포즈에서 GRIP 값(양손 간격)을 뽑는다. 없으면 None."""
+    bl = spec["b"] if isinstance(spec, dict) else spec
+    for k, op, v in bl:
+        if op == GRIP:
+            return v
+    return None
+
+
+def relock_grip(ps, frames, bones=("l upperarm", "l forearm", "l hand")):
+    """★키프레임 **사이** 프레임에서 왼 주먹을 자루에 다시 붙인다.
+
+    키포즈는 전부 자루를 정확히 쥐게 만들어도, 본은 쿼터니언으로 보간되는데
+    IK 해는 비선형이라 중간 프레임에서 손이 자루를 놓친다.
+    실측(수면참): 키는 이탈 0.00 인데 사이 프레임 최대 0.16 H = 주먹 2.3 개.
+    이게 "휘두를 때 손이랑 손잡이가 따로 노는" 그림의 정체였다.
+    그래서 매 프레임 왼팔만 다시 풀고 그 프레임에 키를 박는다.
+
+    frames = [(프레임, 포즈), ...] (액션을 만들 때 쓴 그대로)
+    한손 포즈가 낀 구간은 건드리지 않는다(일부러 자루를 놓는 동작이므로)."""
+    import bpy
+    ks = []
+    for f, spec in frames:
+        d = spec if isinstance(spec, dict) else {"b": spec}
+        ks.append((f, grip_of(spec), bool(d.get("1h"))))
+    ks.sort(key=lambda t: t[0])
+    if len(ks) < 2:
+        return 0
+    pbs = [ps.pb(n) for n in bones]
+    pbs = [b for b in pbs if b is not None]
+    n = 0
+    for i in range(len(ks) - 1):
+        (fa, ga, ha), (fb, gb, hb) = ks[i], ks[i + 1]
+        if ga is None or gb is None or ha or hb:
+            continue                      # 한손 구간·파지 없는 구간은 그대로 둔다
+        for f in range(int(fa) + 1, int(fb)):
+            bpy.context.scene.frame_set(f)
+            t = (f - fa) / float(fb - fa)
+            ps.grip(ga + (gb - ga) * t)
+            for b in pbs:
+                b.keyframe_insert("rotation_quaternion", frame=f)
+            n += 1
+    # 새로 박은 키는 선형으로. 매 프레임 키가 있으니 베지어 오버슈트만 손해다.
+    act = ps.arm.animation_data.action if ps.arm.animation_data else None
+    if act:
+        names = set(b.name for b in pbs)
+        try:
+            for lay in act.layers:
+                for st in lay.strips:
+                    for cb in st.channelbags:
+                        for fc in cb.fcurves:
+                            if any(('"%s"' % nm) in fc.data_path for nm in names):
+                                for kp in fc.keyframe_points:
+                                    kp.interpolation = "LINEAR"
+        except Exception:
+            pass
+    return n
+
+
+def P(bones, root=(0, 0, 0), onehand=False, wind=False):
+    """onehand=True  왼손이 자루를 놓는다(최대 신전). 검증기가 파지 검사를 건너뛴다.
+    wind=True     되감기 구간. 칼이 몸 뒤로 가도 된다(모으는 동작이므로)."""
+    return {"b": bones, "r": root, "1h": onehand, "wind": wind}
+
+
+# ---------------------------------------------------------------- 포즈 정의
+# 검도 카마에 기반. 손은 정중선 근처에서 작게 움직이고 칼날이 크게 돈다.
+# 오른손 r 은 -0.15 ~ +0.22, f 는 항상 +0.12 이상(= 몸 앞)을 지킨다.
+# 양손 간격(H 단위). ★주먹 반지름이 0.072 H 라 **0.144 보다 좁으면 두 주먹이 겹친다.**
+# 0.070 으로 뒀더니 왼손이 자루가 아니라 오른 팔뚝 위에 얹혀 팔이 교차해 보였다(오너 지적).
+# 손목 기준으로는 왼손이 배보다 뒤여도, 주먹 앞면(+0.072)은 배(0.154) 밖으로 나온다.
+# ★손 회전을 오른손과 같게 잠근 뒤(align_hand) 두 주먹이 **한 덩어리로 뭉쳐** 보였다.
+# 주먹의 자루축 방향 길이가 0.2765(월드)라 반이 0.138. GB 0.112 H = 0.270 은
+# 0.276 과 거의 같아서 두 주먹이 딱 맞닿는다. 방향이 다를 땐 두 덩어리로 읽혔는데
+# 같아지니 하나의 살덩이가 됐다(손가락·너클이 없는 메시라 구분할 단서가 없다).
+# 사이에 자루가 보이게 0.074 월드쯤 띄운다.
+GB = 0.142
+
+# 中段の構え — 양손 배꼽 앞, 칼끝은 상대 목을 겨눈다. 검도의 기본 자세
+# 中段の構え. 실측 기준(척추 높이에서 몸통 앞면 = +0.154 H):
+#   1차 시안은 오른손 f 0.13 → **왼손이 +0.056 = 몸 안으로 0.10 H 파묻혔다.**
+#   ("배꼽에 손 올려놓은 듯" - 오너). 검도는 왼손이 배꼽에서 주먹 하나 앞이다.
+#   팔 길이 한계(오른손 f 0.21 에서 IK 비율 1.00) 안까지 밀고, 자루 잡는 간격도
+#   GB 0.078 → 0.070 으로 줄여 왼손을 앞으로 당겼다.
+# 팔만 따로 뺀다. 원본 에셋 달리기처럼 **하체는 남의 모션**을 쓰고
+# 팔만 우리 중단세로 덮어야 할 때가 있다.
+GUARD_ARMS = [
+    ("r clavicle", Z, 4),                        # 어깨를 살짝 앞으로 내밀어 여유 확보
+    ("r", IK, (0.02,  0.07, 0.21)),
+    # ★칼날 방향이 곧 왼손 위치를 정한다. 왼손 = 오른 주먹에서 칼날 반대쪽으로 GB.
+    # 앞 성분이 크면(0.87) 왼손이 그만큼 뒤로 끌려가 **배(코트) 안에 박힌다.**
+    # 실측: 왼 주먹 f 0.131 인데 그 높이의 코트 앞면이 0.154 → 0.33 주먹만큼 파묻힘.
+    # 칼을 세워(39도) 앞 성분을 0.76 으로 줄이면 왼 주먹이 코트 밖으로 나온다.
+    # 이보다 더 세우면 팔이 안 닿는다(IK 클램프). 실측 스윕으로 고른 값.
+    ("r hand", BLADE, (0.20, 0.62, 0.76)),
+    ("l", GRIP, GB),
+]
+
+# spine X 5 는 상체를 앞으로 숙여 배를 손 쪽으로 밀었다. 2 로 줄여 여유를 만든다.
+# ★달릴 때는 중단세가 **물리적으로 불가능**하다. 달리기는 상체를 크게 숙이는데
+# 중단세는 손을 배 앞 정중선에 두므로, 팔을 최대로 뻗어도(f 0.34, IK 한계 초과)
+# 왼 주먹이 코트 안으로 0.66 주먹 파묻힌다(실측). 레퍼런스에서도 이동 중에는
+# 칼을 몸 옆·뒤로 내려 **한 손으로** 든다. 왼팔은 원본 달리기의 팔 흔들기를 그대로 쓴다.
+def run_arms(sw):
+    """달리기 팔. sw = -1(오른 다리 뒤) ~ +1(오른 다리 앞).
+    팔은 **같은 쪽 다리와 반대로** 흔든다. 이게 없으면 칼이 골반에 붙은 판자로 보인다.
+    원본 달리기의 왼팔을 그대로 쓰면 안 된다 - 소총을 든 전투 달리기라
+    빈손이 얼굴 앞까지 올라온다(렌더로 확인).
+    칼은 크고 무거우므로 오른팔 진폭은 왼팔의 절반만."""
+    # 실측 대조로 잡은 값 (연구: 몸통 5~10도 앞기울기 / 팔꿈치 약 90도 유지 ROM 30~56도 /
+    # 손은 엉덩이에서 가슴까지 / 팔은 몸을 가로지르지 않고 앞뒤로).
+    # 고친 이력:
+    #   · 뒤로 젖힌 목표가 어깨에서 0.31 H = **팔 길이 그대로**라 팔꿈치가 162 도까지
+    #     펴졌다(막대기 팔). 손도 배꼽 높이에서만 움직여 가슴까지 안 올라왔다.
+    #   · 그다음 (r,u,f) 를 직선 보간했더니 어깨와의 거리가 크게 변해 팔꿈치가
+    #     46~142 도로 벌어졌다(접혔다 펴졌다).
+    # ★실제 팔 흔들기는 어깨를 중심으로 한 **호**를 그리며 팔꿈치 각을 유지한다.
+    #   그래서 어깨에서 반지름 R 인 구면 위에 목표를 놓는다. R 이 팔꿈치 각을 정한다.
+    def swing_dir(d_back, d_fwd, t):
+        u = (t + 1.0) * 0.5
+        return tuple(Vector(d_back).normalized()
+                     .lerp(Vector(d_fwd).normalized(), u).normalized())
+
+    LD = swing_dir((-0.16, -0.86, -0.48), (0.30, -0.46, 0.83), sw)
+    RD = swing_dir((0.14, -0.92, -0.37), (0.26, -0.66, 0.70), -sw)
+    return [
+        # 어깨는 골반과 **반대로** 돈다. 원본에도 15.8도 들어있지만 더 실어야 산다.
+        # 달리기는 몸통을 5~10 도 앞으로 기울인다(연구 실측). 우리는 오히려
+        # 7.2 도 **뒤로** 젖혀져 있었다 - 그게 "허리가 뻣뻣하다"의 정체.
+        ("spine", X, 9),
+        ("spine", Z, -6.0 * sw),
+        # ★목은 원본 움직임(앞뒤 0.219 / 좌우 0.106)을 그대로 쓰고 **상수 기울기만** 뺀다.
+        # 절대 방향으로 못 박으면 상체가 통째로 굳는다(오너 지적).
+        # 실측: 보정 없으면 좌우 +0.39~0.49, -26도 걸면 -0.01~+0.08 로 선다.
+        ("neck", (0, -1, 0), -26),
+        # 머리는 원본에서 앞뒤 폭이 **0.000** 이라 가져와도 안 움직인다. 직접 흔든다.
+        # 달리는 사람은 시선을 안정시키므로 머리는 거의 수평을 유지하며 살짝만 끄덕인다.
+        ("head", AIM, (0.02 * sw, 1.0, -0.03 + 0.06 * sw)),
+        ("head", FACE, (0.03 * sw, 0.0, 1.0)),   # 달릴 땐 정면을 본다
+
+        ("r clavicle", Z, -5),
+        ("r", ARC, (RD[0], RD[1], RD[2], 0.245 + 0.020 * sw)),  # 칼이 무거워 진폭 작게
+        # ★칼끝은 **앞·아래**. 뒤로 끌면 판자처럼 보이고, 옆으로 기울면 정면에서
+        # 비스듬해 보인다. 좌우 성분 0 으로 두어 몸 정면과 나란히 든다.
+        # 손목 꺾임 22도 한계. 방향을 무조건 맞추면 77도까지 꺾인다.
+        ("r hand", BLADE, (0.0, -0.38, 0.925, 22.0)),
+        ("l clavicle", Z, 5),
+        # 반지름을 살짝 흔들어 팔꿈치가 **앞에서 더 접히고 뒤에서 펴지게** 한다.
+        # 완전히 일정하면 기계처럼 보인다(실측 ROM 0도였다).
+        ("l", ARC, (LD[0], LD[1], LD[2], 0.235 - 0.030 * sw)),
+    ]
+
+
+RUN_ARMS = run_arms(0.0)
+
+GUARD = P([("spine", X, 2), ("spine", Z, -4)] + GUARD_ARMS + [
+    ("l thigh", Z, -8), ("r thigh", Z, -8),
+    ("l thigh", X, 8), ("r thigh", X, -10),      # 오른발 뒤 (검도 앞뒤 발)
+])
+
+# ---- 1타 袈裟斬り: 오른쪽 위 -> 왼쪽 아래. 손은 정중선 앞을 지난다 ----
+W1 = P([                                    # 八相の構え 계열: 오른 관자놀이 옆
+    ("spine", Z, -18), ("spine", X, 6),
+    ("r", IK, (0.13,  0.31, 0.09)),
+    ("r hand", BLADE, (0.36, 0.80, -0.48)),
+    ("l", GRIP, GB),
+    ("head", Z, -10),
+    ("l thigh", Z, -14), ("r thigh", Z, -14),
+    ("l thigh", X, 12), ("r thigh", X, -14),
+], root=(0, 0.06, -0.02))
+
+S1 = P([                                    # 좌하단으로 베어 내린다
+    # ★손을 내려야 칼이 내려간다. 손을 가슴 높이(u 0.30)에 둔 채 칼날만 아래로
+    # 돌리면 손목이 151 도 꺾이고, 손목 제한(WRIST_MAX)이 그걸 되돌려
+    # **작가가 적은 좌하단 방향이 안 나온다**(실측: 대각선이 옆으로 쓸리는 동작이 됐다).
+    # 팔뚝이 이미 좌하를 가리키게 손을 내리면 손목은 18 도로 끝난다.
+    ("spine", Z, 22), ("spine", X, 16),
+    ("r", IK, (-0.06, 0.41, 0.15)),
+    ("r hand", BLADE, (-0.36, -0.68, 0.64)),
+    ("l", GRIP, 0.110),                      # 좌하로 내리면 자루 끝이 왼팔 사거리 밖이라 좁힌다
+    ("head", Z, 10), ("head", X, 8),
+    ("l thigh", Z, 12), ("r thigh", Z, 12),
+    ("l thigh", X, 16), ("r thigh", X, -22),
+], root=(0, -0.14, -0.05))
+
+E1 = P([
+    ("spine", Z, 26), ("spine", X, 12),
+    ("r", IK, (-0.09, 0.23, 0.19)),          # S1 에서 손이 내려오며 칼이 좌하로 흐른다
+    ("r hand", BLADE, (-0.47, -0.69, 0.55)),
+    ("l", GRIP, GB),
+    ("head", Z, 7), ("head", X, 5),
+    ("l thigh", Z, 9), ("r thigh", Z, 9),
+    ("l thigh", X, 13), ("r thigh", X, -18),
+], root=(0, -0.12, -0.045))
+
+# ---- 2타 逆袈裟: 왼쪽 아래 -> 오른쪽 위 ----
+W2 = P([
+    ("spine", Z, 27), ("spine", X, 13),
+    ("r", IK, (-0.06, 0.24, 0.15)),
+    ("r hand", BLADE, (-0.62, -0.64, 0.45)),
+    ("l", GRIP, GB),
+    ("head", Z, 8),
+    ("l thigh", Z, 10), ("r thigh", Z, 10),
+    ("l thigh", X, 13), ("r thigh", X, -18),
+], root=(0, -0.11, -0.05))
+
+S2 = P([                                    # 쳐올려 벤다
+    ("spine", Z, -18), ("spine", X, 2),
+    ("r", IK, (0.12, 0.23, 0.19)),
+    ("r hand", BLADE, (0.48, 0.72, 0.50)),
+    ("l", GRIP, GB),
+    ("head", Z, -10), ("head", X, -4),
+    ("l thigh", Z, -12), ("r thigh", Z, -12),
+    ("l thigh", X, 6), ("r thigh", X, -8),
+], root=(0, -0.02, -0.045))
+
+E2 = P([
+    ("spine", Z, -13), ("spine", X, 4),
+    ("r", IK, (0.12,  0.23, 0.16)),
+    ("r hand", BLADE, (0.48, 0.72, 0.50)),
+    ("l", GRIP, GB),
+    ("head", Z, -7),
+    ("l thigh", Z, -9), ("r thigh", Z, -9),
+    ("l thigh", X, 5), ("r thigh", X, -6),
+], root=(0, -0.03, -0.045))
+
+# ---- 3타 上段からの面: 머리 위 -> 정중선 수직 내려베기 (마무리) ----
+W3 = P([                                    # 上段の構え: 양손을 이마 위로
+    ("spine", X, -14), ("spine", Z, -2),
+    ("r", IK, (0.04,  0.35, 0.06)),
+    ("r hand", BLADE, (0.05, 0.70, -0.71)),
+    ("l", GRIP, GB),
+    ("head", X, -10),
+    ("l thigh", X, 12), ("r thigh", X, -16),
+], root=(0, 0.06, 0.03))
+
+S3 = P([                                    # 정중선을 따라 곧게 내린다 + 깊은 런지
+    ("spine", X, 22), ("spine", Z, 2),
+    ("r", IK, (0.02, 0.24, 0.21)),
+    ("r hand", BLADE, (0.00, -0.55, 0.84)),
+    ("l", GRIP, GB),
+    ("head", X, -6),
+    ("l thigh", X, 22), ("r thigh", X, -34),
+    ("l calf", X, -8), ("r calf", X, 26),
+], root=(0, -0.28, -0.12))
+
+E3 = P([
+    ("spine", X, 17),
+    ("r", IK, (0.02, 0.20, 0.22)),
+    ("r hand", BLADE, (0.00, -0.68, 0.73)),
+    ("l", GRIP, GB),
+    ("head", X, -4),
+    ("l thigh", X, 17), ("r thigh", X, -27),
+    ("r calf", X, 20),
+], root=(0, -0.24, -0.10))
+
+REC = P([
+    ("spine", X, 10), ("spine", Z, -2),
+    ("r", IK, (0.03, 0.17, 0.26)),
+    ("r hand", BLADE, (0.02, 0.10, 0.99)),
+    ("l", GRIP, GB),
+    ("head", X, 4),
+    ("l thigh", X, 12), ("r thigh", X, -16),
+], root=(0, -0.12, -0.05))
+
+# 타이밍: 윈드업 여유 -> 타격 2~3프레임 스냅 -> 여파 감속
+SEQ = [(1, GUARD), (7, W1), (10, S1), (13, E1),
+       (18, W2), (21, S2), (24, E2),
+       (30, W3), (34, S3), (37, E3),
+       (41, REC), (48, GUARD)]
+LAST = 48
+WINDUP_F = {7, 18, 30}     # 이 키 이후 = 가속(타격 돌입)
+STRIKE_F = {10, 21, 34}    # 이 키 이후 = 급감속(여파)
+TRAILS = [(7, 13), (18, 24), (30, 37)]
+IMPACTS = [10, 21, 34]
+
+
+# ================================================================ 일격기(강베기)
+# 크게 감아 올렸다가 몸을 낮추며 한 번에 베고, 벤 자세를 길게 붙든다.
+# 3연타와 반대로 "느리게 모아서 한 방". 타점이 하나뿐이라 윈드업이 길다.
+#
+# ★성격 = **대각선 내리베기**(오른 위 -> 왼 아래). 옆으로 베는 건 횡일섬이 맡는다.
+#   두 스킬이 같은 성격이면 쓸 이유가 없다.
+#   1차 설계는 레퍼런스 영상을 보고 "수평으로 크게 벤다"로 잡았는데,
+#   그 결과 타격 성분이 좌우 68% / 상하 50% 가 되어 횡일섬(좌우 94%)과 구분이 안 됐다.
+#   게다가 손을 가슴 높이에 둔 채 칼날만 왼쪽으로 돌리는 구성이라 손목이 152 도
+#   꺾였고, 손목 제한이 그걸 되돌리면서 칼날 방향이 또 한 번 뭉개졌다(이중 사고).
+#   지금은 **손을 내려 팔뚝이 먼저 좌하를 가리키게** 하고 칼이 그 연장선에 놓인다.
+
+HG1 = P([                                   # 준비: 중단세에서 살짝 가라앉는다
+    ("spine", X, 9), ("spine", Z, -6),
+    ("r", IK, (0.03, 0.18, 0.25)),
+    ("r hand", BLADE, (0.04, 0.36, 0.93)),
+    ("l", GRIP, GB),
+    ("l thigh", Z, -9), ("r thigh", Z, -9),
+    ("l thigh", X, 12), ("r thigh", X, -15),
+    ("l calf", X, -6), ("r calf", X, 10),
+], root=(0, 0.02, -0.03))
+
+HG2 = P([                                   # 감아 올림: 몸을 오른쪽으로 꼬며 칼을 세운다
+    ("spine", X, 2), ("spine", Z, -24),
+    ("r clavicle", Y, -14), ("r clavicle", Z, 8),
+    ("r", IK, (0.13, 0.26, 0.12)),
+    ("r hand", BLADE, (0.34, 0.84, -0.36)),
+    ("l", GRIP, GB),
+    ("head", Z, -16),
+    ("l thigh", Z, -16), ("r thigh", Z, -16),
+    ("l thigh", X, 16), ("r thigh", X, -20),
+    ("l calf", X, -10), ("r calf", X, 16),
+], root=(0, 0.06, -0.05))
+
+HG3 = P([                                   # 최대 축적: 八相. 뒷발에 체중, 활처럼 휜다
+    ("spine", X, -6), ("spine", Z, -34),
+    ("r clavicle", Y, -20), ("r clavicle", Z, 12),
+    ("r", IK, (0.15, 0.35, 0.08)),
+    ("r hand", BLADE, (0.46, 0.76, -0.44)),
+    ("l", GRIP, GB),
+    ("head", Z, -22), ("head", X, -6),
+    ("l thigh", Z, -22), ("r thigh", Z, -22),
+    ("l thigh", X, 20), ("r thigh", X, -24),
+    ("l calf", X, -12), ("r calf", X, 20),
+], root=(0, 0.10, -0.04))
+
+HS = P([                                    # 일섬: 몸을 낮추며 대각선으로 내리벤다
+    ("spine", X, 26), ("spine", Z, 34),
+    ("r clavicle", Y, 8), ("r clavicle", Z, -14),
+    ("l clavicle", Z, 12),                     # 양손 간격을 넓혔으니 왼 어깨도 칼 쪽으로
+    ("r", IK, (-0.06, 0.22, 0.21)),
+    ("r hand", BLADE, (-0.44, -0.63, 0.64)),   # 칼끝이 왼쪽 **아래** 앞으로
+    ("l", GRIP, 0.110),   # 크게 벤 자세는 손이 모인다
+    ("head", Z, 20), ("head", X, 4),
+    ("l thigh", Z, 20), ("r thigh", Z, 20),
+    ("l thigh", X, 30), ("r thigh", X, -46),
+    ("l calf", X, -14), ("r calf", X, 42),
+], root=(0, -0.30, -0.16))
+
+HE1 = P([                                   # 벤 자세를 붙든다(잔심). 이 정지가 무게다
+    ("spine", X, 24), ("spine", Z, 31),
+    ("r clavicle", Y, 6), ("l clavicle", Z, 12),
+    ("r", IK, (-0.11, 0.17, 0.21)),
+    ("r hand", BLADE, (-0.39, -0.68, 0.61)),   # 벤 끝을 좌하로 붙든다
+    ("l", GRIP, 0.110),   # 크게 벤 자세는 손이 모인다
+    ("head", Z, 17), ("head", X, 2),
+    ("l thigh", Z, 18), ("r thigh", Z, 18),
+    ("l thigh", X, 28), ("r thigh", X, -44),
+    ("l calf", X, -13), ("r calf", X, 40),
+], root=(0, -0.31, -0.17))
+
+HE2 = P([                                   # 아주 천천히 풀린다
+    ("spine", X, 20), ("spine", Z, 25),
+    ("l clavicle", Z, 10),
+    ("r", IK, (-0.01, 0.28, 0.22)),
+    ("r hand", BLADE, (-0.44, -0.52, 0.74)),
+    ("l", GRIP, 0.125),   # 손이 서서히 제자리로 벌어진다
+    ("head", Z, 13),
+    ("l thigh", Z, 15), ("r thigh", Z, 15),
+    ("l thigh", X, 25), ("r thigh", X, -39),
+    ("l calf", X, -11), ("r calf", X, 35),
+], root=(0, -0.28, -0.15))
+
+HR = P([                                    # 일어서며 중단세로
+    ("spine", X, 12), ("spine", Z, 10),
+    ("r", IK, (0.00, 0.20, 0.29)),
+    ("r hand", BLADE, (-0.34, 0.14, 0.93)),
+    ("l", GRIP, GB),
+    ("head", Z, 5),
+    ("l thigh", Z, 6), ("r thigh", Z, 6),
+    ("l thigh", X, 16), ("r thigh", X, -22),
+    ("l calf", X, -7), ("r calf", X, 14),
+], root=(0, -0.14, -0.07))
+
+# 느리게 모아서(1~26) 2프레임에 베고(28) 길게 붙든다(28~44) -> 회복
+HEAVY_SEQ = [(1, GUARD), (8, HG1), (17, HG2), (26, HG3),
+             (28, HS), (34, HE1), (44, HE2),
+             (52, HR), (62, GUARD)]
+HEAVY_LAST = 62
+HEAVY_WINDUP_F = {26}          # 여기서 타격으로 급가속
+HEAVY_STRIKE_F = {28}          # 벤 직후 급정지(잔심)
+HEAVY_TRAILS = [(26, 36)]
+HEAVY_IMPACTS = [28]
+
+
+# ================================================================ 횡일섬(넓은 가로베기)
+# 오너 지적 2회를 반영한 3차 설계.
+#  1차: 양손으로 오른쪽->왼쪽. 사거리가 짧았다(양손이면 손이 몸 앞 0.16H 밖으로 못 나감)
+#  2차: 한손 신전으로 바꿨지만 **방향이 거꾸로였다**. 오너: "팔을 쭉 뻗는 쪽이 칼을
+#       잡고 있어야지. 칼도 가로로 베다 만 느낌".
+#       맞다 — 오른손이 몸을 가로질러 왼쪽으로 가면 팔이 접힐 수밖에 없다.
+#       오른팔이 완전히 펴지는 방향은 **오른쪽**이다.
+#  3차: 왼쪽에서 감았다가 오른쪽으로 뻗으며 벤다. 팔이 곧게 펴진다.
+#  4차(현재): 오너 "진짜 가로로만 베면 어떻게. 살짝 올라가며 베야지. 왼쪽 아래에서
+#       우측 위로 베는 느낌(오른손잡이 기준)". 逆袈裟(역게사) — 몸을 낮췄다가
+#       **일어나면서** 벤다. 순수 수평은 힘이 안 실리고, 올려베야 체중이 실린다.
+#       칼끝이 왼쪽 아래(u -0.23)에서 오른쪽 위(u +0.31)로, 약 25도 올라간다.
+
+XG1 = P([                                   # 준비: 무릎 낮추고 칼을 왼쪽으로 넘긴다
+    ("spine", X, 10), ("spine", Z, 12),
+    ("r", IK, (0.01, 0.17, 0.31)),
+    ("r hand", BLADE, (-0.42, -0.16, 0.89)),
+    ("l", GRIP, GB),
+    ("l thigh", Z, 10), ("r thigh", Z, 10),
+    ("l thigh", X, 14), ("r thigh", X, -16),
+    ("l calf", X, -8), ("r calf", X, 12),
+], root=(0, 0.02, -0.04))
+
+XG2 = P([                                   # 되감기: 왼쪽 끝까지 감는다. 팔은 접히지만
+    ("pelvis", Z, 26), ("spine", X, 6), ("spine", Z, 30),   # 그게 스프링을 감는 것
+    ("r clavicle", Y, 4), ("r clavicle", Z, -16),
+    ("r", IK, (-0.01, 0.24, 0.16)),
+    ("r hand", BLADE, (-0.70, -0.50, 0.51)),  # 칼끝 왼쪽 "아래". 여기서부터 올려 벤다
+    ("l", GRIP, GB),                         # 몸 앞이라 양손 유지된다
+    ("head", Z, -20),      # 몸통이 +56 도 감긴다. 머리까지 같이 돌리면
+                            # 시선이 84 도나 돌아가 상대를 놓친다. 반대로 건다
+    ("l thigh", X, 24), ("r thigh", X, -28),
+    ("l calf", X, -14), ("r calf", X, 26),
+], root=(0, 0.05, -0.11), wind=True)
+
+XS = P([                                    # 일섬: 왼손을 놓고 오른팔을 오른쪽으로 쭉
+    ("pelvis", Z, -18), ("spine", X, 12), ("spine", Z, -20),
+    ("r clavicle", Y, -8), ("r clavicle", Z, 20),
+    ("r", IK, (0.33, 0.16, 0.14)),           # 어깨에서 팔 길이의 99% - 완전 신전
+    ("r hand", BLADE, (0.82, 0.36, 0.45)),   # 칼끝이 오른쪽 "위"로 (r +0.72, u +0.31)
+    # ★뒤 성분 -0.74 는 날개처럼 뒤로 뻗어 과했다(오너 지적).
+    # 한손 베기의 왼팔은 **옆-아래**로 벌어지는 게 자연스럽다. 뒤는 살짝만.
+    ("l upperarm", AIM, (-0.70, -0.52, -0.18)),
+    ("l forearm", AIM, (-0.78, -0.40, -0.14)),
+    ("head", Z, 16), ("head", X, -12),   # 시선은 벤 쪽(오른쪽 위)
+    ("l thigh", X, 18), ("r thigh", X, -20),
+    ("l calf", X, -8), ("r calf", X, 16),
+], root=(0, -0.16, -0.03), onehand=True)
+
+XE1 = P([                                   # 다 뻗어 오른쪽 끝까지 흘린다(잔심)
+    ("pelvis", Z, -30), ("spine", X, 10), ("spine", Z, -28),
+    ("r clavicle", Y, -12), ("r clavicle", Z, 18),
+    ("r", IK, (0.28, 0.20, 0.09)),   # 몸이 더 돌아가 어깨가 뒤로 빠지므로 살짝 당김
+    ("r hand", BLADE, (0.88, 0.40, 0.26)),
+    ("l upperarm", AIM, (-0.74, -0.46, -0.22)),
+    ("l forearm", AIM, (-0.82, -0.34, -0.16)),
+    ("head", Z, 26), ("head", X, -16),   # 뻗은 칼끝을 눈으로 따라간다
+    ("l thigh", X, 14), ("r thigh", X, -16),
+    ("l calf", X, -6), ("r calf", X, 12),
+], root=(0, -0.17, -0.01), onehand=True)
+
+XE2 = P([                                   # 칼을 세우며 왼손이 자루로 돌아온다
+    ("pelvis", Z, -22), ("spine", X, 8), ("spine", Z, -18),
+    ("r", IK, (0.13, 0.23, 0.22)),
+    ("r hand", BLADE, (0.62, 0.36, 0.70)),
+    ("l", GRIP, GB),
+    ("head", Z, 16), ("head", X, -8),
+    ("l thigh", X, 17), ("r thigh", X, -20),
+    ("l calf", X, -9), ("r calf", X, 17),
+], root=(0, -0.12, -0.04))
+
+XR = P([                                    # 몸을 되돌리며 중단세로
+    ("pelvis", Z, -8), ("spine", X, 9), ("spine", Z, -4),
+    ("r", IK, (0.04, 0.18, 0.26)),
+    ("r hand", BLADE, (0.24, 0.14, 0.96)),
+    ("l", GRIP, GB),
+    ("head", Z, 6),
+    ("l thigh", X, 12), ("r thigh", X, -15),
+], root=(0, -0.06, -0.05))
+
+# 되감기를 길게(1~18) 주고 3프레임에 뻗는다. 뻗은 자세를 길게 흘린다.
+WIDE_SEQ = [(1, GUARD), (7, XG1), (18, XG2),
+            (21, XS), (27, XE1), (36, XE2),
+            (44, XR), (54, GUARD)]
+WIDE_LAST = 54
+WIDE_WINDUP_F = {18}
+WIDE_STRIKE_F = {21}
+WIDE_TRAILS = [(18, 30)]
+WIDE_IMPACTS = [21]
+
+
+# ================================================================ 점프
+# 수직 이동은 코드가 root 를 띄워서 만든다(중력·체공시간을 게임이 제어해야 하므로).
+# 여기서는 **다리 모양만** 만든다. 루트 이동을 넣으면 코드와 이중으로 더해진다.
+#
+# ★1차 시안은 "웅크림 → 폄 → 무릎당김" 3단이라 **다리를 두 번 굽히는** 것처럼 보였다.
+#   원인: 키를 누른 순간 vy 가 바로 붙어 몸이 떠오르는데, 클립은 그때부터 웅크림을
+#   시작한다. 공중에서 웅크렸다 폈다 다시 당기니 두 번이 된다.
+#   예비동작(anticipation)을 쓰려면 도약을 몇 프레임 미뤄야 하는데, 조작감이 무뎌진다.
+#   → **예비 웅크림을 빼고 폄에서 시작한다.** 굽힘은 공중 1회 + 착지 1회뿐이다.
+
+JP_LAUNCH = P([                             # 도약 순간: 이미 발끝까지 펴져 있다
+    # ★-12(뒤로 젖힘)였다가 무게중심이 뒤로 쏠렸다. 뛰어오를 땐 몸이 앞으로 간다.
+    ("spine", X, 7),
+    ("r", IK, (0.05, 0.20, 0.26)),
+    ("r hand", BLADE, (0.06, 0.34, 0.94)),
+    ("l", GRIP, GB),
+    ("head", X, -4),
+    ("l thigh", X, 10), ("r thigh", X, 6),
+    ("l calf", X, -4), ("r calf", X, -2),
+])
+
+JP_TUCK = P([                               # 상승: 무릎을 가슴 쪽으로 당긴다 (굽힘 1회)
+    ("spine", X, 16),
+    ("r", IK, (0.05, 0.19, 0.28)),
+    ("r hand", BLADE, (0.05, 0.26, 0.96)),
+    ("l", GRIP, GB),
+    ("l thigh", X, -56), ("r thigh", X, -32),
+    ("l calf", X, 78), ("r calf", X, 52),
+])
+
+JP_FALL = P([                               # 하강: 발을 내려 착지를 더듬는다
+    ("spine", X, 6),
+    ("r", IK, (0.05, 0.18, 0.25)),
+    ("r hand", BLADE, (0.05, 0.20, 0.98)),
+    ("l", GRIP, GB),
+    ("l thigh", X, -14), ("r thigh", X, -20),
+    ("l calf", X, 18), ("r calf", X, 24),
+])
+
+JP_LAND = P([                               # 착지: 깊게 굽혀 충격을 먹는다 (굽힘 2회)
+    # ★86도로 굽혔더니 공중 당김(70도)보다 깊어 "끝에서 한 번 더 굽힌다"로 읽혔다.
+    # 착지는 충격 흡수라 얕고 짧아야 한다.
+    ("spine", X, 17), ("spine", Z, -3),
+    ("r", IK, (0.04, 0.19, 0.30)),
+    ("r hand", BLADE, (0.06, 0.18, 0.98)),
+    ("l", GRIP, GB),
+    ("head", X, 6),
+    ("l thigh", X, -28), ("r thigh", X, -30),
+    ("l calf", X, 46), ("r calf", X, 48),
+])
+
+JUMP_SEQ = [(1, JP_LAUNCH), (7, JP_TUCK), (13, JP_FALL),
+            (16, JP_LAND), (23, GUARD)]
+JUMP_LAST = 23
+JUMP_RISE_F = 7          # 올라가는 동안 여기서 버틴다
+JUMP_FALL_F = 13         # 내려오는 동안 여기서 버틴다
+JUMP_LAND_F = 16         # 착지 순간 여기로 건너뛴다
+
+# ---------------------------------------------------------------- 검도 기준 팔
+# 모캡(CMU subject02 검술)에는 **칼이 안 찍혀 있다**. 몸만 찍혔으므로 손 비틀림이
+# 안 넘어온다. 그래서 하체·척추·체중이동은 모캡에서 가져오고 팔과 칼날은 여기서 덮는다.
+#
+# 검도 교본 수치 (조사)
+#   中段: 왼 주먹은 배꼽에서 주먹 하나 앞, 오른손은 츠바 바로 아래, 칼끝은 상대 목
+#   面打ち 마무리: **오른 주먹은 어깨 바로 아래에서 바닥과 거의 평행,
+#                 왼 주먹은 가슴 바로 아래, 칼끝은 자기 머리 높이**에서 멈춤
+#   (우리 기준 높이: 어깨 +0.22H, 가슴 +0.10H, 배꼽 -0.02H, 정수리 +0.44H)
+#
+# 지금 손으로 만든 베기는 오른손이 u +0.03(배꼽 높이)이라 손이 배에 파묻혔다.
+# 자세 자체가 틀렸던 것이지 미세조정 문제가 아니었다.
+# ★목·머리는 모캡에서 안 가져온다. 모캡 피험자는 칼을 올려다봤다가 표적을
+# 내려다봐서 머리가 +25도 -> -26도, **51도**나 흔들린다(실측). 검사는 표적에서
+# 눈을 떼지 않는다. 여기서 자세마다 작은 끄덕임만 준다.
+KENDO = {
+    # 이름:  (오른손 r,u,f), (칼날 r,u,f), 목 앞기울기, 머리 앞기울기
+    "chudan":   ((0.02, 0.07, 0.21), (0.20, 0.62, 0.76), 0.22, -0.05),
+    "raise":    ((0.06, 0.24, 0.17), (0.24, 0.88, 0.22), 0.19, -0.09),
+    "jodan":    ((0.03, 0.38, 0.09), (0.10, 0.72, -0.68), 0.17, -0.11),
+    "strike":   ((0.02, 0.19, 0.27), (0.00, 0.25, 0.97), 0.30, 0.10),
+    "settle":   ((0.02, 0.13, 0.24), (0.06, 0.36, 0.93), 0.26, 0.03),
+}
+
+
+def kendo_arms(a, b, t, gb=None):
+    """검도 자세 a 에서 b 로 t(0~1) 만큼 간 팔 포즈."""
+    ra, ba, na, ha = KENDO[a]
+    rb, bb, nb, hb = KENDO[b]
+    r = tuple(ra[i] + (rb[i] - ra[i]) * t for i in range(3))
+    bd = (Vector(ba).normalized().lerp(Vector(bb).normalized(), t)).normalized()
+    nf = na + (nb - na) * t
+    hf = ha + (hb - ha) * t
+    return [
+        ("neck", AIM, (0.0, 1.0, nf)),
+        ("head", AIM, (0.0, 1.0, hf)),
+        ("head", FACE, (0.0, 0.0, 1.0)),      # 표적에서 눈을 떼지 않는다
+        ("r clavicle", Z, 4),
+        ("r", IK, r),
+        ("r hand", BLADE, (bd.x, bd.y, bd.z, 55.0)),   # 손목 55도 한계
+        ("l", GRIP, GB if gb is None else gb),
+    ]
