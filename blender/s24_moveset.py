@@ -69,6 +69,12 @@
     실측 게이트: Idle/Walk/Jump/Attack 전 프레임 파지, Heavy 전 프레임 파지,
     Wide 54 중 38 프레임, Run 0 프레임(달리기는 원래 손을 놓는다).
 
+★★한 손 파지 (RELEASE. 기본 Jump) — 2026-08-12 오너 지시
+  "점프 자세 좀 바꿔줘. 칼을 양손으로 쥐고 뛰는 게 물리적으로 말이 안 되잖아.
+   한 손에 쥐고 뛰어야지."
+  RELEASE 에 적은 클립은 왼손을 자루에서 떼고 **균형 잡는 팔**로 바꾼다.
+  자세한 표와 근거는 아래 [한 손 파지] 절에 있다.
+
 ★발 접지
   비례가 다르면(허벅지 0.247H vs 0.203H, 종아리 0.173H vs 0.240H) 각도만 옮겼을 때
   발 높이가 달라진다. 클립마다 메시 최저점 10분위를 바인드 최저점에 맞추는
@@ -102,6 +108,7 @@
   GRIP_IK   1(기본) 왼팔 IK 사용 / 0 순수 리타게팅만(비교용)
   GRIP_K    왼손목-자루 오프셋 환산 보정(기본 1.0. 손 크기가 키 대비 많이 다를 때만)
   GRIP_ON/GRIP_OFF  파지 게이트 문턱(키 정규화. 기본 0.10 / 0.18)
+  RELEASE   한 손으로 쥘 클립(쉼표)   기본 Jump  (빈 값이면 전부 양손)
   KEEP_ORIG 1 이면 타깃 원본 액션을 Orig* 이름으로 같이 내보낸다(기본 0)
   VERIFY    1(기본) 결과 glb 재임포트해 파지·접지 실측
   RENDER    1(기본) 렌더 / 0 생략
@@ -138,6 +145,8 @@ TEX_QUALITY = int(os.environ.get("TEX_QUALITY", "90"))
 # 파지 게이트: 소스 왼손목-자루축 수직거리(키 정규화). 이 아래면 쥔 것으로 본다.
 GRIP_ON = float(os.environ.get("GRIP_ON", "0.10"))
 GRIP_OFF = float(os.environ.get("GRIP_OFF", "0.18"))
+# 한 손 파지 클립(오너 지시. 아래 [한 손 파지] 절 참조)
+RELEASE = [c.strip() for c in os.environ.get("RELEASE", "Jump").split(",") if c.strip()]
 # 왼손목-자루 오프셋 환산 배율에 곱하는 보정. 두 리그의 손 크기가 키 대비 많이
 # 다를 때만 건드린다(아래 [자루] 절에서 손 크기 차이를 찍는다).
 GRIP_K = float(os.environ.get("GRIP_K", "1.0"))
@@ -178,12 +187,18 @@ PELVIS = "Bip001 Pelvis"
 L_ARM = ("Bip001 L UpperArm", "Bip001 L Forearm", "Bip001 L Hand")
 HAND_R = "Bip001 R Hand"
 HAND_L = "Bip001 L Hand"
+# ★쇄골이 매달린 척추 마디. 이름이 헷갈리게 붙어 있다(실측 계층:
+#   Pelvis -> Chest2 -> Chest -> Spine -> Clavicle). 즉 **Spine 이 제일 윗마디**다.
+TORSO = "Bip001 Spine"
+NECK = "Bip001 Neck"
+CLAV_L, CLAV_R = "Bip001 L Clavicle", "Bip001 R Clavicle"
 
 print("=" * 78)
 print("[설정] 소스 %s" % SRC_GLB)
 print("       타깃 %s" % DST_GLB)
 print("       결과 %s" % OUT_GLB)
 print("       클립 %s / 왼팔IK %s" % (",".join(CLIPS), "ON" if GRIP_IK else "OFF"))
+print("       한 손 파지(왼손을 떼는 클립) %s" % (",".join(RELEASE) or "없음"))
 
 # ================================================================ 1) 씬 준비
 bpy.ops.wm.read_homefile(use_empty=True)
@@ -356,6 +371,9 @@ ROOT_BONE = ROOTS[0]
 LEG_S = SREST[PELVIS][1].z - SREST["Bip001 L Foot"][1].z
 LEG_D = DREST[PELVIS][1].z - DREST["Bip001 L Foot"][1].z
 K_TRANS = LEG_D / LEG_S                             # 골반 이동 진폭 환산 배율
+# 왼팔 길이(어깨->팔꿈치->손목). 균형 팔 목표를 이 길이의 비로 준다.
+ARM_L = ((DREST[L_ARM[1]][1] - DREST[L_ARM[0]][1]).length
+         + (DREST[L_ARM[2]][1] - DREST[L_ARM[1]][1]).length)
 print("\n[레스트] 소스 키 %.4f / 타깃 키 %.4f  (키비율 K_H=%.4f)" % (SH, DH, K_H))
 print("         다리(골반-발목) 소스 %.4f / 타깃 %.4f  (골반이동 배율 %.4f)"
       % (LEG_S, LEG_D, K_TRANS))
@@ -588,12 +606,15 @@ def wpos(pose, bn):
     return A2W @ pose[bn].translation
 
 
-def two_bone_ik(S, E, W, T):
+def two_bone_ik(S, E, W, T, pole=None):
     """어깨 S / 팔꿈치 E / 손목 W 를 목표 T 로 보내는 회전 두 개(월드 쿼터니언).
 
     반환 (R1, R2, 실제도달점). R1 은 위팔에, R2@R1 은 팔뚝·손에 곱한다.
     팔꿈치 스위블(굽는 평면)은 현재 자세를 그대로 유지한다. 그래야 어깨가
     엉뚱하게 돌지 않고 리타게팅이 만든 몸짓이 살아남는다.
+    ★pole 을 주면 스위블을 그쪽으로 강제한다(팔꿈치가 향할 방향). 목표를 원래
+      자세에서 멀리 옮길 때는 스위블을 물려받으면 안 된다 — 자루를 쥐던 팔꿈치
+      평면을 그대로 들고 옆으로 가면 **알통 자랑 자세**가 나온다(실측으로 봤다).
     """
     l1 = (E - S).length
     l2 = (W - E).length
@@ -605,7 +626,7 @@ def two_bone_ik(S, E, W, T):
     dc = min(max(d, abs(l1 - l2) + 1e-5), l1 + l2 - 1e-5)
     ca = (l1 * l1 + dc * dc - l2 * l2) / (2 * l1 * dc)
     A = math.acos(min(1.0, max(-1.0, ca)))
-    ev = E - S
+    ev = pole if pole is not None else (E - S)
     perp = ev - n * ev.dot(n)
     if perp.length < l1 * 1e-4:                     # 팔이 완전히 펴진 특이점
         ref = Vector((0, 0, 1)) if abs(n.z) < 0.9 else Vector((1, 0, 0))
@@ -646,8 +667,83 @@ def grip_target():
     return (t, q, perp / SH, w)
 
 
-def apply_grip(pose, Rw, gt):
-    """왼팔 2본 IK 로 손목을 타깃 자루에 건다. (목표, IK전 이탈, None, 가중치)."""
+# ---------------------------------------------------------------- 한 손 파지
+# ★오너 지시(2026-08-12): "점프 자세 좀 바꿔줘. 칼을 양손으로 쥐고 뛰는 게
+#   물리적으로 말이 안 되잖아. 한 손에 쥐고 뛰어야지."
+#   소스(slayer)의 점프는 양손검 전제라 왼손이 자루에 붙어 있다. 게다가 s34 가
+#   1번 칼을 1.5배로 다시 앉힌 뒤로는 그 왼손 자리가 **칼 아래끝보다 더 아래**다
+#   (최종 glb 실측: 왼손 자루축 -0.234m / 칼 아래끝 -0.225m). 허공을 쥔 손이었다.
+#
+# 어떻게 바꾸나 — 각도를 굳히지 않고 **가슴 좌표계에 매단다**
+#   고정 포즈를 넣으면 뻣뻣하다. 어깨(위팔 머리)에서 '가슴 기준 방향'으로 목표를
+#   주면 몸이 뛰고 기울 때 팔이 통째로 따라가므로 원본 점프의 생동감이 남는다.
+#   그 위에 위상별 (벌림 A / 앞으로 F / 뻗음 k) 를 얹어 도약->체공->착지를 만든다.
+#
+# ★위상표를 이렇게 잡은 근거: 게임은 이 클립을 통째로 재생하지 않는다
+#   (main.js CHAR_CFG.jump = start 0.00 / rise 0.20 / fall 0.40 / land 0.50 / end 0.73).
+#   올라가는 동안 **f7 에서 멈춰 있고** 내려오는 동안 **f13 에서 멈춘다.** 착지하면
+#   f16~f23 만 재생한다. 그래서 화면에서 제일 오래 보이는 것이 f7·f13 자세다.
+#   표의 t=0.27(f7) t=0.55(f13) 이 그 두 장이다.
+BAL_KEYS = [                    # (위상 t, 벌림 A도, 앞으로 F도, 뻗음 k=팔길이 비)
+    (0.00, 14, -12, 0.82),      # f1  웅크림. 아직 자루를 쥐고 있다(가중치 0)
+    (0.18, 40, 18, 0.88),       # f5  도약. 손을 놓으며 팔이 벌어진다
+    (0.27, 46, 24, 0.90),       # f7  ★상승 내내 이 자세로 멈춘다
+    (0.55, 54, 4, 0.92),        # f13 ★하강 내내 이 자세로 멈춘다(팔을 뒤로 벌려 준비)
+    (0.70, 34, 10, 0.86),       # f16 착지 흡수. 팔을 내린다
+    (1.00, 18, 2, 0.82),        # f23 회복. Idle 로 0.18초 크로스페이드되며 다시 쥔다
+]
+BAL_ON, BAL_FULL = 0.02, 0.18   # 파지->균형 전환 구간(위상). 도약 순간에 놓는다
+# 팔꿈치가 향할 방향(가슴 좌표계 X=왼쪽/Y=위/Z=앞). 아래·약간 뒤·약간 안쪽.
+BAL_POLE = (-0.10, -1.00, -0.45)
+
+
+def bal_key(t):
+    """위상 t 의 (A,F,k). 구간 안은 smoothstep(속도가 튀면 팔이 홱 꺾인다)."""
+    ks = BAL_KEYS
+    if t <= ks[0][0]:
+        return ks[0][1:]
+    for i in range(len(ks) - 1):
+        t0, t1 = ks[i][0], ks[i + 1][0]
+        if t <= t1:
+            s = (t - t0) / max(1e-6, t1 - t0)
+            s = s * s * (3 - 2 * s)
+            return tuple(a + (b - a) * s for a, b in zip(ks[i][1:], ks[i + 1][1:]))
+    return ks[-1][1:]
+
+
+def bal_weight(t):
+    if t <= BAL_ON:
+        return 0.0
+    if t >= BAL_FULL:
+        return 1.0
+    s = (t - BAL_ON) / (BAL_FULL - BAL_ON)
+    return s * s * (3 - 2 * s)
+
+
+def torso_frame(pose):
+    """가슴 좌표계 (열이 축) X=왼쪽 / Y=위(척추) / Z=앞.
+    ★뼈 로컬축을 믿지 않는다. 척추 방향과 쇄골 두 개로 직접 만든다
+      (Meshy 리그는 마디 이름이 뒤집혀 있어서 로컬축을 가정하면 틀린다)."""
+    up = (wpos(pose, NECK) - wpos(pose, TORSO)).normalized()
+    lat = wpos(pose, CLAV_L) - wpos(pose, CLAV_R)
+    lat = (lat - up * lat.dot(up)).normalized()
+    return Matrix((lat, up, lat.cross(up))).transposed()
+
+
+def balance_target(pose, t):
+    """이번 프레임의 왼손목 목표(균형 팔). 어깨에서 가슴 기준 방향으로 뻗는다."""
+    A, F, k = bal_key(t)
+    A, F = math.radians(A), math.radians(F)
+    u = Vector((math.sin(A), -math.cos(A) * math.cos(F), math.cos(A) * math.sin(F)))
+    return wpos(pose, L_ARM[0]) + (torso_frame(pose) @ u) * (ARM_L * k)
+
+
+def apply_grip(pose, Rw, gt, ph=None):
+    """왼팔 2본 IK 로 손목을 타깃 자루에 건다. (목표, IK전 이탈, None, 가중치).
+
+    ph 가 오면(RELEASE 클립) 그 위상만큼 목표를 **균형 팔** 쪽으로 옮긴다.
+    목표를 섞는 것이라 팔꿈치 스위블·어깨 회전은 그대로 이어진다(툭 끊기지 않는다).
+    """
     t, q, sperp, w = gt
     hd = Vector(D_SW[0].col[0])
     h_below, h_blade = D_SW[1], D_SW[2]
@@ -664,12 +760,22 @@ def apply_grip(pose, Rw, gt):
     Dl = Rw[HAND_L] @ DREST[HAND_L][0].inverted()
     T = C - Dl @ (q * (K_H * GRIP_K))
     Lw = wpos(pose, HAND_L)
+    S = wpos(pose, L_ARM[0])
+    E = wpos(pose, L_ARM[1])
+    pole = None
+    if ph is not None:
+        wb = bal_weight(ph)
+        if wb > 1e-4:
+            T = T.lerp(balance_target(pose, ph), wb)
+            w = max(w, wb)                          # 균형 팔은 파지 게이트와 무관
+            # 팔꿈치가 향할 방향도 같은 비율로 넘긴다(아래·약간 뒤). 툭 끊기지 않게
+            # 원래 팔꿈치 방향에서 섞는다.
+            pole = (E - S).normalized().lerp(
+                (torso_frame(pose) @ Vector(BAL_POLE)).normalized(), wb)
     before = (Lw - T).length
     if w <= 1e-4:
         return T, before, before, 0.0
-    S = wpos(pose, L_ARM[0])
-    E = wpos(pose, L_ARM[1])
-    R1, R2, Tc = two_bone_ik(S, E, Lw, T)
+    R1, R2, Tc = two_bone_ik(S, E, Lw, T, pole)
     R1 = Quaternion().slerp(R1, w)
     R2 = Quaternion().slerp(R2, w)
     M1 = R1.to_matrix()
@@ -717,7 +823,13 @@ def pct(xs, p):
 def bake(name):
     f0, f1 = use_src(name)
     nf = f1 - f0 + 1
-    print("\n[%s] 소스 f%d~%d (%d장)" % (name, f0, f1, nf))
+    rel = name in RELEASE and DO_GRIP
+    print("\n[%s] 소스 f%d~%d (%d장)%s"
+          % (name, f0, f1, nf, "  ★한 손 파지(왼팔=균형)" if rel else ""))
+
+    def phase(i):
+        """RELEASE 클립이면 이 프레임의 위상(0~1), 아니면 None(=양손 파지)."""
+        return (i / max(1, nf - 1)) if rel else None
 
     # --- 1차: 골반 궤적 평균 / 접지 보정량 / 파지 게이트를 잰다 ---
     praw, gts = [], []
@@ -736,8 +848,14 @@ def bake(name):
                   for i in range(nf)]
             gts = [(g[0], g[1], g[2], s) for g, s in zip(gts, sm)]
         on = sum(1 for g in gts if g[3] > 0.5)
-        print("   파지 게이트: %d/%d 프레임 (소스 왼손-자루축 수직거리 %.3f~%.3f H)"
-              % (on, nf, min(g[2] for g in gts), max(g[2] for g in gts)))
+        print("   파지 게이트: %d/%d 프레임 (소스 왼손-자루축 수직거리 %.3f~%.3f H)%s"
+              % (on, nf, min(g[2] for g in gts), max(g[2] for g in gts),
+                 "  <- RELEASE 라 이 게이트 위에 균형 팔을 덮어쓴다" if rel else ""))
+    if rel:
+        print("   균형 팔 위상표(t / 벌림 / 앞으로 / 뻗음 / 파지->균형 가중치):")
+        for t, A, F, k in BAL_KEYS:
+            print("      t %.2f (f%-2d)  A %+3d도  F %+3d도  k %.2f   w %.2f"
+                  % (t, f0 + int(round(t * (nf - 1))), A, F, k, bal_weight(t)))
 
     lows, maxerr, befs, afts = [], 0.0, [], []
     for i, f in enumerate(range(f0, f1 + 1)):
@@ -747,7 +865,7 @@ def bake(name):
         Rw = delta_rots()
         pose, basis = build(Rw, pw)
         if DO_GRIP:
-            T, bef, _, w = apply_grip(pose, Rw, gts[i])
+            T, bef, _, w = apply_grip(pose, Rw, gts[i], phase(i))
             pose, basis = build(Rw, pw)
             befs.append((bef / DH, gts[i][3]))
             afts.append(((wpos(pose, HAND_L) - T).length / DH, gts[i][3]))
@@ -789,7 +907,7 @@ def bake(name):
         Rw = delta_rots()
         pose, basis = build(Rw, pw)
         if DO_GRIP:
-            apply_grip(pose, Rw, gts[i])
+            apply_grip(pose, Rw, gts[i], phase(i))
             pose, basis = build(Rw, pw)
         for bn in ORDER:
             arm.pose.bones[bn].matrix_basis = basis[bn]
@@ -971,9 +1089,10 @@ if VERIFY:
             tips.append(RM @ (UD * TIP_L))          # 칼끝(손 행렬로 직접)
         TRAIL[nm] = tips
         sd = sorted(ds)
-        print("  %-8s %7d %8.3f %8.3f %8.3f %9.2f   축상 %.3f~%.3f (자루끝 %.3f)"
+        print("  %-8s %7d %8.3f %8.3f %8.3f %9.2f   축상 %.3f~%.3f (자루끝 %.3f)%s"
               % (nm, len(ds), sd[0], sd[len(sd) // 2], sd[-1], sd[-1] / FIST,
-                 min(ts), max(ts), POM_L * HSCALE / H))
+                 min(ts), max(ts), POM_L * HSCALE / H,
+                 "  ★한 손(왼손이 떨어져 있어야 정상)" if nm in RELEASE else ""))
 
     print("\n[검증2] 접지: 발 본 최저 높이(바닥=%.4f)와 메시 뚫림" % FLOOR)
     for nm in CLIPS:
@@ -1192,6 +1311,24 @@ if RENDER:
             shoot(os.path.join(OUTDIR, "%s_%s_f%02d.png" % (nm, view, REP[nm])), view)
         # 파지 접사: 두 손이 같은 자루를 쥐고 있는지 눈으로 판정하는 컷
         grip_shot(os.path.join(OUTDIR, "grip_%s_f%02d.png" % (nm, REP[nm])))
+
+    # 한 손 파지 클립은 **연속으로** 찍어야 판정이 된다(한 장으로는 팔이 어디로
+    # 가는지 안 보인다). 게임이 실제로 멈춰 보여 주는 프레임을 반드시 포함한다.
+    for nm in RELEASE:
+        act = bpy.data.actions.get(nm)
+        if not act:
+            continue
+        use(act)
+        f0, f1 = int(act.frame_range[0]), int(act.frame_range[1])
+        fs = sorted(set([f0, f1] + [f0 + int(round(t * (f1 - f0)))
+                                    for t in (0.09, 0.18, 0.27, 0.40, 0.55,
+                                              0.70, 0.85)]))
+        for f in fs:
+            sc.frame_set(f)
+            bpy.context.view_layer.update()
+            for view in ("front", "side"):
+                shoot(os.path.join(OUTDIR, "rel_%s_%s_f%02d.png" % (nm, view, f)),
+                      view)
 
     # 공격 3종은 스윙 흐름을 5장으로 본다(한 장으로는 궤적을 못 읽는다)
     for nm in ("Attack", "Heavy", "Wide"):

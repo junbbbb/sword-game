@@ -21,13 +21,28 @@
   가만히 서 있는 동안 캐릭터가 혼자 발차기하는 화면이 되므로 기각했다.
   지금 Idle(양손 겨눔)은 게임 톤에 맞고 파지도 안정적이라(왼손-자루축 0.086 고정) 유지한다.
 
-★네이티브는 빈손 클립이라 **칼이 풍차처럼 돈다**. 그래서 두 가지를 얹는다
+★네이티브는 빈손 클립이라 **칼이 풍차처럼 돈다**. 그래서 세 가지를 얹는다
   1) 오른팔 감쇠(ARM_DAMP): 오른팔 4본만 자기 사이클 평균 자세 쪽으로 당긴다.
      한 손에 뭘 들고 걸으면 그 팔은 원래 덜 흔든다. 왼팔·다리·척추는 안 건드린다.
      실측 칼 방향호: 걷기 89.5도 -> 36.1도 / 달리기 72.3도 -> 39.1도
-  2) 손목 로컬 회전(WRIST_FIX): 감쇠하면 칼이 '사이클 평균 방향'에 굳는데 그 평균이
+  2) 오른팔 들기(ARM_LIFT): 감쇠한 팔을 프레임마다 **월드에서 정확히 그 각도만큼**
+     들어 올린다(어깨 회전. 손·칼은 강체로 따라온다). 2026-08-12 추가 — 아래 참조.
+  3) 손목 로컬 회전(WRIST_FIX): 감쇠하면 칼이 '사이클 평균 방향'에 굳는데 그 평균이
      걷기는 정면 수평(-23도), 달리기는 어깨 위(+17도)라 둘 다 실루엣을 망친다
-     (달리기는 칼이 머리를 가로지른다). 칼끝 평균 고도를 TIP_ELEV(-35도)로 내린다.
+     (달리기는 칼이 머리를 가로지른다). 칼끝 평균 고도를 TIP_ELEV 로 맞춘다.
+
+★★하류에서 칼이 커지면 이 스크립트의 측정이 거짓말이 된다 (SW_NAME·TIP_K)
+  2026-08-12 오너 지시로 s34 가 **1번 칼을 1.5배**로 키워 자루째 다시 앉혔다.
+  손목-칼끝 거리가 73.87 -> 131.53 (**x1.7806**) 이 됐고, 그 칼이 게임 **시작 칼**이다
+  (main.js swordIdx=0). 그런데 이 스크립트는 s34 **앞**에 도므로 그 크기를 못 본다.
+  기본값(SW_baekah, TIP_K=1) 그대로 두면 바닥여유가 +0.20 이라고 찍고 넘어가는데
+  실제 게임 화면에서는 칼끝이 **지면 아래 0.47m** 까지 내려간다(실측).
+      SW_NAME  측정 기준 칼을 고른다(게임 시작 칼 = SW_nokseun)
+      TIP_K    하류에서 손목-칼끝 거리가 몇 배가 되는지. 그 배율로 **가상 칼끝**을
+               만들어 바닥여유에 함께 넣는다. s34 가 칼끝을 같은 반직선 위에
+               다시 놓으므로(로그의 dir 오차 0.017도) 이 모형이 정확하다.
+  ★관통(몸)은 실제 메시로만 잰다. s34 는 자루를 주먹에 다시 앉히므로 칼몸 전체가
+    단순히 커지는 게 아니라서, 가상 칼끝으로 관통을 흉내 내면 오히려 거짓말이 된다.
 
 ★"같은 리그"는 가정이 아니라 실측이다
   이 스크립트는 시작하자마자 두 아마추어의 **레스트를 뼈 24개 전부 대조**한다.
@@ -82,8 +97,11 @@
                NAT_STEM=Meshy_AI_game_character_8k_biped)
   NAT_IDLE   Idle 파일의 번호 부분  기본 Idle_14
   ARM_DAMP   오른팔 감쇠            기본 0.25 (1=원본 그대로, 0=평균에 고정)
+  ARM_LIFT   오른팔 들기(도)        기본 0 (양수면 손이 올라간다. 칼끝을 지면 위로)
   WRIST_FIX  1(기본) 칼 간섭 보정 / 0 측정만 하고 안 고침
   TIP_ELEV   칼끝 평균 목표 고도(도) 기본 -35 (수평 아래로 내린다)
+  SW_NAME    측정 기준 칼           기본 SW_baekah (게임 기본 장착 칼)
+  TIP_K      하류 칼끝 배율         기본 1.0 (s34 에서 커질 칼을 미리 넣는다)
   NCAND      비싼 검사를 돌릴 후보 수 기본 26
   CLEAR_MIN  바닥 여유 하한(m)      기본 0.02
   PEN_MAX    몸 관통 허용(m)        기본 0.025 (= 지금 출시본 Idle/Walk 수준)
@@ -130,6 +148,8 @@ OUT_GLB = os.environ.get("OUT_GLB") or DST_GLB
 WRIST_FIX = os.environ.get("WRIST_FIX", "1") == "1"
 CLEAR_MIN = float(os.environ.get("CLEAR_MIN", "0.02"))
 PEN_MAX = float(os.environ.get("PEN_MAX", "0.025"))
+SW_NAME = os.environ.get("SW_NAME", "SW_baekah")   # 측정 기준 칼
+TIP_K = float(os.environ.get("TIP_K", "1.0"))      # 하류(s34)에서 칼끝이 몇 배가 되나
 FIST_R = float(os.environ.get("FIST_R", "0.15"))
 EXPORT = os.environ.get("EXPORT", "1") == "1"
 RENDER = os.environ.get("RENDER", "0") == "1"
@@ -169,6 +189,8 @@ KEEP = [c for c in ("Idle", "Attack", "Heavy", "Wide", "Jump") if c not in NATIV
 #   당긴다. 한 손에 뭘 들고 뛰면 그 팔은 원래 덜 흔든다 - 해부학적으로도 맞는 처리다.
 #   왼팔·다리·척추는 **하나도 안 건드린다**(달리기의 생동감은 거기서 나온다).
 ARM_DAMP = float(os.environ.get("ARM_DAMP", "0.30"))
+# 감쇠한 팔을 어깨에서 들어 올리는 각도(도). 0 이면 안 건드린다. 아래 [오른팔 들기] 참조.
+ARM_LIFT = float(os.environ.get("ARM_LIFT", "0"))
 DAMP_BONES = ["Bip001 R Clavicle", "Bip001 R UpperArm",
               "Bip001 R Forearm", "Bip001 R Hand"]
 
@@ -375,9 +397,13 @@ FOOT_BONES = [b for b in armK.pose.bones
               if "foot" in b.name.lower() or "toe" in b.name.lower()]
 print("       접지 판정 뼈 %d개 %s" % (len(FOOT_BONES), [b.name for b in FOOT_BONES]))
 
-# 칼 = 게임 기본 장착(SWORDS[1] = baekah)
-SW = next((o for o in swords if o.name.startswith("SW_baekah")), swords[0])
-print("       측정 칼 %s (정점 %d)" % (SW.name, len(SW.data.vertices)))
+# 측정 칼. 기본은 게임 기본 장착(SWORDS[1] = baekah)이지만, 지금 시작 칼은
+# 1번(nokseun)이고 그것만 s34 에서 1.5배가 된다 -> SW_NAME/TIP_K 로 지정한다.
+SW = next((o for o in swords if o.name.startswith(SW_NAME)), swords[0])
+if not SW.name.startswith(SW_NAME):
+    print("       ★칼 %s 를 못 찾아 %s 로 잰다" % (SW_NAME, SW.name))
+print("       측정 칼 %s (정점 %d) / 하류 칼끝 배율 TIP_K %.4f"
+      % (SW.name, len(SW.data.vertices), TIP_K))
 
 
 def ev_verts(obj):
@@ -413,9 +439,12 @@ wrist = (armK.matrix_world @ armK.pose.bones[HAND_R].matrix).translation.copy()
 _rv = [SW.matrix_world @ v.co for v in SW.data.vertices]
 TIP_I = max(range(len(_rv)), key=lambda i: (_rv[i] - wrist).length_squared)
 BLADE_L = (_rv[TIP_I] - wrist).length
+# 손 뼈 로컬 칼끝(길이 포함). TIP_K 를 곱하면 하류에서 커질 칼의 **가상 칼끝**이다.
+TIP_HL = (armK.matrix_world @ armK.pose.bones[HAND_R].matrix).inverted() @ _rv[TIP_I]
 armK.data.pose_position = "POSE"
-print("       칼끝 정점 #%d / 손목-칼끝 %.4f (게임 %.3f m)"
-      % (TIP_I, BLADE_L, BLADE_L * SCALE))
+print("       칼끝 정점 #%d / 손목-칼끝 %.4f (게임 %.3f m)%s"
+      % (TIP_I, BLADE_L, BLADE_L * SCALE,
+         "  -> 하류 %.3f m" % (BLADE_L * TIP_K * SCALE) if TIP_K != 1.0 else ""))
 
 
 # ★'몸 안쪽인가' 판정은 **광선 교차 횟수 홀짝**으로 한다. 최근접면 법선 부호로
@@ -442,9 +471,13 @@ def _inside(bvh, p):
 def sword_state(nsub=120):
     """지금 프레임의 (바닥여유, 주먹밖 관통, 관통지점 손목거리, 관통 높이)."""
     lf = low_foot()
-    w = (armK.matrix_world @ armK.pose.bones[HAND_R].matrix).translation
+    HMw = armK.matrix_world @ armK.pose.bones[HAND_R].matrix
+    w = HMw.translation
     sv = ev_verts(SW)
-    clear = (min(p.z for p in sv) - lf) * SCALE + GAME_H * SOLE
+    lo = min(p.z for p in sv)
+    if TIP_K != 1.0:                     # 하류에서 커질 칼끝(같은 반직선 위)
+        lo = min(lo, (HMw @ (TIP_HL * TIP_K)).z)
+    clear = (lo - lf) * SCALE + GAME_H * SOLE
     bvh = ev_bvh(body)
     pen, pw, ph = 0.0, 0.0, 0.0
     step = max(1, len(sv) // nsub)
@@ -476,18 +509,24 @@ def measure(act, label, sample=1):
     for f in range(f0, f1 + 1, sample):
         sc.frame_set(f)
         bpy.context.view_layer.update()
+        lf = low_foot()
         c, p, pw, ph = sword_state()
         mesh_lo = min(q.z for q in ev_verts(body))
-        rows.append((f, c, p, pw, ph, (mesh_lo - low_foot()) * SCALE))
+        rows.append((f, c, p, pw, ph, (mesh_lo - lf) * SCALE, lf))
     cmin = min(r[1] for r in rows)
     pmax = max(r[2] for r in rows)
     rc = [r for r in rows if r[1] == cmin][0]
     rp = [r for r in rows if r[2] == pmax][0]
+    # ★게임의 접지 규칙은 클립마다 다르다(main.js groundFeet). 달리기만 최근
+    #   0.5초 창의 **최저 발**을 바닥으로 삼는다(체공 구간에 몸이 주저앉지 않게).
+    #   그래서 달리기의 진짜 여유는 프레임 접지보다 이만큼 높다.
+    base = min(r[6] for r in rows)
+    ccyc = min(r[1] + (r[6] - base) * SCALE for r in rows)
     print("  %-10s %3d프레임  바닥여유 최소 %+.3f (f%d)  주먹밖관통 최대 %.3f "
-          "(f%d, 손목거리 %.2f, 높이 %.2f)"
-          % (label, len(rows), cmin, rc[0], pmax, rp[0], rp[3], rp[4]))
+          "(f%d, 손목거리 %.2f, 높이 %.2f)   [사이클접지 %+.3f]"
+          % (label, len(rows), cmin, rc[0], pmax, rp[0], rp[3], rp[4], ccyc))
     return {"rows": rows, "clear": cmin, "pen": pmax, "fclear": rc[0],
-            "fpen": rp[0], "penw": rp[3], "penh": rp[4]}
+            "fpen": rp[0], "penw": rp[3], "penh": rp[4], "cycle": ccyc}
 
 
 def blade_arc(act, label=""):
@@ -706,6 +745,85 @@ if ARM_DAMP < 1.0:
         blade_arc(new[nm], "DMP " + nm)
     print("\n[칼 간섭 실측] 오른팔 감쇠 후")
     M_RAW = {nm: measure(new[nm], "DMP " + nm, 2) for nm in NATIVE}
+
+# ---------------------------------------------------------------- 오른팔 들기
+# ★2026-08-12. 1번 칼이 1.5배(손목-칼끝 x1.7806)가 되면서 **칼끝이 지면 아래**로
+#   내려갔다(실측: 걷기 -0.168 / 달리기 -0.470). 원인은 칼이 아니라 이 클립들의
+#   오른팔 각도다 — 빈손 달리기의 팔은 아래로 내려 붙고, 감쇠는 그 평균 자세를
+#   그대로 굳히기 때문에 1.6m 짜리 칼을 들면 날이 땅에 눕는다.
+#   그래서 감쇠한 팔을 **어깨에서 통째로 들어 올린다.** 손목 보정(칼만 돌리기)과
+#   나눠 쓰는 이유: 칼만 들면 자루가 하늘을 보고 손목이 꺾인 그림이 되고,
+#   팔만 들면 클립의 팔 흔들림이 그대로 남아 프레임마다 칼끝 높이가 출렁인다.
+#   둘을 같이 쓰면 '무거운 칼을 든 채 달리는' 자세가 된다.
+#
+# ★축은 **한 클립에 하나**다(프레임마다 다시 잡으면 안 된다)
+#   축 a = (어깨->손목의 사이클 평균) x 월드up. 이 축으로 +θ 돌리면 손이 올라간다.
+#   ★★프레임마다 축을 다시 잡아 봤는데 **칼 방향호가 41 -> 48도로 늘었다.**
+#     프레임마다 다른 회전을 먹이면 그 차이가 그대로 칼끝 궤적의 벌어짐이 되기
+#     때문이다. 모든 프레임에 **같은 월드 회전**을 먹이면 방향호는 등거리라
+#     한 도도 안 변한다(실측으로 확인). 그래서 축·각을 클립당 상수로 고정한다.
+#   회전은 월드에서 정의하고 뼈 로컬 델타로 환산해 위팔 키에 곱한다:
+#       basis' = P^-1 @ R_world @ P @ basis     (P = 이 프레임의 '기저 앞' 월드회전)
+#   팔뚝·손·칼은 FK 자식이라 강체로 따라온다.
+UPPER_R = "Bip001 R UpperArm"
+
+
+def lift_arm(act, deg):
+    """오른 위팔 키 전부를 '손이 올라가는 방향'으로 deg 만큼 돌린다."""
+    fcs = quat_fcurves(act, UPPER_R)
+    if len(fcs) != 4:
+        raise SystemExit("오른 위팔 회전 채널이 4개가 아니다(%d)" % len(fcs))
+    use(armK, act)
+    pb = armK.pose.bones[UPPER_R]
+    n = len(fcs[0].keyframe_points)
+    frames = [int(round(fcs[0].keyframe_points[i].co.x)) for i in range(n)]
+    # 1차: 사이클 평균 팔 방향으로 축을 정한다
+    acc = Vector((0, 0, 0))
+    for f in frames:
+        sc.frame_set(f)
+        bpy.context.view_layer.update()
+        S = (armK.matrix_world @ pb.matrix).translation
+        W = (armK.matrix_world @ armK.pose.bones[HAND_R].matrix).translation
+        acc += (W - S).normalized()
+    ax = acc.normalized().cross(Vector((0, 0, 1)))
+    if ax.length < 1e-4:
+        raise SystemExit("팔이 정확히 수직이라 드는 축을 못 잡는다")
+    Rw = Matrix.Rotation(math.radians(deg), 3, ax.normalized())
+    # 2차: 프레임마다 로컬 델타로 환산해서 모아 둔다(★먼저 다 읽고 나중에 쓴다)
+    out = []
+    for f in frames:
+        sc.frame_set(f)
+        bpy.context.view_layer.update()
+        Mw = (armK.matrix_world @ pb.matrix).to_3x3()
+        Mw.normalize()
+        B = pb.matrix_basis.to_3x3()
+        B.normalize()
+        P = Mw @ B.inverted()                   # 기저 앞 월드 회전
+        out.append((P.inverted() @ Rw @ P @ B).to_quaternion().normalized())
+    prev = None
+    for i, q in enumerate(out):
+        if prev is not None and q.dot(prev) < 0:   # 쿼터니언 부호 연속성
+            q.negate()
+        prev = q
+        for c in range(4):
+            kp = fcs[c].keyframe_points[i]
+            kp.co.y = kp.handle_left.y = kp.handle_right.y = q[c]
+    for c in range(4):
+        fcs[c].update()
+    return n, ax.normalized()
+
+
+if ARM_LIFT:
+    print("\n[오른팔 들기] %+.1f 도 (어깨에서. 손·칼은 강체로 따라온다)" % ARM_LIFT)
+    for nm in NATIVE:
+        n, ax = lift_arm(new[nm], ARM_LIFT)
+        print("  %-5s 위팔 키 %d개 / 축 (%+.3f,%+.3f,%+.3f)"
+              % (nm, n, ax.x, ax.y, ax.z))
+    print("\n[칼 흔들림] 팔 들기 후")
+    for nm in NATIVE:
+        blade_arc(new[nm], "LFT " + nm)
+    print("\n[칼 간섭 실측] 팔 들기 후")
+    M_RAW = {nm: measure(new[nm], "LFT " + nm, 2) for nm in NATIVE}
 
 # ---------------------------------------------------------------- 손목 보정
 # ★목표를 '기준 통과'가 아니라 **칼을 든 각도**로 준다.

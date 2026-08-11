@@ -10,11 +10,16 @@
     # 1) 알몸 basic2 + 칼 7자루
     blender -b -P blender/s31_basic2_body.py
     # 2) slayer 무브셋 7종 이식 (레스트 관절 각도차 5.9~10.4도. kensa 보다 작다)
+    #    ★점프는 기본값 RELEASE=Jump 로 **한 손 파지**가 된다(2026-08-12 오너 지시).
     SRC_GLB=web/slayer.glb DST_GLB=web/basic2_body.glb OUT_GLB=web/basic2_moves.glb \
       DST_SWORD=SW_baekah.001 SWORD_FIT=0 GRIP_K=1.0 KEEP_ORIG=1 \
       OUTDIR=renders/history/v97_wave11/char_basic2/moveset blender -b -P blender/s24_moveset.py
-    # 3) 걷기·달리기만 basic2 네이티브로 교체(+오른팔 감쇠·손목 보정)
+    # 3) 걷기·달리기만 basic2 네이티브로 교체(+오른팔 감쇠·팔 들기·손목 보정)
+    #    ★SW_NAME/TIP_K/ARM_LIFT/TIP_ELEV 는 2026-08-12 에 붙었다. 빼면 칼끝이
+    #      지면 아래로 내려간다(6번이 1번 칼을 1.78배로 키우는데 3번은 그걸 못 본다).
+    #      TIP_K 는 6번 로그의 pmax 비(131.531/73.868)를 그대로 적은 값이다.
     DST_GLB=web/basic2_moves.glb OUT_GLB=web/basic2.glb CLIPS=Walk,Run \
+      SW_NAME=SW_nokseun TIP_K=1.7806 ARM_LIFT=16 TIP_ELEV=-24 \
       NAT_DIR=incoming/meshy4/Meshy_AI_game_character_8k_biped \
       NAT_STEM=Meshy_AI_game_character_8k_biped \
       OUTDIR=renders/history/v97_wave11/char_basic2/native blender -b -P blender/s27_kensa_native.py
