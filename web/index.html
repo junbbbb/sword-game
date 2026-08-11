@@ -13,12 +13,13 @@
      경고를 남긴다. **파일 자체는 fonts/ 에 그대로 둔다**(다른 데서 참조할 수 있다). -->
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  /* 바탕도 시스템창과 같은 계열의 밤바다색이라야 첫 프레임이 안 튄다 */
-  html,body { width:100%; height:100%; overflow:hidden; background:#050d14;
+  /* 바탕도 판과 같은 계열의 짙은 남색이라야 첫 프레임이 안 튄다
+     (12차 리테마: 밤바다 청록 #050d14 → 이 벌의 남색 #0b1024) */
+  html,body { width:100%; height:100%; overflow:hidden; background:#0b1024;
     font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,
       "Apple SD Gothic Neo","Segoe UI","Malgun Gothic","Noto Sans KR",sans-serif; }
   #cv { display:block; width:100%; height:100%; }
-  .hud { position:fixed; color:rgba(230,243,247,.62); text-shadow:0 1px 3px #000;
+  .hud { position:fixed; color:rgba(253,249,236,.66);
     user-select:none; pointer-events:none; }
 
   /* ── 조작 안내 ──────────────────────────────────────────────────────────
@@ -34,86 +35,75 @@
      ★nowrap: 좁은 창에서 키캡 글자가 「Spa / ce」로 접히는 것을 막는다. */
   #help .ks { flex:0 0 106px; display:flex; gap:4px; justify-content:flex-end;
     white-space:nowrap; }
-  /* ★키캡도 **채우지 않는다.** 1px 헤어라인 박스가 시스템창 문법의 지배 규칙이다 */
-  #help .k { display:inline-block; min-width:24px; padding:1px 7px;
-    border:1px solid rgba(143,211,241,.42); border-radius:0; background:rgba(11,31,45,.55);
-    color:#cdeeff; font-size:12px; text-align:center; white-space:nowrap; }
+  /* ★키캡은 눌린 남색 + 크림 테 + 둥근 모서리다(12차 리테마의 지배 규칙).
+       진짜 값은 ui.js 가 나중에 덮는다. 여기 한 벌은 ui.js 가 붙기 전 한 프레임을 위한 것이다 */
+  #help .k { display:inline-block; min-width:24px; padding:1px 7px 2px;
+    border:2px solid rgba(245,239,221,.42); border-radius:7px; background:#101833;
+    color:#fdf9ec; font-size:12px; font-weight:700; text-align:center; white-space:nowrap; }
   /* 캡 곁의 비-키 글자. 캡 사이의 「~」, 캡 앞의 「이동+」가 여기 속한다 */
-  #help .kx { color:rgba(230,243,247,.38); font-size:12px; white-space:nowrap; }
-  #help .t { color:rgba(230,243,247,.62); }
-  #help .t b { color:#e6f3f7; font-weight:600; }
-  #help .hSep { height:1px; margin:7px 4px 8px 0; background:rgba(143,211,241,.16); }
-  #help .hNote { color:rgba(230,243,247,.38); font-size:12px; line-height:1.55; padding-left:2px; }
+  #help .kx { color:rgba(253,249,236,.42); font-size:12px; white-space:nowrap; }
+  #help .t { color:rgba(253,249,236,.66); }
+  #help .t b { color:#fdf9ec; font-weight:800; }
+  #help .hSep { height:2px; border-radius:1px; margin:7px 4px 8px 0;
+    background:rgba(245,239,221,.30); }
+  #help .hNote { color:rgba(253,249,236,.42); font-size:12px; line-height:1.55; padding-left:2px; }
 
-  #sword { right:16px; bottom:18px; font-size:15px; font-weight:600;
-    color:#e6f3f7; transition:opacity .25s; letter-spacing:1px; }
+  #sword { right:16px; bottom:18px; font-size:15px; font-weight:800;
+    color:#fdf9ec; transition:opacity .25s; }
   #stat { right:16px; top:14px; font-size:12px; text-align:right;
-    color:rgba(230,243,247,.38); line-height:1.7; }
-  #stat span { color:rgba(230,243,247,.62); }
+    color:rgba(253,249,236,.42); line-height:1.7; }
+  #stat span { color:rgba(253,249,236,.66); }
   #combo { position:fixed; left:50%; top:20%; transform:translateX(-50%);
-    font-size:44px; font-weight:800; white-space:nowrap; color:#eaf5ff;
-    text-shadow:0 0 20px rgba(65,211,251,.5),0 3px 6px #000;
-    opacity:0; letter-spacing:2px; }
+    font-size:44px; font-weight:800; white-space:nowrap; color:#fdf9ec;
+    text-shadow:0 4px 0 rgba(8,12,28,.62),0 0 20px rgba(127,224,168,.28);
+    opacity:0; letter-spacing:1px; }
 
   /* ── 로딩 진행 셸 ───────────────────────────────────────────────────────
      ★예전에는 「불러오는 중…」 정지 글자 하나였다(v93 판정). 십수 MB 를 받는 동안
        화면이 얼어 있는 것과 구분이 안 된다. 진행 트랙 + 퍼센트로 바꾼다.
-     ★11차: 첫 화면부터 시스템창이어야 입장 알림창까지 한 덩어리로 읽힌다.
-       그래서 진행 트랙을 **시스템창 안에** 넣는다.
+     ★첫 화면부터 같은 문법이어야 입장 알림창까지 한 덩어리로 읽힌다.
+       그래서 진행 트랙을 **카드 안에** 넣는다.
      ★★이 판의 CSS 를 ui.js 와 나눠 쓸 수 없다. ui.js 는 main.js 맨 끝에서 붙는데
        로딩 화면은 그보다 먼저 떠 있어야 하기 때문이다. 그래서 같은 문법을 여기
        한 벌 더 적는다(로딩 화면의 정본은 이 블록이다). 색을 바꿀 때는 ui.js 의
-       :root 토큰과 **같이** 바꿀 것 - 안 그러면 로딩과 게임의 창 색이 갈린다. */
+       :root 토큰과 **같이** 바꿀 것 - 안 그러면 로딩과 게임의 판 색이 갈린다.
+     ★12차 리테마 값(ui.js :root 와 1:1):
+         판 #26325a→#141c39 · 크림 테 #f5efdd 3px · 어두운 링 rgba(9,13,28,.72)
+         민트 #7fe0a8 · 글자 #fdf9ec · 눌린 자리 #101833 */
   #load { position:fixed; inset:0; display:flex; align-items:center;
-    justify-content:center; background:#050d14; z-index:9; }
-  /* 판: 평면 남색 + 옅은 대각 결 + 1px 헤어라인. ui.js 의 .win 과 같은 값이다 */
-  #load .win { position:relative; padding:14px 26px 22px;
-    background-color:rgba(16,43,60,.88);
-    background-image:
-      repeating-linear-gradient(45deg,rgba(143,211,241,.030) 0 1px,transparent 1px 8px),
-      repeating-linear-gradient(-45deg,rgba(143,211,241,.016) 0 1px,transparent 1px 13px);
-    border:1px solid rgba(143,211,241,.42); }
-  /* 떨어진 네온 브래킷 프레임(모서리 45도 모따기). ui.js 의 .fr 과 같은 값이다 */
-  #load .fr { --ch:13px; position:absolute; inset:-8px; pointer-events:none;
-    background-image:
-      repeating-linear-gradient(180deg,#bef4fe 0 1px,transparent 1px 3px,#36b4f2 3px 4px,transparent 4px 6px,#36b4f2 6px 7px),
-      repeating-linear-gradient(0deg,#bef4fe 0 1px,transparent 1px 3px,#36b4f2 3px 4px,transparent 4px 6px,#36b4f2 6px 7px),
-      repeating-linear-gradient(90deg,#bef4fe 0 1px,transparent 1px 3px,#36b4f2 3px 4px),
-      repeating-linear-gradient(270deg,#bef4fe 0 1px,transparent 1px 3px,#36b4f2 3px 4px),
-      linear-gradient(135deg,transparent calc(50% - 1px),#36b4f2 calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px)),
-      linear-gradient(-135deg,transparent calc(50% - 1px),#36b4f2 calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px)),
-      linear-gradient(45deg,transparent calc(50% - 1px),#36b4f2 calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px)),
-      linear-gradient(-45deg,transparent calc(50% - 1px),#36b4f2 calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px));
-    background-size:
-      calc(100% - var(--ch)*2) 7px,calc(100% - var(--ch)*2) 7px,
-      4px calc(100% - var(--ch)*2),4px calc(100% - var(--ch)*2),
-      var(--ch) var(--ch),var(--ch) var(--ch),var(--ch) var(--ch),var(--ch) var(--ch);
-    background-position: 50% 0,50% 100%,0 50%,100% 50%, 0 0,100% 0,0 100%,100% 100%;
-    background-repeat:no-repeat;
-    filter:drop-shadow(0 0 5px rgba(65,211,251,.55)) drop-shadow(0 0 16px rgba(54,180,242,.28)); }
-  /* 머리: [!] 박스 + 낱말 박스. 둘 다 채움 없는 1px 헤어라인 */
-  #load .hd { display:flex; align-items:stretch; gap:5px; }
-  #load .hd .ic { position:relative; flex:0 0 19px; height:19px; font-style:normal;
-    border:1px solid rgba(143,211,241,.42); display:flex; align-items:center;
-    justify-content:center; font-size:10px; line-height:1; color:#cdeeff;
-    text-shadow:0 0 4px rgba(190,244,254,.8),0 0 13px rgba(65,211,251,.42); }
-  #load .hd .ic::before { content:''; position:absolute; inset:3px;
-    border:1px solid currentColor; border-radius:50%; opacity:.85; }
-  #load .hd b { display:flex; align-items:center; height:19px;
-    border:1px solid rgba(143,211,241,.42); padding:0 9px 0 calc(9px + .3em);
-    font-weight:500; font-size:11px; letter-spacing:.3em; color:#cdeeff;
-    text-shadow:0 0 4px rgba(190,244,254,.8),0 0 13px rgba(65,211,251,.42); }
-  #load .bd { padding-top:22px; display:flex; flex-direction:column;
-    align-items:center; gap:11px; }
-  #load .ldTrack { position:relative; width:min(300px,54vw); height:3px;
-    background:rgba(143,211,241,.16); overflow:hidden; }
+    justify-content:center; background:#0b1024; z-index:9; }
+  /* 판: 둥근 남색 + 크림 테 + 어두운 링. ui.js 의 .win 과 같은 값이다 */
+  #load .win { position:relative; padding:22px 34px 24px; border-radius:20px;
+    background:linear-gradient(180deg,#26325a 0%,#1a2444 58%,#141c39 100%);
+    border:3px solid #f5efdd;
+    box-shadow:0 0 0 3px rgba(9,13,28,.72),0 10px 24px rgba(0,0,0,.5); }
+  /* 탭 노치(위 가운데 민트 혀). ui.js 의 .fr 과 같은 값이다 */
+  #load .fr { position:absolute; left:50%; top:-14px; width:58px; height:14px;
+    margin-left:-29px; pointer-events:none; background:#7fe0a8;
+    border:3px solid #f5efdd; border-bottom:none; border-radius:8px 8px 0 0; }
+  /* 동그란 아이콘 뱃지(왼쪽 변에 걸친 원) + 큰 글자 위의 민트 라벨 */
+  #load .hd { display:block; text-align:center; }
+  #load .hd .ic { position:absolute; left:-25px; top:50%; margin-top:-25px;
+    width:50px; height:50px; border-radius:50%; font-style:normal;
+    border:3px solid #f5efdd;
+    background:radial-gradient(circle at 50% 32%,#ffe58c 0%,#ffcf4a 62%,#f0ac2a 100%);
+    color:#3a2506; font-weight:800; font-size:25px; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 0 3px rgba(9,13,28,.72),0 5px 12px rgba(0,0,0,.45); }
+  #load .hd b { display:block; font-weight:800; font-size:12px; letter-spacing:.2em;
+    padding-left:.2em; color:#7fe0a8; text-shadow:0 2px 0 rgba(8,12,28,.55); }
+  #load .bd { padding-top:16px; display:flex; flex-direction:column;
+    align-items:center; gap:12px; }
+  #load .ldTrack { position:relative; width:min(300px,54vw); height:14px;
+    border-radius:8px; border:2px solid rgba(245,239,221,.36); background:#101833;
+    overflow:hidden; }
   #load .ldFill { position:absolute; left:0; top:0; bottom:0; width:100%;
-    transform:scaleX(0); transform-origin:0 50%;
-    background:linear-gradient(90deg,#1463a0,#41d3fb 70%,#bef4fe);
-    box-shadow:0 0 8px rgba(65,211,251,.6);
+    transform:scaleX(0); transform-origin:0 50%; border-radius:6px;
+    background:linear-gradient(180deg,#a6f0c6,#57d94f 55%,#3bbf46);
     transition:transform .28s cubic-bezier(.22,.8,.3,1); }
-  #load .ldPct { font-size:11px; letter-spacing:.22em; padding-left:.22em;
-    color:rgba(230,243,247,.62); font-variant-numeric:tabular-nums; }
+  #load .ldPct { font-size:13px; font-weight:800; letter-spacing:.02em;
+    color:#fdf9ec; font-variant-numeric:tabular-nums;
+    text-shadow:0 2px 0 rgba(8,12,28,.55); }
 </style>
 </head>
 <body>
