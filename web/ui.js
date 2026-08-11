@@ -156,51 +156,39 @@ const SANS = "'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,
 
 // ---------------------------------------------------------------------------
 const CSS = `
-/* ══ 12차 리테마: 로블록스 + 메이플 + 롤 (오너 직접 지시) ═════════════════════
-   컨셉 정본 두 장 - incoming/codex_ui/hud_concept.png (계기판·목표 알약·칩)
-                    incoming/codex_ui/popup_concept.png (카드·보스 경고)
-   그 두 장에서 읽어낸 문법 다섯. 아래 규칙은 화면의 모든 판에 예외 없이 걸린다.
-     ① 판은 **둥근 남색**이다(칩 12px · 슬롯 14px · 카드 20px · 알약 999px).
-        각진 모서리는 이 벌에 하나도 없다(11차 시스템창은 정반대였다).
-     ② 테는 **또렷한 크림 2~3px** + 그 바깥에 **어두운 링 한 겹**.
-        링이 없으면 밝은 봄 초원 위에서 크림 테가 배경에 먹힌다(1층 맵의 가독 요구).
-     ③ 글자는 **볼드 산세리프**(700~800). 자간은 좁고, 아래로 딱딱한 그림자 한 겹.
-        ★발광(halo)은 한 줄도 안 쓴다 - 그건 11차 시스템창의 언어였고 전부 걷어냈다.
-     ④ 포인트 색은 셋뿐이다: 민트(라벨·탭) · 노랑(목표·강조) · 빨강(경고·체력).
-     ⑤ 카드에는 **탭 노치**(위 가운데 민트 혀)와 **동그란 아이콘 뱃지**(왼쪽 변에
-        걸친 원)가 붙는다. 이 둘이 이 벌의 서명이다.
-   ★절제(오너 톤): 광택·이중 발광·과한 그림자 금지. 존재감은 「또렷함」으로 낸다.
+/* ══ 13차 리테마: 아이보리 · 월넛 · 허니 UI 키트 ════════════════════════════
+   컨셉 정본 네 장 - incoming/codex_ui2/kit_hud.png · kit_overhead.png
+                    kit_damage.png · kit_cards.png
+   아이보리 면, 월넛 굵은 테, 허니와 오렌지 포인트, 통통한 라운드와 키캡 뱃지를
+   모든 HUD 표면에 한 벌로 적용한다. 데미지 숫자는 enemy.js 소유라 건드리지 않는다.
    ★11차에서 물려받아 **한 칸도 안 바꾼 것**: 정보 설계 · 문구 · 발화 타이밍 · 수명 ·
      키 배정 · safeBox · awake 원샷 · 물림 규칙(이 파일 맨 끝 블록). 이번은 스킨이다.
    ★색을 바꿀 때는 index.html 의 로딩 화면 CSS 도 **같이** 바꿀 것(정본이 두 벌이다). */
 :root{
   --rb-font:${SANS};
-  /* 판. 위가 살짝 밝고 아래가 짙은 세로 경사 한 겹(컨셉의 판이 그렇다) */
-  --rb-panel-a:#26325a;
-  --rb-panel-b:#1a2444;
-  --rb-panel-c:#141c39;
-  --rb-deep:#101833;                    /* 트랙·키캡처럼 한 단 눌린 자리 */
-  --rb-ink:rgba(9,13,28,.72);           /* 크림 테 바깥의 어두운 링 */
-  /* 테 */
-  --rb-line:#f5efdd;                    /* 또렷한 크림 */
-  --rb-line-soft:rgba(245,239,221,.30); /* 판 안 구분선·약한 테 */
-  /* 글자 */
-  --rb-txt:#fdf9ec;
-  --rb-dim:rgba(253,249,236,.66);
-  --rb-mute:rgba(253,249,236,.42);
-  --rb-drop:0 2px 0 rgba(8,12,28,.55);  /* 글자 밑 딱딱한 그림자 한 겹 */
-  --rb-drop-lg:0 3px 0 rgba(8,12,28,.6);
-  /* 포인트 셋 */
-  --rb-mint:#7fe0a8;
-  --rb-gold:#ffd24d;
-  --rb-red:#f4635c;
-  --rb-heart:#ff4d5e;
-  /* 그림자 한 벌 */
-  --rb-pop:0 0 0 3px var(--rb-ink),0 10px 24px rgba(0,0,0,.5);
-  --rb-pop-sm:0 0 0 2px var(--rb-ink),0 5px 14px rgba(0,0,0,.45);
+  --rb-panel-a:#fffaf0;
+  --rb-panel-b:#f6ecd8;
+  --rb-panel-c:#ead5af;
+  --rb-deep:#4b321d;
+  --rb-ink:#3b2514;
+  --rb-line:#5a3d24;
+  --rb-line-soft:rgba(181,126,59,.42);
+  --rb-txt:#3b2414;
+  --rb-dim:#6d4d32;
+  --rb-mute:#9a7652;
+  --rb-drop:0 1px 0 #fff8e8;
+  --rb-drop-lg:0 2px 0 #fff8e8;
+  --rb-mint:#f4bb38;
+  --rb-gold:#f4b62d;
+  --rb-orange:#ef7e24;
+  --rb-red:#e94a34;
+  --rb-heart:#f25b4b;
+  --rb-green:#45d86e;
+  --rb-pop:inset 0 0 0 2px #fff8e8,inset 0 0 0 4px #c9954e,0 4px 0 #3b2514,0 12px 22px rgba(59,37,20,.24);
+  --rb-pop-sm:inset 0 0 0 1px #fff8e8,inset 0 0 0 3px #cf9b50,0 3px 0 #3b2514,0 7px 14px rgba(59,37,20,.20);
   /* 뜻이 걸린 색 두 가지. 스킨이 바뀌어도 이 뜻은 안 바뀐다 */
-  --rb-token:#ffd24d;   /* 증표 */
-  --rb-ok:#57d94f;      /* 은신 */
+  --rb-token:#f4b62d;   /* 증표 */
+  --rb-ok:#45b966;      /* 은신 */
 }
 /* 가짜 굵기·가짜 기울임 금지. ★800 을 부르면 Pretendard(있으면) 나 Apple SD Gothic Neo
    의 **진짜 굵은 자소**로 떨어진다. 없는 굵기를 만들어 내면 획이 뭉개진다. */
@@ -828,6 +816,283 @@ body.uiCleared #uiClearDim{opacity:1}
 /* 세로가 짧은 창에서는 캐릭터도 그만큼 작게 잡힌다. 바도 같이 줄인다 */
 @media (max-height:620px){ #uiHpFloat{width:68px;height:9px} }
 
+/* ══ 13차 키트 스킨: 아이보리 면 · 월넛 테 · 허니 포인트 ══════════════════
+   아래는 표면만 다시 칠하는 최종 스킨 층이다. 위치·타이밍·반응형 단계와 추적 로직은
+   위 정본을 그대로 쓰며, 연출 물림 규칙은 이 블록 뒤에서 마지막 우선순위를 갖는다. */
+
+/* 카드 공통 */
+#uiTitle .win,#uiBanner .win,#uiDeath .win,#bClear{
+  border:3px solid var(--rb-line);border-radius:22px;
+  background:linear-gradient(180deg,var(--rb-panel-a) 0%,var(--rb-panel-b) 68%,var(--rb-panel-c) 100%);
+  box-shadow:var(--rb-pop);color:var(--rb-txt)}
+#uiTitle .fr,#uiBanner .fr,#uiDeath .fr{
+  left:16px;right:16px;top:8px;width:auto;height:6px;margin:0;
+  border:0;border-radius:999px;background:linear-gradient(90deg,transparent,var(--rb-gold),transparent)}
+#uiBanner .fr,#uiDeath .fr{
+  background:linear-gradient(90deg,transparent,var(--rb-red),var(--rb-orange),var(--rb-red),transparent)}
+#uiTitle .hd .ic,#uiBanner .hd .ic,#uiDeath .hd .ic{
+  left:-35px;width:66px;height:66px;margin-top:-33px;
+  border:3px solid var(--rb-line);
+  background:radial-gradient(circle at 42% 34%,#fffdf5 0%,#f8e4bd 54%,#dda95e 100%);
+  color:var(--rb-txt);box-shadow:var(--rb-pop-sm)}
+#uiBanner .hd .ic,#uiDeath .hd .ic{
+  background:linear-gradient(145deg,#ff8a5b,#e43f2e);color:#fff7e9}
+#uiTitle .hd .ic{font-size:0}
+#uiTitle .hd .ic::before{
+  content:'';width:11px;height:11px;border-radius:50%;background:var(--rb-orange);
+  box-shadow:0 -11px 0 2px var(--rb-gold),10px -3px 0 2px var(--rb-gold),
+             6px 9px 0 2px var(--rb-gold),-6px 9px 0 2px var(--rb-gold),
+             -10px -3px 0 2px var(--rb-gold)}
+#uiTitle .hd b,#uiBanner .hd b,#uiDeath .hd b{
+  color:#9b6325;text-shadow:none;font-size:12px;letter-spacing:.16em}
+#uiBanner .hd b,#uiDeath .hd b{color:#c73728}
+
+/* 입장 타이틀 카드 */
+#uiTitleBg{
+  background:radial-gradient(ellipse at 50% 24%,rgba(255,247,226,.16) 0%,rgba(50,30,13,.76) 82%)}
+#uiTitle .win{width:min(580px,78vw);padding:25px 42px 27px}
+#uiTitle .big{font-size:clamp(18px,2.2vh,24px);color:#8c5d27;text-shadow:none}
+#uiTitle .sub{font-size:clamp(27px,3.8vh,42px);color:var(--rb-txt);margin-top:5px;
+  text-shadow:0 2px 0 #fff8e8,0 4px 0 rgba(90,61,36,.18)}
+#uiTitle .rule{background:linear-gradient(90deg,transparent,#c58b3f,transparent)}
+#uiTitle .lore{color:var(--rb-dim);font-weight:700}
+
+/* 보스 경고 카드 */
+#uiBanner{padding-top:30px}
+#uiBanner .win{width:min(760px,86vw);padding:20px 52px 22px;
+  border-color:#8d2d23;background:linear-gradient(180deg,#fff8e8,#f5dfc0 70%,#efcba8)}
+#uiBanner .tag{color:#9c4f36;text-shadow:none;font-weight:800}
+#uiBanner .name{color:#b82f23;text-shadow:0 2px 0 #fff2df,0 4px 0 rgba(90,38,25,.18)}
+#uiBanner .name::before,#uiBanner .name::after{
+  content:'';width:10px;height:10px;flex:0 0 10px;border:2px solid #8d2d23;
+  background:var(--rb-orange);transform:rotate(45deg);box-shadow:none}
+
+/* 상단 목표 알약과 보스 체력 */
+#bBox{border:3px solid #7f3027;border-radius:18px;
+  background:linear-gradient(180deg,#fff1dc,#eec49e);box-shadow:var(--rb-pop-sm)}
+#bName{color:#a02f27;text-shadow:none}
+#bBar{height:13px;border:2px solid var(--rb-line);background:#4b281d;box-shadow:inset 0 2px 3px rgba(38,18,8,.28)}
+#bGoal{gap:8px;padding:9px 23px 10px;border:3px solid var(--rb-line);
+  background:linear-gradient(180deg,var(--rb-panel-a),var(--rb-panel-b));
+  box-shadow:var(--rb-pop-sm);color:var(--rb-txt);text-shadow:none}
+#bGoal::before{
+  content:'';order:-2;width:20px;height:20px;flex:0 0 20px;border-radius:50%;
+  border:2px solid #9b6325;
+  background:radial-gradient(circle,#fff7cc 0 18%,transparent 20%),
+             conic-gradient(from 18deg,#f6c84d 0 12%,#e99724 12% 20%,#f6c84d 20% 32%,
+             #e99724 32% 40%,#f6c84d 40% 52%,#e99724 52% 60%,#f6c84d 60% 72%,
+             #e99724 72% 80%,#f6c84d 80% 92%,#e99724 92% 100%)}
+#bGoal::after{content:'목표 ·';order:-1;color:#8b5721;font-size:12px;font-weight:800;letter-spacing:.12em}
+#bGoal i{color:#b86c19}
+
+/* 사망 카드 */
+#uiDeath{
+  background:radial-gradient(ellipse 46% 38% at 50% 48%,rgba(180,61,39,.24) 0%,rgba(72,36,19,.88) 84%)}
+#uiDeath .win{width:min(520px,76vw);padding:24px 42px 27px;border-color:#7f3027}
+#uiDeath .glyph{font-size:clamp(70px,11vh,104px);color:#c73d2e;
+  text-shadow:0 2px 0 #fff1df,0 5px 0 #7d2d23}
+#uiDeath .rule{background:linear-gradient(90deg,transparent,var(--rb-red),transparent)}
+#uiDeath .cnt{color:#75462f;text-shadow:none;font-weight:800}
+
+/* 도움말 판과 키캡 */
+#help{padding:14px 17px 15px;border:3px solid var(--rb-line);border-radius:20px;
+  background:linear-gradient(180deg,rgba(255,250,240,.98),rgba(246,236,216,.98));
+  box-shadow:var(--rb-pop-sm);color:var(--rb-dim)}
+#help b,#help .t{color:var(--rb-txt)}
+#help .k{border:2px solid #8c6237;border-radius:7px;background:#fffaf0;color:var(--rb-txt);
+  box-shadow:0 2px 0 #c89756;text-shadow:none}
+#help .kx,#help .hNote{color:var(--rb-mute)}
+#help .hSep{height:1px;background:linear-gradient(90deg,#c18a42,transparent)}
+#uiHelpChip{width:42px;height:42px;line-height:36px;border:3px solid var(--rb-line);border-radius:50%;
+  background:linear-gradient(180deg,#fffaf0,#efd9b5);box-shadow:var(--rb-pop-sm);
+  color:var(--rb-txt);text-shadow:none}
+#uiHelpChip:hover{border-color:#8b5721;color:#bd6b1c;background:#fffdf6}
+#stat{border:2px solid var(--rb-line);border-radius:14px;
+  background:linear-gradient(180deg,#fffaf0,#f0dcb9);color:var(--rb-mute);box-shadow:var(--rb-pop-sm)}
+#stat span{color:var(--rb-dim)}
+
+/* 하단 계기판 */
+#uiDock{gap:13px;padding:14px 21px 16px;border:3px solid var(--rb-line);border-radius:22px;
+  background:linear-gradient(180deg,var(--rb-panel-a),var(--rb-panel-b) 68%,var(--rb-panel-c));
+  box-shadow:var(--rb-pop)}
+#uiDock .hrt{font-size:25px;color:var(--rb-heart);
+  -webkit-text-stroke:1.5px var(--rb-line);text-shadow:0 2px 0 #fff2dc;margin-right:12px}
+#eHud{gap:12px}
+#eBar{width:230px;height:19px;border:3px solid var(--rb-line);border-radius:999px;
+  background:var(--rb-deep);box-shadow:inset 0 2px 4px rgba(32,17,7,.38)}
+#eFill{filter:saturate(1.04) brightness(1.02)}
+#eBar::after{
+  background:linear-gradient(90deg,transparent 0 calc(25% - 1px),rgba(75,50,29,.66) calc(25% - 1px) 25%,transparent 25%),
+             linear-gradient(90deg,transparent 0 calc(50% - 1px),rgba(75,50,29,.66) calc(50% - 1px) 50%,transparent 50%),
+             linear-gradient(90deg,transparent 0 calc(75% - 1px),rgba(75,50,29,.66) calc(75% - 1px) 75%,transparent 75%)}
+#uiHpNum{min-width:72px;color:var(--rb-txt);font-size:16px;text-shadow:none}
+#uiHpNum s,#uiHpNum u{color:var(--rb-dim)}
+#eTxt{padding-left:15px;color:var(--rb-dim);font-size:13px}
+#eTxt::before{background:#bd8743}
+#eTxt b{color:var(--rb-txt)}
+
+#uiSkills{gap:12px}
+#uiSkills .sk{--sk-accent:#47a9e8;width:96px;height:68px;border:3px solid #8d6236;border-radius:17px;
+  background:linear-gradient(180deg,#fffaf0,#efd9b5);box-shadow:inset 0 0 0 2px #fff7e6;
+  overflow:visible}
+#uiSkills .sk[data-k="Wide"]{--sk-accent:#31c86b}
+#uiSkills .sk[data-k="Dash"]{--sk-accent:#d99a42}
+#uiSkills .sk::after{content:'';position:absolute;left:50%;top:9px;width:37px;height:19px;
+  transform:translateX(-50%) rotate(-9deg);border-bottom:6px solid var(--sk-accent);
+  border-radius:0 0 70% 70%;filter:drop-shadow(0 2px 0 rgba(90,61,36,.32));z-index:1}
+/* ★QA 수정 둘. ① 이름을 absolute 로 띄우는 순간 바깥 flex 의 justify-content 가
+     더는 안 듣는다 - 글자가 왼쪽 변에 붙는다(실측: 세 칩 모두). text-align 을 직접 준다.
+   ② bottom:7px 이면 아래 변에 걸린 키캡(bottom:-12px · 높이 24px = 칩 안쪽 12px)과
+     5px 씩 겹친다(전 폭 실측 -5). 이름을 그 12px 위로 올린다 - 활 장식은 top 9~28px
+     이므로 위쪽도 안 닿는다. */
+#uiSkills .sk .nm{position:absolute;left:3px;right:3px;bottom:14px;z-index:2;
+  text-align:center;color:var(--rb-txt);font-size:13px;text-shadow:none}
+#uiSkills .sk .key{bottom:-12px;z-index:5;min-width:31px;height:24px;line-height:18px;
+  padding:1px 8px;border:2px solid var(--rb-line);border-radius:7px;background:#fffaf0;
+  box-shadow:0 2px 0 #bd8743,0 0 0 2px #f7e8cc;color:var(--rb-txt);font-size:12px}
+#uiSkills .sk.rdy{border-color:#8d6236;background:linear-gradient(180deg,#fffdf7,#f0dbb7);
+  box-shadow:inset 0 0 0 2px #fff7e6,0 3px 0 #5a3d24,0 7px 12px rgba(59,37,20,.16)}
+#uiSkills .sk.rdy .nm{color:var(--rb-txt)}
+#uiSkills .sk.off{border-color:#aa8d6c;background:linear-gradient(180deg,#e9ddc9,#d8c3a3);box-shadow:none}
+#uiSkills .sk.off .nm{color:#967c60}
+#uiSkills .sk.off .key{color:#9c8061;border-color:#9a7b5a;background:#e8dac3}
+#uiSkills .sk .cd{z-index:4;border-radius:14px}
+#uiSkills .sk[data-k="Dash"]::before{top:4px;z-index:2;color:#8f6a42}
+#uiSkills .sk[data-k="Dash"] .nm{margin-top:0}
+#uiSkills .sk.off[data-k="Dash"]::before{color:#a48d73}
+
+#uiDock .dkSword{gap:9px;padding:6px 20px 7px;border:2px solid var(--rb-line);
+  background:linear-gradient(180deg,#fffdf6,#efd7ad);box-shadow:0 2px 0 #c08a45}
+#uiDock .dkSword::before{content:'';display:block;width:18px;height:4px;border:2px solid var(--rb-line);
+  border-radius:4px;background:#dce8ec;transform:rotate(-45deg)}
+#uiDock .dkSword .lb{color:#916839;font-weight:800}
+#sword{color:var(--rb-txt);text-shadow:none;font-size:15px}
+
+/* 은신 라벨 · 일반 숫자 */
+/* ★QA 수정. 계기판이 이 벌에서 190px 로 커졌다(커밋본 154px). 밑에서 14px 띄워
+     세우므로 라벨의 아래 끝은 204px 위여야 한다. 202px 이면 판을 2px 파고든다
+     (실측 여유 -2. 커밋본은 +10 이었다). 세 분기 다 여유 8px 로 맞춘다. */
+#stHud{bottom:212px;padding:7px 19px 8px;border-radius:999px;text-shadow:none}
+#stHud.hide{color:#24643a;background:linear-gradient(180deg,#fffdf5,#e5f2d7);
+  border:3px solid var(--rb-ok);box-shadow:var(--rb-pop-sm)}
+#stHud.loud{color:#9b4b1f;background:linear-gradient(180deg,#fff8e9,#f5d2a6);
+  border:3px solid var(--rb-orange);box-shadow:var(--rb-pop-sm)}
+#combo{color:#fffaf0;-webkit-text-stroke:2px var(--rb-line);
+  text-shadow:0 3px 0 #c9913e,0 6px 7px rgba(59,37,20,.28)}
+#combo i{color:#fff5df;-webkit-text-stroke:1px var(--rb-line);text-shadow:0 2px 0 #b67c34}
+
+/* 클리어 카드 */
+/* ★QA 수정. 원 뱃지(::before)가 판 안으로 32px 들어와 라벨(::after 「결과」)을 그대로
+     깔고 앉았다 - 주황 원 위의 갈색 글자라 실화면에서 안 읽혔다.
+     ★뱃지는 테두리가 box-sizing 을 못 물려받는다(index.html 의 별표 선택자는 가상요소를 안 잡는다).
+       그래서 실제 크기가 66 이 아니라 66+3+3 = **72px** 이다. -34px 에 두면 32px 이
+       판 안으로 들어온다. -52px 로 빼서 안쪽을 20px 로 줄이고 라벨을 30px 에 둔다
+       (사이 10px). 큰 글자(h1, 위 여백 53px)와도 9px 이 남는다.
+     자리만 옮겼고 문구·크기·색은 그대로다. */
+#bClear{min-width:min(660px,88vw);border-radius:22px}
+#bClear::before{left:50%;top:-52px;width:66px;height:66px;margin-left:-33px;
+  border:3px solid var(--rb-line);border-radius:50%;
+  background:radial-gradient(circle at 42% 34%,#fffbe9 0 20%,#f7c848 22% 52%,#e98c1f 54% 100%);
+  box-shadow:var(--rb-pop-sm)}
+#bClear::after{top:30px;color:#9b6325;text-shadow:none}
+#bClear h1{font-size:34px;color:var(--rb-txt);padding:53px 34px 0;text-shadow:var(--rb-drop-lg)}
+#bClear table{min-width:min(520px,74vw);margin-top:22px;color:var(--rb-dim)}
+#bClear td{border-bottom:2px solid rgba(181,126,59,.24);color:var(--rb-dim)}
+#bClear td.v{color:var(--rb-txt);text-shadow:none}
+#bClear .hint{color:#8a6646}
+#uiClearDim{background:radial-gradient(ellipse at 50% 50%,rgba(255,246,222,.08),rgba(57,35,18,.72) 84%)}
+
+/* 나침반 · 무리 마커 */
+#uiNav{--nav-ink:#b13a28;--nav-glow:rgba(239,126,36,.28)}
+#uiNav .tip{border-left-color:var(--nav-ink);
+  filter:drop-shadow(0 2px 0 var(--rb-line)) drop-shadow(0 3px 3px rgba(59,37,20,.32))}
+#uiNav .plate{border-radius:50%;border:3px solid var(--rb-line);
+  background:radial-gradient(circle at 42% 34%,#fffdf6,#f0d8ae);
+  color:var(--nav-ink);text-shadow:0 1px 0 #fff8e8;box-shadow:var(--rb-pop-sm)}
+#uiNav .plate::after{border-radius:50%;box-shadow:0 0 0 3px rgba(244,182,45,.22)}
+#uiNav .cap,#uiPip .cap{background:#fff8e9;border:2px solid var(--rb-line);
+  color:var(--rb-txt);text-shadow:none;box-shadow:0 2px 0 #c38e4a}
+#uiPip{border-radius:50%;border:2px solid var(--rb-line);
+  background:linear-gradient(180deg,#fffaf0,#efd8b2);box-shadow:var(--rb-pop-sm)}
+#uiPip::after{background:var(--rb-orange);box-shadow:0 0 0 2px #fff4d4}
+
+/* 스킬 콜아웃 */
+#combo .uiCall{border:3px solid var(--rb-line);border-radius:18px;
+  background:linear-gradient(180deg,#fffaf0,#efd7ae);box-shadow:var(--rb-pop)}
+#combo .uiCall .hd{color:#9b6325;text-shadow:none;-webkit-text-stroke:0}
+#combo .uiCall .nm{color:var(--rb-txt);text-shadow:none;-webkit-text-stroke:0}
+#combo .uiCall .ty{color:#8c6847;-webkit-text-stroke:0}
+
+/* 머리 위 체력바. 레벨 배지는 같은 transform 노드 안에서 왼쪽에 붙는다. */
+#uiHpFloat{width:84px;height:12px;overflow:visible;border:0;border-radius:0;background:transparent;
+  box-shadow:none;will-change:transform}
+#uiHpFloat .track{position:absolute;inset:0;overflow:hidden;border:3px solid var(--rb-line);
+  border-radius:999px;background:var(--rb-deep);box-shadow:0 2px 0 rgba(59,37,20,.34)}
+#uiHpFloat .track i{top:0;bottom:0;left:0;border-radius:999px}
+#uiHpFloat .lv{position:absolute;right:calc(100% - 4px);top:50%;z-index:3;
+  width:30px;height:30px;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;
+  border:3px solid var(--rb-line);border-radius:50%;background:linear-gradient(180deg,#fffdf6,#efd5a9);
+  box-shadow:var(--rb-pop-sm);color:var(--rb-txt);font-family:var(--rb-font);
+  font-size:13px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+#uiHpFloat.hit .track{border-color:#fff7e5}
+
+/* 같은 두 반응형 분기. 정보는 그대로 두고 여백과 크기만 단계적으로 줄인다. */
+@media (max-width:1000px){
+  #uiDock{padding:12px 16px 14px;gap:11px}
+  #eBar{width:184px;height:18px}
+  #uiHpNum{min-width:64px;font-size:14px}
+  #uiSkills{gap:9px}
+  #uiSkills .sk{width:80px;height:60px}
+  /* ★QA: 칩이 68 -> 60 으로 줄었는데 활 장식만 그대로였다. 획(border-bottom)이
+     이름 위로 5px 올라탔다(실측 활→이름 -5). 장식도 같이 줄인다. */
+  #uiSkills .sk::after{top:6px;height:13px;border-bottom-width:5px}
+  #uiSkills .sk .nm{font-size:12px}
+  #help{font-size:12px;padding:10px 13px 11px}
+  #help .ks{flex-basis:96px}
+  #stHud{bottom:196px}          /* ★QA: 이 분기의 계기판은 174+14=188px. 186 은 -2 였다 */
+}
+@media (max-width:860px){
+  #uiDock{bottom:10px;padding:10px 12px 13px;gap:9px}
+  #eBar{width:132px;height:16px}
+  #uiHpNum{min-width:54px;font-size:12.5px}
+  #uiDock .hrt{font-size:20px;margin-right:8px}
+  #eHud{gap:8px}
+  #eTxt{padding-left:9px;font-size:11.5px}
+  #uiSkills{gap:7px}
+  #uiSkills .sk{width:64px;height:50px;border-radius:14px}
+  #uiSkills .sk::after{top:5px;width:29px;height:10px;border-bottom-width:4px}  /* ★QA: 위와 같은 이유 */
+  #uiSkills .sk .nm{font-size:11.5px;bottom:12px}   /* ★QA: 키캡(안쪽 10px)과 안 겹치게 */
+  #uiSkills .sk .key{bottom:-10px;min-width:24px;height:20px;line-height:14px;padding:1px 5px;font-size:10px}
+  #uiSkills .sk .cd{border-radius:11px}
+  #uiSkills .sk[data-k="Dash"]::before{font-size:8.5px;top:2px}
+  #uiDock .dkSword{padding:5px 14px 6px}
+  #sword{font-size:12.5px}
+  #help{font-size:11.5px;line-height:1.55;padding:9px 11px 10px}
+  #help .ks{flex-basis:88px;gap:3px}
+  #help .k{min-width:21px;padding:1px 5px 2px;font-size:11px}
+  #help .kx,#help .hNote{font-size:11px}
+  #stHud{bottom:170px}          /* ★QA: 이 분기의 계기판은 147+10=157px */
+  #bGoal{padding:7px 15px 8px;font-size:12.5px;gap:6px}
+  #bGoal::before{width:17px;height:17px;flex-basis:17px}
+  #bGoal::after{font-size:11px}
+  #uiTitle .win{padding:21px 30px 23px}
+  #uiBanner .win{padding:18px 36px 20px}
+}
+@media (max-height:620px){
+  #uiHpFloat{width:68px;height:10px}
+  #uiHpFloat .lv{width:26px;height:26px;font-size:11px}
+  /* ★QA: 낮은 창에서는 안내판 아래끝이 계기판 윗선을 넘는다. 이 벌에서 판이 커진
+     만큼(안내판 +4px · 계기판 +14px) 760x560 에서 실제로 5px 물렸다(커밋본은 +10 여유).
+     글자 크기는 안 건드리고 판 여백과 구분선 간격만 줄인다. */
+  #help{padding:9px 12px 10px}
+  #help .hSep{margin:5px 4px 6px 0}
+}
+@media (max-height:560px){
+  #uiTitle{padding-top:clamp(28px,5vh,56px)}
+  #uiTitle .win{padding:17px 28px 19px}
+  #uiDeath .glyph{font-size:clamp(60px,10vh,82px)}
+}
+
 /* ══ 연출이 화면을 소유한다 (판정 S4 · S5 · S6 · S7) ═══════════════════════
    ★★이 블록은 **반드시 이 파일 CSS 의 맨 끝**에 있어야 한다. 여기 적힌 선택자는
      전부 (0,2,0) 이라 「body.uiHelpOff #uiHelpChip{opacity:1}」 같은 앞쪽 규칙과
@@ -1007,9 +1272,10 @@ export function initUI() {
   const barEl = document.getElementById('eBar');
   if (barEl && barEl.parentNode) barEl.parentNode.insertBefore(hpNum, barEl.nextSibling);
 
-  // 머리 위 체력바(12차). 잔상(.gh)이 채움(.fl) **뒤**에 깔린다 - 문서 순서가 곧 층이다.
+  // 머리 위 체력바. 레벨 배지와 트랙은 같은 transform 노드 안에서 함께 추적된다.
   const hpFloat = el('div', 'uiHpFloat');
-  hpFloat.innerHTML = '<i class="gh"></i><i class="fl"></i>';
+  hpFloat.innerHTML = '<b class="lv">1</b><span class="track"><i class="gh"></i><i class="fl"></i></span>';
+  const hpLevel = hpFloat.querySelector('.lv');
   const hpGhost = hpFloat.querySelector('.gh');
   const hpFill = hpFloat.querySelector('.fl');
   document.body.append(hpFloat);
@@ -1246,14 +1512,14 @@ export function initUI() {
     node.classList.toggle('off', busy);
     node.classList.toggle('rdy', has && !busy);
     // 쿨다운 라디얼. 12시에서 시작해 시계 방향으로 남은 만큼 덮여 있다가 걷힌다.
-    // ★색은 이 벌의 어두운 링 색(--rb-ink)과 같은 남색-검정이다. 칩 밖의 판과 한 벌로
+    // ★색은 이 벌의 월넛 트랙 색과 같다. 칩 밖의 판과 한 벌로
     //   읽혀야 해서, 스킨을 갈아입을 때마다 이 한 줄도 같이 본다.
     const g = node.firstElementChild;              // .cd
     if (!g) return;
     if (!busy) { if (g.style.background) g.style.background = ''; return; }
     const turn = Math.max(0, Math.min(1, left)).toFixed(3);
-    g.style.background = 'conic-gradient(from 0deg,rgba(9,13,28,.80) 0turn ' + turn
-      + 'turn,rgba(9,13,28,0) ' + turn + 'turn)';
+    g.style.background = 'conic-gradient(from 0deg,rgba(75,50,29,.72) 0turn ' + turn
+      + 'turn,rgba(75,50,29,0) ' + turn + 'turn)';
   }
   // 남은 시간 비율(1 = 방금 시작, 0 = 곧 끝).
   // ★main.js 는 attackEnd(게임시계)를 밖에 안 내놓는다. 그래서 **지금 도는 클립의
@@ -1372,9 +1638,9 @@ export function initUI() {
   // ★12차: 뜻(붉음=보스, 호박=증표, 중성=탈출구)은 그대로 두고 획 색만 이 벌의
   //   크림 쪽으로 끌어왔다. 판이 남색 + 크림 테라 획도 그 계열이어야 한 벌로 읽힌다.
   const NAV_KIND = {
-    boss:  { glyph: '鬼', ink: '#ffd9d0', glow: 'rgba(255,90,64,.60)' },
-    token: { glyph: '符', ink: '#ffe3ad', glow: 'rgba(255,200,90,.55)' },
-    exit:  { glyph: '門', ink: '#d9edff', glow: 'rgba(143,211,241,.55)' },
+    boss:  { glyph: '鬼', ink: '#b53c2f', glow: 'rgba(233,74,52,.30)' },
+    token: { glyph: '符', ink: '#aa6718', glow: 'rgba(244,182,45,.30)' },
+    exit:  { glyph: '門', ink: '#4b6680', glow: 'rgba(92,145,180,.28)' },
   };
   // 목표. ★boss.guide 가 정본이다(상단 문구와 **같은 값**을 본다). 낡은 boss.js 로
   //   돌아가도 화살은 살아 있어야 하므로 옛 경로를 폴백으로 남긴다.
@@ -1555,10 +1821,16 @@ export function initUI() {
   // -------------------------------------------------------------------------
   // 체력 숫자. ★enemy.js 는 최대 체력을 안 내놓는다. 첫 폴링이 만체력이라
   //   지금까지 본 가장 큰 값을 최대로 잡으면 어떤 빌드에서도 맞는다(기본 100).
-  let hpMax = 100, hpSeen = -1;
+  let hpMax = 100, hpSeen = -1, hpLevelSeen = 0;
   function updateHp() {
     const en = window.__enemy;
     if (!en || typeof en.hp !== 'number') return;
+    // 표시 전용 레벨이다. 게임 시스템에는 쓰지 않으며 처치 5회마다 한 단계만 올린다.
+    const level = 1 + Math.floor(Math.max(0, Number(en.kills) || 0) / 5);
+    if (level !== hpLevelSeen) {
+      hpLevelSeen = level;
+      hpLevel.textContent = String(level);
+    }
     if (en.hp > hpMax) hpMax = Math.ceil(en.hp);
     const v = Math.max(0, Math.round(en.hp));
     if (v === hpSeen) return;                      // 안 바뀌었으면 DOM 을 안 쓴다
