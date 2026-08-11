@@ -72,7 +72,9 @@ const RING_S0 = 1.6;         // 판 한 변(m). 그림의 고리는 이 안쪽 0
 // ★v94. 7.4 -> 5.2. 이번 파도의 문법 계약이 "지면 전개는 폐기, 바닥에는 먹 자취 소량만"
 //   이다(참격은 화면에 그은 획이고 지면에 까는 그림이 아니다). 전멸의 방점이라 없애지는
 //   않았지만, 화면 절반을 덮던 지름을 무리 하나 크기로 줄였다.
-const RING_S1 = 5.2;
+// ★v96. 5.2 -> 3.4. 오너 지시 "칼 근처에서만". 무리 하나 크기여도 지면 데칼은
+//   쿼터뷰에서 화면 아래쪽을 넓게 먹는다. 마지막으로 벤 자리 한 뼘이면 방점은 선다.
+const RING_S1 = 3.4;
 const RING_LIFT = 0.035;     // 바닥에서 띄우는 높이. 0 이면 바닥과 z-파이팅한다
 // ★색: 구운 ring_shock.png 는 흰·금색이고 원래 가산합성용이다. 그런데 이 맵은
 //   아침 산야라 바닥이 밝다. 흰 고리를 밝은 흙 위에 얹으면 그냥 사라진다
@@ -146,23 +148,33 @@ const SL_HIT_A = 0.78;       // 알파도 옅게
 const SW_N = 4;              // 휘두름 본 획 4/24 = 0.167s
 const SW_N_LIGHT = 3;        // 안 죽인 명중 3/24 = 0.125s
 const SW_N_KILL = 4;         // 처치 획 4/24 = 0.167s
-// ── 동반 획 (v94) ──
-// 본 획 하나만 그으면 "칼빔 한 줄"이다. 귀멸 프레임은 거의 항상 2~3획이 어긋나 겹쳐 있고,
-// 화면 점유 15~57% 는 **한 획이 뚱뚱해서**가 아니라 그 겹침에서 나온다.
-// 획에 **수직으로** 밀어 깐다 - 수직은 벤 방향이 아니므로 리치 계약과 무관하다.
-// ★v94 2차. 둘 -> 셋. 획을 뚱뚱하게 하는 대신 **겹을 늘리는** 방향이다(귀멸의 큰 기술 컷도
-//   그렇게 화면을 채운다). 셋째 획은 팔레트를 한 단 눌러서(palK) 프레임 안 색 가짓수를 늘린다 —
-//   실측 지적: "게임 획은 상위 두 색이 50%인 사실상 2톤, 귀멸은 1위 색이 4%".
-const SW_COMP = [
-  { lenK: 0.86, thkK: 0.66, push:  0.30, dAng:  0.13, aK: 0.92, n: 3, palK: 1.00 },
-  { lenK: 0.68, thkK: 0.50, push: -0.27, dAng: -0.16, aK: 0.82, n: 3, palK: 0.72 },
-  { lenK: 0.52, thkK: 0.38, push:  0.52, dAng:  0.26, aK: 0.70, n: 2, palK: 1.28 },
-];
+// ── 화면 겹 붓자국을 껐다 (v96. 오너 직접 지시) ──
+// 오너가 배포본을 보고 한 말이 이 상수의 전부다:
+//   "이펙트 효과가 칼 근처에서만 나타나야 하는데 뭔 화면의 1/3 덮는 수준이여."
+// 실측(1280x720 · v95 빌드 · renders/history/v96_wave10/fx/sheet_before_*.jpg):
+//   한 번 휘두를 때 이 화면 겹이 **본 획 1 + 동반 획 3 = 넉 장**을 캐릭터 옆 허공에
+//   띄운다. 프레임 검사에서 주인공 머리가 80~94% 덮였고, 그림은 붓이 아니라
+//   파란 **돛/연**으로 읽혔다(심사 인용 "몸 옆·앞 허공에 뜬 판때기"와 같은 그림).
+// 문법을 갈랐다: **획은 이제 칼 궤적에 붙은 가는 호 하나뿐**이고 그건 월드에서
+//   칼끝 실측 궤적으로 그린다(main.js updateTrail). 화면 좌표에 앉는 큰 붓자국은
+//   원리상 "칼 근처"일 수가 없으므로(자리를 화면에서 정한다) 통째로 끈다.
+// ★기계는 남겨 둔다. 지우면 같이 죽는 것이 셋이다 —
+//     · 임팩트 프레임(백색 패널)의 먹 실루엣이 lastStroke.len/thk 를 읽는다(합격작)
+//     · 찢김선이 lastStroke.ang/x/y 를 읽는다
+//     · 전멸 링이 lastSlashNDC 로 월드 자리를 되짚는다
+//   그래서 stroke() 는 **자리·각도만 기록하고 슬롯은 안 잡는다**(아래 SCREEN_STROKE).
+const SCREEN_STROKE = 0;     // 1 로 되돌리면 v95 의 화면 겹 붓자국이 그대로 살아난다
+const SW_COMP = [];          // 동반 획 폐기(9B-2 가 만든 세 장)
 
 // ── 애니 프레임 ──
 // ★이 파일의 v91 전체가 이 한 줄에서 나온다: **연출은 24fps 로 뚝뚝 끊긴다.**
 //   60fps 로 부드럽게 보간하면 3D 리본이고, 1/24 초씩 붙들면 작화 프레임이다.
 //   시트(web/tex/slash_flip.png)는 가로 2칸(가로베기·대각베기) x 세로 6칸(6프레임).
+// ── 타격 지점 참격이 읽는 시트 (v97 11-FX시트) ──
+// ★A/B 손잡이 한 줄. codex(gpt-5.6-sol)가 귀멸 실프레임 기준으로 그린 낱장 6장을
+//   tools/bake_slash_flip3.py 로 이 규격(2x6 · 칸 1024x320 · 회색조 밝기 계단)에 구웠다.
+//   롤백 = 이 문자열을 './tex/slash_flip.png' 로 되돌리는 것뿐이다(옛 시트는 그대로 있다).
+const IMPACT_SHEET = './tex/slash_flip3.png';
 const FRAME_T = 1 / 24;      // 한 장을 붙드는 시간(초)
 const FLIP_N = 6;            // 시트 세로 칸 수 = 한 획의 프레임 수
 const FLIP_C = 2;            // 시트 가로 칸 수 = 획 종류
@@ -477,7 +489,11 @@ export function createFeel(opts) {
         // 줄 번호(벤 축과 나란한 줄이 촘촘히 깔린다). 고르면 빗금이 되니 난수로 흩는다
         // ★v94. 17 -> 27. 성긴 검은 막대 몇 개는 배경에 꽂힌 **말뚝**으로 읽힌다(심사 인용).
         //   같은 자리에 촘촘히 여러 줄이 있어야 '결'로 읽힌다.
-        float k = q.y * (27.0 + 16.0 * uLong) + uSeed;
+        // ★v96. 27 -> 34. 뻗는 길이를 절반으로 줄이면서(아래 outer) 줄 간격까지 그대로
+        //   두면 짧은 막대 몇 개가 되어 다시 말뚝이 된다. 짧아진 만큼 촘촘해야 한다.
+        // ★v97. 34 -> 42. 오너 "너무 줄였다". 수렴형(v96 이 얻은 모양)은 그대로 두고
+        //   **개수와 굵기만** 되돌린다 - 결은 촘촘할수록 '찢김'으로 읽힌다.
+        float k = q.y * (42.0 + 18.0 * uLong) + uSeed;
         float cell = floor(k);
         float f = fract(k) - 0.5;
         float rnd = hash(vec2(cell, uSeed));
@@ -487,20 +503,29 @@ export function createFeel(opts) {
         // ★v94. 길이를 0.62배로 줄였다(심사 "속선이 3D 말뚝"). 화면을 가로지르는
         //   길이의 검은 막대는 배경에 꽂힌 물체로 읽힌다. 획에 딸린 결이려면
         //   **본 획 길이 언저리**에서 끝나야 한다.
-        float outer = (0.50 + rnd * 0.60) * (0.62 + 0.95 * uLong) * (0.58 + uP * 0.62) * 0.62;
+        // ★v96. 다시 0.55배(총 0.34배). 오너 지시 "칼 근처에서만". 본 획이 이제 칼에
+        //   붙은 가는 호 하나뿐이라, 속도선이 전화면으로 뻗으면 그게 곧 화면을 덮는 것이다.
+        // ★v97. 마지막 배수 0.34 -> 0.46. 본 획이 다시 굵어졌으므로(main.js STRAND_CFG)
+        //   결도 그 획 언저리까지는 뻗어야 '획에 딸린 결'이 된다. 화면을 가로지르진 않는다.
+        float outer = (0.50 + rnd * 0.60) * (0.62 + 0.95 * uLong) * (0.58 + uP * 0.62) * 0.46;
         // ★선 끝을 알파로 흐리면 '모션블러 얼룩'이 된다(실측 1회). 애니의 속도선은
         //   **굵기가 뾰족해지며** 끝난다. 그래서 알파는 계단으로 끊고 두께를 좁힌다.
-        // ★v94. 양끝 다 뾰족하게(안쪽 끝도). 한쪽만 뾰족하면 말뚝의 밑동처럼 보인다.
-        float tap = (1.0 - smoothstep(inner, outer, ax))
-                  * smoothstep(inner, inner + (outer - inner) * 0.30, ax);
-        float thick = (0.07 + rnd * 0.15) * (0.16 + 0.84 * tap);
+        // ★v96. 균일 두께 평행 막대(양끝만 뾰족)에서 **타격점으로 수렴하는** 결로 바꿨다.
+        //   안쪽 끝(타격점 쪽)이 실오라기이고 바깥으로 갈수록 굵어졌다가 끝에서 뜯긴다.
+        //   그래야 눈이 선을 따라 타격점으로 끌려 들어간다(오너 지시 6항).
+        float sN = clamp((ax - inner) / max(outer - inner, 1e-4), 0.0, 1.0);
+        float tap = pow(sN, 0.75) * (1.0 - smoothstep(0.70, 1.0, sN));
+        // ★v97. (0.05 + rnd*0.11) -> (0.07 + rnd*0.15). 수렴 모양은 그대로, 굵기만 보강.
+        float thick = (0.07 + rnd * 0.15) * (0.06 + 0.94 * tap);
         float line = 1.0 - smoothstep(thick * 0.72, thick, abs(f));
         float span = step(inner, ax) * (1.0 - step(outer, ax));
         // 벤 축에서 멀어질수록 줄이 **성겨진다**(흐려지는 게 아니라 개수가 준다).
         // 줄마다 제 난수를 문턱과 견줘 있거나 없거나 둘 중 하나로 만든다.
         // ★v94. 퍼짐 폭을 절반으로 조였다(1.05 -> 0.58). 벤 축에서 멀리 떨어져 홀로 뜬
         //   검은 선은 어디에도 안 붙어 보여서 지면에 꽂힌 물체가 된다.
-        float band = 1.0 - smoothstep(0.20 + 0.30 * uLong, 0.58 + 0.55 * uLong, abs(q.y));
+        // ★v96. 0.58 -> 0.34. 길이를 줄인 만큼 폭도 같이 줄여야 '한 다발'로 읽힌다.
+        // ★v97. 0.34 -> 0.44. 다발이 굵어진 본 획을 감싸야 한다(길이와 같이 움직인다).
+        float band = 1.0 - smoothstep(0.15 + 0.22 * uLong, 0.44 + 0.34 * uLong, abs(q.y));
         float exist = step(hash(vec2(cell + 3.7, uSeed + 1.3)) * 0.92, band);
         float life = 1.0 - uP * 0.25;
         float a = line * span * exist * life * (0.60 + 0.18 * uLong);
@@ -626,11 +651,15 @@ export function createFeel(opts) {
   //   화면에는 아무것도 안 나오지만 **셰이더 프로그램은 첫 프레임에 구워진다.**
   //   = 첫 타격의 컴파일 히치가 구조적으로 안 생긴다(옛 arcMesh 가 갖고 있던 성질).
   const IMPF_MAX = 8;          // 동시에 떠 있을 수 있는 장 수(옛 ARC_MAX 와 같다)
-  const IMPF_LEN = 0.95;       // size 1 일 때 획 반길이(m)
-  // ★v94: 이 값은 **안 건드린다.** 이 한 장(진홍 초승달)이 건틀릿의 유일한 합격작이고,
-  //   합격작이 읽는 시트도 옛 것 그대로 두었다(위 '시트 두 벌' 참조). 둘 중 하나만
-  //   바꿔도 그림이 달라진다.
-  const IMPF_THK = 0.52;       // size 1 일 때 칸 반높이(m). 그림의 획은 이 안쪽 0.375
+  // ★v96. 0.95 -> 0.64 / 0.52 -> 0.35. **비를 그대로 두고 크기만 줄였다** — 그림은
+  //   한 픽셀도 안 바뀌고(합격작 보존) 요괴를 통째로 덮던 것만 없어진다.
+  //   실측(v95): 획 전체 길이 1.9m x size 0.95 = 1.80m 인데 요괴 키가 1.30m 라
+  //   "무엇을 벴는지" 자체가 안 보였다(오너 지시 8항). 지금은 1.22m 로 요괴 안에 든다.
+  // ★v97. 0.64 -> 0.80 / 0.35 -> 0.44. 여기도 **비는 그대로**다(합격작 무수정 계약).
+  //   오너 "너무 줄였다"에 맞춘 중간점 - 9차 0.95 와 10차 0.64 사이. 획 전체 길이는
+  //   1.52m 라 요괴(키 1.30m)를 아직 안 덮는다(10차가 닫은 지적을 다시 열지 않는다).
+  const IMPF_LEN = 0.80;       // size 1 일 때 획 반길이(m)
+  const IMPF_THK = 0.44;       // size 1 일 때 칸 반높이(m). 그림의 획은 이 안쪽 0.375
   const IMPF_N_KILL = 6;       // 처치는 시트 여섯 장 전부(0.25초)
   const IMPF_N_HIT = 4;        // 안 죽인 명중은 네 장(0.167초)에서 끊는다
   // 장별 알파도 계단이다. 처치는 진하게 시작해 끊고, 명중은 처음부터 옅다
@@ -740,7 +769,11 @@ export function createFeel(opts) {
     impfs.push({
       p: new THREE.Vector3(x, y, z), ang, t: 0,
       n: kill ? IMPF_N_KILL : IMPF_N_HIT,
-      size: size || 1,
+      // ★v97. 커진 것은 **처치의 진홍 초승달뿐**이다(오너 지시 "0.64 -> 0.80 안팎").
+      //   안 죽인 명중까지 같이 키우면 일격기 한 대가 1.5m 짜리 판때기가 되어
+      //   "무엇을 벴는지 안 보인다"는 지적이 다시 열린다(실측 크롭 x_sumen).
+      //   0.82 를 곱하면 처치 아닌 장은 v96 크기 그대로다.
+      size: (size || 1) * (kill ? 1.0 : 0.82),
       // 획 종류: 화면에서 수평에 가까우면 가로베기 칸, 아니면 대각베기 칸
       // (붓자국 stroke() 와 같은 규칙이라 두 그림의 휨이 서로 안 어긋난다)
       col: Math.abs(Math.sin(ang)) < FLIP_H_SIN ? 0 : 1,
@@ -802,7 +835,8 @@ export function createFeel(opts) {
   //   형태가 단순해서(덩어리 + 테두리 + 방울) 절차로도 손그림처럼 나온다.
   const POP_MAX = 12;
   const POP_N = 2;                 // 장 수(24fps). 1 = 번쩍만, 2 = 번쩍 + 먹 튀김
-  const POP_SIZE = 0.62;           // size 1 일 때 반지름(m)
+  // ★v96. 0.62 -> 0.44. 아래 먹 테두리를 좁히면서 크기도 같이 줄인다(오너 지시 7항).
+  const POP_SIZE = 0.44;           // size 1 일 때 반지름(m)
   const popGeo = new THREE.BufferGeometry();
   const pPos = new Float32Array(POP_MAX * 4 * 3);
   const pUV = new Float32Array(POP_MAX * 4 * 2);
@@ -830,6 +864,14 @@ export function createFeel(opts) {
     uniforms: {
       uWht: { value: new THREE.Color(0xf6f2e8) },     // 종이 흰빛(순백은 눈이 아프다)
       uInk: { value: new THREE.Color(0x0b0a10) },     // 먹
+      // ★v99(11-FX-B). 감청(물빛). 먹 튀김 방울의 다수를 이 색으로 돌린다.
+      //   ★값이 #186095 가 아니라 #56A5C9 인 데 이유가 있다. main.js 의 물 팔레트는
+      //     hex 를 255 로 나눠 **선형 그대로** 셰이더에 넣는데, THREE.Color(hex) 는
+      //     sRGB 로 읽어 선형으로 변환한다(r160 ColorManagement 기본 on).
+      //     그래서 같은 화면색을 내려면 여기 값은 팔레트 hex 를 sRGB 인코딩한 것이어야
+      //     한다(#186095 를 선형으로 보고 sRGB 로 되감으면 #56A5C9). 같은 hex 를
+      //     그대로 적으면 화면에서 거의 검정이 된다.
+      uWat: { value: new THREE.Color(0x56A5C9) },
     },
     vertexShader: `
       attribute vec2 aUV; attribute float aAlpha; attribute float aFrm; attribute float aSeed;
@@ -838,7 +880,7 @@ export function createFeel(opts) {
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: `
       varying vec2 vUV; varying float vA; varying float vFrm; varying float vSd;
-      uniform vec3 uWht; uniform vec3 uInk;
+      uniform vec3 uWht; uniform vec3 uInk; uniform vec3 uWat;
       float h1(float x){ return fract(sin(x * 127.1) * 43758.5453); }
       void main(){
         // ★!(vA > x) 꼴. NaN 은 모든 비교가 거짓이라 (vA <= x) 로 쓰면 NaN 이
@@ -853,28 +895,57 @@ export function createFeel(opts) {
           float a2 = h1(floor(th * 1.2732 + vSd * 2.0) + vSd * 7.7);  // 8등분(큰 결)
           float R = 0.50 + 0.34 * a2 + 0.16 * a1;
           if (r > R) discard;
-          // 테두리가 형태를 정의한다. 안쪽 0.72R 까지가 흰빛, 그 바깥은 먹.
-          gl_FragColor = vec4(r > R * 0.72 ? uInk : uWht, 1.0);
+          // 테두리가 형태를 정의한다. 안쪽 0.88R 까지가 흰빛, 그 바깥은 먹.
+          // ★v96. 0.72 -> 0.88. 옛 값은 반지름의 바깥 28%(면적의 48%)가 먹이라
+          //   화면에서 60px 짜리 이 한 장이 **속 빈 검은 타원 고리 = 눈알**로 보였다
+          //   (오너 지시 7항. 처치 프레임에 그게 두세 개 깔린다). 먹은 테두리 한 겹이면 된다.
+          gl_FragColor = vec4(r > R * 0.88 ? uInk : uWht, 1.0);
           return;
         }
-        // ── f1. 먹 튀김 ── 접점에서 방사로 튄 방울. 흰 심을 한 점씩 남긴다.
-        float ink = 0.0; float core = 0.0;
+        // ── f1. 먹 튀김 ── 접점에서 방사로 튄 방울.
+        // ★★v99(11-FX-B). LOG 의 "어두운 테두리 + 한가운데 흰 점 = 눈알" 함정이
+        //   **접점 자국에 그대로 남아 있었다**: r<0.17 먹 원판 안에 r<0.075 흰 점.
+        //   판정 시트 v98 열 Z1 칸 임팩트 한가운데의 그 눈알이 이것이다.
+        //   v96 은 f0 번쩍에서, v97 은 방울 속에서 같은 지적을 닫았는데 접점만 남았다.
+        //   → 흰 점을 빼고, 접점 자국을 **원판이 아니라 짧은 획**으로 바꾼다.
+        //     원판은 크기를 아무리 줄여도 눈이 된다(모양이 문제지 크기가 아니다).
+        // ★같이: 방울 일곱 중 순먹은 둘쯤만 남기고 나머지를 **감청 몸 + 흰 꼬리 쉼표**로
+        //   돌린다. 순먹 방울이 밝은 모래 위에 흩어지면 그 무리 자체가 검은 타원 떼로
+        //   읽힌다(오너 판정지 지적). 물의 호흡이 튀긴 것이니 물색이 다수인 쪽이 맞다.
+        float ink = 0.0, wat = 0.0, tip = 0.0;
         for (int k = 0; k < 7; k++) {
           float fk = float(k);
           float ang = (fk + h1(fk * 3.3 + vSd)) * 0.8976;             // 2pi/7 언저리에 흩음
           float dist = 0.40 + 0.52 * h1(fk * 5.1 + vSd * 2.3);
-          float rad = 0.10 + 0.11 * h1(fk * 7.9 + vSd * 4.1);
+          // ★v97. 0.10+0.11 -> 0.062+0.072. 심을 빼서 속을 채우자 방울 하나가
+          //   화면 15~20px 짜리 **검은 잎사귀**로 읽혔다(실측 크롭). 튀김은 작아야 튀김이다.
+          float rad = 0.062 + 0.072 * h1(fk * 7.9 + vSd * 4.1);
           vec2 c = vec2(cos(ang), sin(ang)) * dist;
-          // 방울은 동그라미가 아니라 **진행 방향으로 늘어난 쉼표**다
+          // 방울 좌표계: +x 가 날아간 방향(바깥). 꼬리는 접점 쪽(-x)으로 끌린다.
           vec2 d = q - c;
           vec2 e = vec2(d.x * cos(ang) + d.y * sin(ang), -d.x * sin(ang) + d.y * cos(ang));
-          float rr = length(vec2(e.x * 0.62, e.y * 1.30));
-          if (rr < rad) { ink = 1.0; if (rr < rad * 0.34) core = 1.0; }
+          bool pure = h1(fk * 11.3 + vSd * 5.9) < 0.28;               // 일곱 중 둘쯤만 순먹
+          // ★순먹은 **작고 꼬리가 없다.** 1차 시도에서 먹에도 꼬리를 달았더니 화면에
+          //   검은 바늘이 방사로 뻗어 '별표(*)'가 됐다(실측 크롭). 검은 것은 점이어야 한다.
+          float rd = rad * (pure ? 0.62 : 0.95);
+          float head = length(vec2(e.x * 0.62, e.y * 1.30));
+          // 꼬리가 있어야 '방울'이 아니라 '쉼표'다. 없으면 그냥 점 일곱 개다.
+          // ★길이는 날아간 거리의 38% 까지만. 접점까지 끌면 획이 아니라 긁힌 자국이 된다.
+          float s = clamp(-e.x / max(dist * 0.38, 1e-3), 0.0, 1.0);
+          float hw = rd * (1.0 - s) * 0.80 + 0.016;
+          bool onTail = (!pure) && (e.x < 0.0) && (s < 1.0) && (abs(e.y) < hw);
+          if (head < rd || onTail) {
+            if (pure) ink = 1.0;
+            else { wat = 1.0; if (onTail && s > 0.55) tip = 1.0; }    // 꼬리 안쪽 끝만 흰빛
+          }
         }
-        // 접점에도 작은 먹 심 하나(튀김의 출발점)
-        if (r < 0.17) { ink = 1.0; if (r < 0.075) core = 1.0; }
-        if (ink < 0.5) discard;
-        gl_FragColor = vec4(core > 0.5 ? uWht : uInk, 1.0);
+        // 접점 자국. 원판 + 흰 점이 아니라 **짧은 먹 획** 하나. 각도는 팝마다 다르게
+        // (가로로 못 박으면 화면 UI 의 대시로 읽힌다).
+        float ta = h1(vSd * 2.9 + 0.7) * 3.14159;
+        vec2 tq = vec2(q.x * cos(ta) + q.y * sin(ta), -q.x * sin(ta) + q.y * cos(ta));
+        if (r < 0.16 && abs(tq.y) < 0.028 + 0.070 * abs(tq.x)) ink = 1.0;
+        if (ink < 0.5 && wat < 0.5) discard;
+        gl_FragColor = vec4(ink > 0.5 ? uInk : (tip > 0.5 ? uWht : uWat), 1.0);
       }`,
   });
   // ★메시를 늘 켜 둔다(알파 0 이면 전부 discard). 첫 타격에서 셰이더를 굽느라
@@ -957,8 +1028,8 @@ export function createFeel(opts) {
   //   합격작은 손대지 않는다 - 그래서 그 둘이 읽는 시트는 **옛 시트 그대로** 둔다.
   //   새로 구운 굵은 획 시트(slash_flip2, 칸 1024x448·획 몸통 0.632)는 이번에
   //   신설한 **화면공간 본 획**만 읽는다.
-  //     slashMat  (화면 겹 붓자국)      -> slash_flip2  (새 것)
-  //     impfMat   (타격 지점 진홍 초승달) -> slash_flip   (합격작. 무수정)
+  //     slashMat  (화면 겹 붓자국)      -> slash_flip2  (★SCREEN_STROKE=0 이라 지금은 안 그린다)
+  //     impfMat   (타격 지점 진홍 초승달) -> IMPACT_SHEET (v97 11-FX시트에서 codex 작화로 갈았다)
   //     impMat    (백색 패널의 획 실루엣) -> slash_flip   (합격작. 무수정)
   // ★새 시트가 없으면 slashMat 도 옛 시트로 내려간다(그림만 가늘어지고 안 깨진다).
   function mkSheet(t) {
@@ -973,8 +1044,13 @@ export function createFeel(opts) {
     mkSheet(t);
     impMat.uniforms.uTex.value = t;
     impMat.uniforms.uHasTex.value = 1;
-    impfMat.uniforms.uTex.value = t;
-    impfMat.uniforms.uHasTex.value = 1;
+    // ★타격 지점 참격은 아래 IMPACT_SHEET 가 주인이다. 여기서는 **비어 있을 때만** 꽂는다
+    //   (두 로더가 같은 uniform 을 쓰므로 순서를 안 재우면 늦게 끝난 쪽이 이긴다.
+    //    실제로 처음에 이 줄이 무조건 덮어써서 새 시트가 안 붙었다)
+    if (!impfMat.uniforms.uTex.value) {
+      impfMat.uniforms.uTex.value = t;
+      impfMat.uniforms.uHasTex.value = 1;
+    }
     // 새 시트가 아직/영영 안 오면 본 획도 여기에 붙는다
     if (!slashMat.uniforms.uTex.value) {
       slashMat.uniforms.uTex.value = t;
@@ -982,6 +1058,14 @@ export function createFeel(opts) {
       sheetName = './tex/slash_flip.png';
     }
   }, undefined, () => { /* 없으면 절차 폴백 */ });
+  // ── 타격 지점 참격 시트 (v97 11-FX시트. codex 작화 장착) ──
+  // ★여기 한 줄이 A/B 의 전부다. 되돌리려면 './tex/slash_flip.png' 로 바꾸면 끝난다
+  //   (옛 시트 파일은 지우지 않았다). 재생 타이밍·팔레트 재칠은 한 글자도 안 건드렸다.
+  //   못 읽으면 위 로더가 이미 옛 시트를 꽂아 놨으므로 조용히 옛 그림으로 돈다.
+  new THREE.TextureLoader().load(IMPACT_SHEET + location.search, (t) => {
+    impfMat.uniforms.uTex.value = mkSheet(t);
+    impfMat.uniforms.uHasTex.value = 1;
+  }, undefined, () => { /* 없으면 옛 시트 그대로 */ });
   new THREE.TextureLoader().load('./tex/slash_flip2.png' + location.search, (t) => {
     slashMat.uniforms.uTex.value = mkSheet(t);
     slashMat.uniforms.uUseTex.value = 1;
@@ -1020,6 +1104,25 @@ export function createFeel(opts) {
   // opt = { n: 재생할 장 수, lenK/thkK: 길이·굵기 배수, aK: 알파 배수 } (v94. 동반 획용)
   function stroke(ang, offX, offY, big, kind, light, opt) {
     opt = opt || {};
+    // ── v96. 화면 겹은 안 그린다(위 SCREEN_STROKE 주석) ──
+    // ★그래도 **자리·각도·크기는 반드시 기록한다.** 임팩트 프레임의 먹 실루엣,
+    //   찢김선, 전멸 링이 전부 이 값을 되짚어 쓴다. 여기서 일찍 나가면 그 셋이
+    //   조용히 옛 자리에 그려진다(눈으로는 "링이 엉뚱한 데서 터진다"로 보인다).
+    if (!SCREEN_STROKE) {
+      if (opt.comp) return;                    // 동반 획은 기록도 안 한다
+      const lenQ = (big ? SL_LEN_BIG : SL_LEN) * (light ? SL_HIT_K : 1.0);
+      const thkQ = (big ? SL_THK_BIG : SL_THK) * (light ? 0.80 : 1.0);
+      if (!light) {
+        lastSlashT = performance.now() * 0.001;
+        lastSlashNDC.set((offX || 0) / (camera.aspect || 1), offY || 0);
+        lastStroke.ang = ang;
+        lastStroke.x = offX || 0; lastStroke.y = offY || 0;
+        lastStroke.len = lenQ; lastStroke.thk = thkQ;
+        lastStroke.col = Math.abs(Math.sin(ang)) < FLIP_H_SIN ? 0 : 1;
+        lastStroke.big = big ? 1 : 0;
+      }
+      return;
+    }
     const s = slashes[ring];
     const i = ring;
     ring = (ring + 1) % SLOTS;
@@ -1600,6 +1703,13 @@ export function createFeel(opts) {
       if (o.thr) PAL_EL.thr = o.thr;
       return PAL_EL;
     },
+    // ★v99. 먹 튀김(f1) 방울 다수가 쓰는 **원소색**. main.js 가 칼을 바꿀 때마다
+    //   지금 든 칼의 팔레트에서 감청 자리를 넘긴다. 안 부르면 물빛 기본값 그대로다
+    //   (그러면 불칼에서도 파란 방울이 튄다 - 그래서 부르는 쪽이 있어야 한다).
+    // ★인자는 **선형 rgb 0..1** 이다. main.js 의 uPal 이 hex/255 를 선형으로 그냥
+    //   쓰므로 같은 자로 넘겨야 화면에서 궤적의 감청 밴드와 같은 색에 앉는다.
+    //   (setHex 로 받으면 sRGB->선형 변환이 한 번 더 걸려 훨씬 어두워진다.)
+    setPopTint(r, g, b) { popMat.uniforms.uWat.value.setRGB(r, g, b); },
     // 맞은 그 자리에 참격 한 장(월드 플립북). main.js 의 옛 spawnImpact(가산합성
     // 초승달 + 별빛)를 그대로 대신한다. 부르는 쪽은 **좌표·각도·크기·종류**만 넘긴다.
     //   x,y,z = 월드 좌표(요괴 가슴께) / ang = 화면 각도(라디안) / size = 크기(m)
