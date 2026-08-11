@@ -75,6 +75,12 @@
   RELEASE 에 적은 클립은 왼손을 자루에서 떼고 **균형 잡는 팔**로 바꾼다.
   자세한 표와 근거는 아래 [한 손 파지] 절에 있다.
 
+★★검 든 오른팔 내리기 (SWORD_DOWN. 기본 Jump) — 2026-08-12 오너 지시 2차
+  "점프할 때 한 손으로 검을 앞으로 들고 있는데 넌 그게 말이 된다 생각하냐?"
+  1차는 왼손만 풀었고 오른팔은 소스 그대로 **검을 앞으로 겨눈** 자세였다.
+  SWORD_DOWN 에 적은 클립은 오른팔 3본을 어깨에서 통째로 돌려 검을 몸 옆·아래로
+  내린다. 자세한 표와 근거는 아래 [오른팔 내리기] 절에 있다.
+
 ★발 접지
   비례가 다르면(허벅지 0.247H vs 0.203H, 종아리 0.173H vs 0.240H) 각도만 옮겼을 때
   발 높이가 달라진다. 클립마다 메시 최저점 10분위를 바인드 최저점에 맞추는
@@ -109,6 +115,7 @@
   GRIP_K    왼손목-자루 오프셋 환산 보정(기본 1.0. 손 크기가 키 대비 많이 다를 때만)
   GRIP_ON/GRIP_OFF  파지 게이트 문턱(키 정규화. 기본 0.10 / 0.18)
   RELEASE   한 손으로 쥘 클립(쉼표)   기본 Jump  (빈 값이면 전부 양손)
+  SWORD_DOWN 검 든 오른팔을 내릴 클립  기본 Jump  (빈 값이면 소스 그대로)
   KEEP_ORIG 1 이면 타깃 원본 액션을 Orig* 이름으로 같이 내보낸다(기본 0)
   VERIFY    1(기본) 결과 glb 재임포트해 파지·접지 실측
   RENDER    1(기본) 렌더 / 0 생략
@@ -147,6 +154,8 @@ GRIP_ON = float(os.environ.get("GRIP_ON", "0.10"))
 GRIP_OFF = float(os.environ.get("GRIP_OFF", "0.18"))
 # 한 손 파지 클립(오너 지시. 아래 [한 손 파지] 절 참조)
 RELEASE = [c.strip() for c in os.environ.get("RELEASE", "Jump").split(",") if c.strip()]
+# 검 든 오른팔을 내릴 클립(오너 지시 2차. 아래 [오른팔 내리기] 절 참조)
+SWDOWN = [c.strip() for c in os.environ.get("SWORD_DOWN", "Jump").split(",") if c.strip()]
 # 왼손목-자루 오프셋 환산 배율에 곱하는 보정. 두 리그의 손 크기가 키 대비 많이
 # 다를 때만 건드린다(아래 [자루] 절에서 손 크기 차이를 찍는다).
 GRIP_K = float(os.environ.get("GRIP_K", "1.0"))
@@ -185,6 +194,8 @@ FALLBACK = {
 }
 PELVIS = "Bip001 Pelvis"
 L_ARM = ("Bip001 L UpperArm", "Bip001 L Forearm", "Bip001 L Hand")
+# 검 든 팔. 어깨에서 통째로 돌릴 3본(손·검은 FK 자식이라 강체로 따라온다)
+R_ARM = ("Bip001 R UpperArm", "Bip001 R Forearm", "Bip001 R Hand")
 HAND_R = "Bip001 R Hand"
 HAND_L = "Bip001 L Hand"
 # ★쇄골이 매달린 척추 마디. 이름이 헷갈리게 붙어 있다(실측 계층:
@@ -199,6 +210,7 @@ print("       타깃 %s" % DST_GLB)
 print("       결과 %s" % OUT_GLB)
 print("       클립 %s / 왼팔IK %s" % (",".join(CLIPS), "ON" if GRIP_IK else "OFF"))
 print("       한 손 파지(왼손을 떼는 클립) %s" % (",".join(RELEASE) or "없음"))
+print("       오른팔 내리기(검 든 팔) %s" % (",".join(SWDOWN) or "없음"))
 
 # ================================================================ 1) 씬 준비
 bpy.ops.wm.read_homefile(use_empty=True)
@@ -524,6 +536,32 @@ if GRIP_IK and not DO_GRIP:
     print("   ★검을 못 찾아 왼팔 IK 를 끈다(소스 %s / 타깃 %s)" % (SRC_SWORD, dname))
 
 
+# ---- 칼끝 방향 (아래 [오른팔 내리기] 가 겨누는 축) ----
+# ★게임이 처음 장착하는 칼로 잰다(swordIdx=0 = nokseun). 하류 s34 가 그 칼을
+#   1.78배로 다시 앉히지만 **같은 반직선 위**라 방향은 안 변한다(s34 로그 0.017도).
+#   기준은 measureBlade 와 같다: 손 레스트 로컬에서 원점에서 가장 먼 정점.
+def tip_dir_local(a, name):
+    ob = bpy.data.objects.get(name)
+    if ob is None:
+        return None
+    HMi = hand_rest_matrix(a).inverted()
+    loc = [HMi @ (ob.matrix_world @ v.co) for v in ob.data.vertices]
+    return max(loc, key=lambda p: p.length).normalized()
+
+
+GAME_SW = next((o.name for o in bpy.data.objects
+                if o.type == "MESH" and o.parent == arm
+                and o.name.startswith("SW_nokseun")), dname)
+TIP_DIR = tip_dir_local(arm, GAME_SW) if GAME_SW else None
+if TIP_DIR is not None:
+    _r = DREST[HAND_R][0] @ TIP_DIR
+    _o = tip_dir_local(arm, dname)
+    print("   칼끝 축: %s 기준 손로컬 (%.3f,%.3f,%.3f) / 레스트 월드 (%.3f,%.3f,%.3f)"
+          "  (파지 기준 칼 %s 와 %.2f도 차)"
+          % (GAME_SW, TIP_DIR.x, TIP_DIR.y, TIP_DIR.z, _r.x, _r.y, _r.z,
+             dname, math.degrees(TIP_DIR.angle(_o)) if _o else -1))
+
+
 # ---- 손 크기 대조: 파지 오프셋을 '키 비율'로 환산해도 되는지의 근거 ----
 # 왼손목이 자루축에서 떨어진 거리(0.077H)는 사실 **손목-손바닥 거리**다.
 # 그래서 키가 아니라 손 크기로 환산해야 맞다. 두 리그의 손이 키 대비 같은 크기면
@@ -738,6 +776,133 @@ def balance_target(pose, t):
     return wpos(pose, L_ARM[0]) + (torso_frame(pose) @ u) * (ARM_L * k)
 
 
+# ------------------------------------------------------------ 오른팔 내리기
+# ★오너 지시 2차(2026-08-12): "점프할 때 한 손으로 검을 앞으로 들고 있는데
+#   넌 그게 말이 된다 생각하냐?"
+#   1차(위 [한 손 파지])는 왼손만 풀었고 검 든 오른팔은 소스 그대로였다. 그 소스가
+#   양손검 전제라 **검을 어깨 높이로 앞에 겨눈 채** 뛴다(committed glb 실측.
+#   가슴 좌표계 · 오른어깨 원점 · 게임 m):
+#       f7  손 (안쪽 +0.209, 위 +0.014, 앞 +0.493)   칼끝 (위 +0.807, 앞 +1.872)
+#       f13 손 (안쪽 +0.210, 위 -0.105, 앞 +0.499)   칼끝 (위 +0.347, 앞 +2.025)
+#   1.6m 짜리 대검을 두 팔 다 놓은 채 앞으로 겨누고 뛰는 그림이다. 실제로는 무거운
+#   검을 든 팔은 **몸 옆~살짝 뒤·아래로 내려** 균형을 잡는다.
+#
+# 어떻게 바꾸나 — 어깨에서 **팔 전체를 한 번 돌린다**(IK 아님)
+#   손목 위치를 IK 로 잡으면 팔꿈치 각이 바뀌어 손목-검 관계가 틀어진다. 검은 손뼈에
+#   물린 강체라 **팔꿈치 굽힘·손목 각을 그대로 둔 채 어깨에서 통째로 돌리는** 것이
+#   맞다(s27 의 ARM_LIFT 와 같은 원리, 방향만 반대). 그러면 파지가 한 톨도 안 변한다.
+#   목표는 각도를 굳히지 않고 **가슴 좌표계 방향**으로 준다. 몸이 뜨고 기울면 팔이
+#   통째로 따라가 원본 점프의 생동감이 남는다(왼팔 균형 자세와 같은 방식).
+#
+# ★겨누는 것은 팔이 아니라 **칼끝**이다 (1차 시도가 여기서 틀렸다)
+#   팔 방향만 목표로 주고 한 번 돌려 봤더니(팔 고도 -65도) 칼끝이 이렇게 나왔다:
+#       f7 칼끝 고도 -53도 · 발밑 -0.43m   f16 -56도 · 발밑 -0.52m
+#   즉 칼이 바닥을 뚫는다. 이 리그는 손목-칼끝이 1.6m 로 키(1.75m)에 육박해서
+#   **팔을 내리면 칼끝이 반드시 지면 밑으로 간다.** 눈에 보이는 것도, 바닥·몸에
+#   닿는 것도 칼끝이므로 칼끝 방향을 1순위로 맞추고 팔은 그 다음에 맞춘다.
+#   회전 하나(3자유도)로 두 방향(4자유도)을 다 만족시킬 수는 없다 — 팔-칼 사잇각이
+#   소스에 고정(실측 31도)돼 있기 때문이다. 그래서 두 단계로 나눈다:
+#     1) 칼끝을 목표 방향으로 보내는 최소회전
+#     2) **칼 축 둘레**로 더 돌려(칼끝은 그대로) 팔을 목표 쪽에 최대한 붙인다
+#   그래도 남는 각은 손목이 먹는다: 팔을 그만큼 더 내리고 손목을 같은 각만큼
+#   되돌리면 칼 방향은 유지된 채 팔만 더 내려간다(SWD_WRIST 가 상한. 22도면
+#   ★f7·f13 에서 칼끝 목표와 팔 목표를 **둘 다** 소수점 셋째 자리까지 맞춘다).
+#   최종 실측(basic2.glb, 가슴 좌표계 · 게임 m):
+#       f7  손 (밖 -0.201, 아래 -0.486, 뒤 -0.103)  칼끝 (아래 -1.086, 뒤 -1.438)
+#           칼끝 고도 -22.0도 · 팔 고도 -65.1도 · 발밑 여유 +0.510
+#       f13 손 (밖 -0.189, 아래 -0.493, 뒤 -0.160)  칼끝 (아래 -1.195, 뒤 -1.495)
+#           칼끝 고도 -26.0도 · 팔 고도 -63.3도 · 발밑 여유 +0.259
+#       클립 전체 몸 관통 최대 0.0166 = **고치기 전과 같은 값**(f1 파지분)
+#
+# ★위상표의 근거는 왼팔과 같다: 게임은 상승 내내 f7, 하강 내내 f13 에서 멈춘다.
+#   화면에 제일 오래 보이는 두 장이라 거기를 먼저 정하고 나머지를 이었다.
+# ★착지(f16~) 는 소스가 이미 팔을 내린다(팔 고도 +2 -> -38도). 그래서 가중치를
+#   0 으로 되돌려 **소스의 착지 팔스윙을 살린다**. 힘으로 붙들면 착지가 뻣뻣해진다.
+SWD_KEYS = [       # (위상 t, 칼끝 고도 E도(음수=아래), 칼끝 벌림 Wd도(뒤에서 오른쪽),
+                   #          팔 벌림 A도, 팔 앞으로 F도(음수=뒤))
+    (0.00, -10, 40, 16, 24),    # f1  웅크림. 가중치 0이라 소스 그대로다
+    (0.20, -16, 30, 20, -4),    # f5  도약. 검이 내려가며 뒤로 끌린다
+    (0.27, -22, 26, 22, -12),   # f7  ★상승 내내 이 자세로 멈춘다
+    (0.55, -26, 22, 20, -18),   # f13 ★하강 내내 이 자세로 멈춘다(더 뒤·아래로)
+    (0.70, -20, 26, 20, -8),    # f16 착지. 칼끝을 들며 팔이 앞으로 돌아오기 시작
+    (1.00, -12, 34, 18, 0),     # f23 회복(가중치 0. 소스 착지 스윙으로 돌아간다)
+]
+# 가중치(위상, w). 도약 0.2초 안에 다 내리고, 착지 뒤에 소스로 돌려준다.
+SWD_W = [(0.00, 0.0), (0.03, 0.0), (0.20, 1.0), (0.70, 1.0), (0.88, 0.55), (1.00, 0.0)]
+# 손목이 먹어 줄 상한(도). 0 이면 팔이 칼 사잇각만큼 덜 내려간다.
+SWD_WRIST = float(os.environ.get("SWD_WRIST", "22"))
+
+
+def _key_at(keys, t):
+    """구간 안은 smoothstep 으로 잇는다(속도가 튀면 팔이 홱 꺾인다)."""
+    if t <= keys[0][0]:
+        return keys[0][1:]
+    for i in range(len(keys) - 1):
+        t0, t1 = keys[i][0], keys[i + 1][0]
+        if t <= t1:
+            s = (t - t0) / max(1e-6, t1 - t0)
+            s = s * s * (3 - 2 * s)
+            return tuple(a + (b - a) * s for a, b in zip(keys[i][1:], keys[i + 1][1:]))
+    return keys[-1][1:]
+
+
+def swd_dirs(pose, t):
+    """이번 프레임의 (칼끝 목표방향, 팔 목표방향) 월드 단위벡터.
+    ★가슴 좌표계는 X=왼쪽이라, 오른쪽으로 벌어지는 쪽이 -X 다."""
+    E, Wd, A, F = _key_at(SWD_KEYS, t)
+    E, Wd, A, F = (math.radians(x) for x in (E, Wd, A, F))
+    b = Vector((-math.sin(Wd) * math.cos(E), math.sin(E),
+                -math.cos(Wd) * math.cos(E)))       # 뒤·아래 대각
+    u = Vector((-math.sin(A), -math.cos(A) * math.cos(F), math.cos(A) * math.sin(F)))
+    C = torso_frame(pose)
+    return (C @ b).normalized(), (C @ u).normalized()
+
+
+def apply_sword_down(pose, Rw, t):
+    """오른팔 3본을 어깨에서 통째로 돌려 검을 내린다. (팔 회전량도, 손목 되돌림도, w).
+
+    팔 길이·팔꿈치 굽힘은 하나도 안 건드린다(회전 하나를 세 뼈에 똑같이 곱한다).
+    손목만 마지막에 반대로 되돌려 칼 방향을 지킨다.
+    """
+    w = _key_at(SWD_W, t)[0]
+    if w <= 1e-4 or TIP_DIR is None:
+        return 0.0, 0.0, 0.0
+    S = wpos(pose, R_ARM[0])
+    W = wpos(pose, HAND_R)
+    Hr = (A2W @ pose[HAND_R]).to_3x3()
+    Hr.normalize()
+    d = (Hr @ TIP_DIR).normalized()                 # 지금 칼끝 방향
+    a = (W - S).normalized()                        # 지금 팔 방향
+    bt, at = swd_dirs(pose, t)
+    q = d.rotation_difference(bt)                   # 1) 칼끝을 목표로
+    # 2) 칼 축 둘레 회전은 칼끝을 안 건드린다. 그걸로 팔을 목표 쪽에 붙인다
+    p = q @ a
+    p = p - bt * p.dot(bt)
+    r = at - bt * at.dot(bt)
+    if p.length > 1e-5 and r.length > 1e-5:
+        p.normalize()
+        r.normalize()
+        q = Quaternion(bt, math.atan2(p.cross(r).dot(bt), p.dot(r))) @ q
+    # 3) 남은 각은 손목이 먹는다: 팔을 더 내리고 손목을 같은 각만큼 되돌린다
+    a2 = q @ a
+    rest = a2.angle(at)
+    wr = min(rest, math.radians(SWD_WRIST))
+    if wr > 1e-4:
+        ax = a2.cross(at)
+        if ax.length > 1e-6:
+            q = Quaternion(ax.normalized(), wr) @ q
+    else:
+        wr = 0.0
+    q = Quaternion().slerp(q, w)                    # 축은 그대로, 각만 가중치만큼
+    M = q.to_matrix()
+    for bn in R_ARM:
+        Rw[bn] = M @ Rw[bn]
+    if wr > 1e-4:
+        qb = Quaternion().slerp(Quaternion(ax.normalized(), -wr), w)
+        Rw[HAND_R] = qb.to_matrix() @ Rw[HAND_R]    # 손목만 되돌린다(칼 방향 유지)
+    return math.degrees(q.angle), math.degrees(wr * w), w
+
+
 def apply_grip(pose, Rw, gt, ph=None):
     """왼팔 2본 IK 로 손목을 타깃 자루에 건다. (목표, IK전 이탈, None, 가중치).
 
@@ -824,12 +989,18 @@ def bake(name):
     f0, f1 = use_src(name)
     nf = f1 - f0 + 1
     rel = name in RELEASE and DO_GRIP
-    print("\n[%s] 소스 f%d~%d (%d장)%s"
-          % (name, f0, f1, nf, "  ★한 손 파지(왼팔=균형)" if rel else ""))
+    swd = name in SWDOWN
+    print("\n[%s] 소스 f%d~%d (%d장)%s%s"
+          % (name, f0, f1, nf, "  ★한 손 파지(왼팔=균형)" if rel else "",
+             "  ★오른팔 내리기(검)" if swd else ""))
+
+    def ph_all(i):
+        """이 프레임의 위상(0~1)."""
+        return i / max(1, nf - 1)
 
     def phase(i):
         """RELEASE 클립이면 이 프레임의 위상(0~1), 아니면 None(=양손 파지)."""
-        return (i / max(1, nf - 1)) if rel else None
+        return ph_all(i) if rel else None
 
     # --- 1차: 골반 궤적 평균 / 접지 보정량 / 파지 게이트를 잰다 ---
     praw, gts = [], []
@@ -856,14 +1027,25 @@ def bake(name):
         for t, A, F, k in BAL_KEYS:
             print("      t %.2f (f%-2d)  A %+3d도  F %+3d도  k %.2f   w %.2f"
                   % (t, f0 + int(round(t * (nf - 1))), A, F, k, bal_weight(t)))
+    if swd:
+        print("   오른팔(검) 위상표(t / 칼끝 고도·벌림 / 팔 벌림·앞으로(음수=뒤) / 가중치):")
+        for t, E, Wd, A, F in SWD_KEYS:
+            print("      t %.2f (f%-2d)  칼끝 E %+3d도 Wd %+3d도   팔 A %+3d도 F %+3d도"
+                  "   w %.2f"
+                  % (t, f0 + int(round(t * (nf - 1))), E, Wd, A, F, _key_at(SWD_W, t)[0]))
 
-    lows, maxerr, befs, afts = [], 0.0, [], []
+    lows, maxerr, befs, afts, swds = [], 0.0, [], [], []
     for i, f in enumerate(range(f0, f1 + 1)):
         sc.frame_set(f)
         bpy.context.view_layer.update()
         pw = DREST[ROOT_BONE][1] + (praw[i] - pmean) * K_TRANS
         Rw = delta_rots()
         pose, basis = build(Rw, pw)
+        if swd:
+            # ★왼손 파지보다 **먼저**. 검이 먼저 움직여야 왼손이 그 검을 따라간다
+            #   (apply_grip 은 지금 프레임의 오른손 위치에서 자루 기준점을 잡는다).
+            swds.append(apply_sword_down(pose, Rw, ph_all(i)))
+            pose, basis = build(Rw, pw)
         if DO_GRIP:
             T, bef, _, w = apply_grip(pose, Rw, gts[i], phase(i))
             pose, basis = build(Rw, pw)
@@ -896,6 +1078,14 @@ def bake(name):
               " (최대 %.2f주먹)"
               % (min(g_b), max(g_b), max(g_b) / FIST,
                  min(g_a), max(g_a), max(g_a) / FIST))
+    if swd and swds:
+        act_f = [(i, d, wr) for i, (d, wr, w) in enumerate(swds) if w > 1e-4]
+        print("   오른팔 회전량: %d/%d 프레임 적용 (팔 최대 %.1f도 f%d / 평균 %.1f도,"
+              " 손목 되돌림 최대 %.1f도)"
+              % (len(act_f), nf, max(d for _, d, _ in act_f),
+                 f0 + max(act_f, key=lambda r: r[1])[0],
+                 sum(d for _, d, _ in act_f) / len(act_f),
+                 max(wr for _, _, wr in act_f)))
 
     # --- 2차: 보정을 넣고 키를 찍는다 ---
     act = new_action(name)
@@ -906,6 +1096,9 @@ def bake(name):
               + Vector((0, 0, shift)))
         Rw = delta_rots()
         pose, basis = build(Rw, pw)
+        if swd:                                     # ★1차와 같은 순서로(검 먼저)
+            apply_sword_down(pose, Rw, ph_all(i))
+            pose, basis = build(Rw, pw)
         if DO_GRIP:
             apply_grip(pose, Rw, gts[i], phase(i))
             pose, basis = build(Rw, pw)
@@ -1312,9 +1505,9 @@ if RENDER:
         # 파지 접사: 두 손이 같은 자루를 쥐고 있는지 눈으로 판정하는 컷
         grip_shot(os.path.join(OUTDIR, "grip_%s_f%02d.png" % (nm, REP[nm])))
 
-    # 한 손 파지 클립은 **연속으로** 찍어야 판정이 된다(한 장으로는 팔이 어디로
-    # 가는지 안 보인다). 게임이 실제로 멈춰 보여 주는 프레임을 반드시 포함한다.
-    for nm in RELEASE:
+    # 한 손 파지·오른팔 내리기 클립은 **연속으로** 찍어야 판정이 된다(한 장으로는
+    # 팔이 어디로 가는지 안 보인다). 게임이 멈춰 보여 주는 프레임을 반드시 포함한다.
+    for nm in sorted(set(RELEASE) | set(SWDOWN)):
         act = bpy.data.actions.get(nm)
         if not act:
             continue

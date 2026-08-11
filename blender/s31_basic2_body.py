@@ -4,13 +4,18 @@
     blender -b -P blender/s31_basic2_body.py
     -> web/basic2_body.glb   (액션 없음. 모션은 이어서 s24_moveset.py 가 이식한다)
 
-전체 공정 다섯 줄(이 순서대로 다시 돌리면 언제든 재현된다. 2026-08-11 실행 기록.
-1~4 는 2026-08-11 재실행에서 **바이트 단위로 같은 파일**이 다시 나왔다)
+전체 공정 **여섯 줄**(이 순서대로 다시 돌리면 언제든 재현된다. 2026-08-11 실행 기록.
+1~4 는 2026-08-11 재실행에서 **바이트 단위로 같은 파일**이 다시 나왔다.
+2026-08-12 에는 여섯 줄 전부가 committed basic2.glb 와 md5 까지 같았다)
+★★6번(s34)을 빼먹으면 1번 칼이 옛 카타나로 남아 md5 가 안 맞는다. 여기 다섯 줄만
+  적혀 있어서 실제로 한 번 헛돌았다. 6번은 blender/s34_sword1_swap.py 헤더에 있다.
 
     # 1) 알몸 basic2 + 칼 7자루
     blender -b -P blender/s31_basic2_body.py
     # 2) slayer 무브셋 7종 이식 (레스트 관절 각도차 5.9~10.4도. kensa 보다 작다)
-    #    ★점프는 기본값 RELEASE=Jump 로 **한 손 파지**가 된다(2026-08-12 오너 지시).
+    #    ★점프는 기본값 RELEASE=Jump 로 **한 손 파지**가 되고(2026-08-12 오너 지시),
+    #      기본값 SWORD_DOWN=Jump 로 **검 든 오른팔이 몸 옆·아래로 내려간다**
+    #      (같은 날 오너 지시 2차. 빼면 검을 앞으로 겨눈 채 뛴다)
     SRC_GLB=web/slayer.glb DST_GLB=web/basic2_body.glb OUT_GLB=web/basic2_moves.glb \
       DST_SWORD=SW_baekah.001 SWORD_FIT=0 GRIP_K=1.0 KEEP_ORIG=1 \
       OUTDIR=renders/history/v97_wave11/char_basic2/moveset blender -b -P blender/s24_moveset.py
@@ -30,6 +35,9 @@
     #    (임시파일에 쓰고 os.replace. 이미 옷이 있으면 멈춘다)
     BODY_GLB=web/basic2.glb OUT_GLB=web/basic2.glb \
       OUTDIR=renders/history/v98_wave12/cloth blender -b -P blender/s33_basic2_cloth.py
+    # 6) 1번 칼을 오너가 준 new_sword 로 교체 + 1.5배 + 자루 파지 (자세한 건 s34 헤더)
+    #    ★이 줄까지 돌려야 committed basic2.glb 와 md5 가 같아진다
+    OUTDIR=renders/history/v98_wave12/sword1 blender -b -P blender/s34_sword1_swap.py
 
   ★2번에서 GRIP_K 를 1.0 으로 둔 근거: s24 가 찍는 손 크기가 소스 0.0853 /
     타깃 0.0823 로 3.4% 차이뿐이다(kensa 는 36% 차이라 0.64 를 줬다).
