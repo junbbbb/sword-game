@@ -25,14 +25,46 @@
   basic / basic2 둘 다에 얹어 재 본 결과 basic2 쪽이 맞다고 판정됐다:
       벨트 둘레가 요구하는 배율 S_b 0.3872 / 어깨끈이 요구하는 최소배율 S_s 0.3988
       -> 두 치수의 어긋남이 3.0% (basic 은 12.0%)
-  그래서 배치 손잡이(HIP_F·CLOTH_S)는 s15 가 쓰던 값을 기본값으로 그대로 둔다.
   몸(char1)의 레스트 지오메트리는 s31/s24/s27 을 거쳐도 안 변한다(그 셋은 칼과
   애니메이션만 건드린다). 즉 s15 때 잰 치수가 지금도 유효하다.
+
+★★[2026-08-11 재작업] "옷이 왜 이렇게 크냐" (오너 지시). 원인 두 개를 고쳤다.
+  1) **통짜 배율을 각도별 요구배율의 최댓값으로 잡았다.**
+     허리는 원기둥이 아니라 옆으로 넓은 타원이다. 각도 36칸에서 잰 요구배율이
+     0.27(앞뒤) ~ 0.378(옆)로 **1.4배** 벌어져 있는데, 안 뚫리게 하려고 최댓값을
+     쓰니 앞뒤가 그만큼(40%) 떴다. 벨트가 몸에 **한 점도 안 닿았다**
+     (실측: 벨트 138정점의 최소 간격 27.5mm · 중앙 46.1mm · 최대 75.3mm).
+  2) **conform 이 한 방향뿐이었다.** 뚫는 정점만 밖으로 밀고(8개, 4.5mm) 뜬 정점은
+     그대로 뒀다. 그래서 배율의 헐렁함이 끝까지 남았다.
+  고친 방법: 배율은 최댓값 대신 **분위수**(FIT_PCT, 기본 0.55)로 잡아 평균에 맞추고,
+  conform 을 **양방향**으로 바꿔 모든 정점을 "몸 표면 + 목표간격"으로 끌어당긴다.
+  ★변위는 반드시 **스무딩해서** 먹인다. 날것으로 먹이면 벨트의 안쪽면과 바깥면이
+    각자 표면에 붙어 벨트 두께가 0 이 된다(가죽이 종이가 된다). 스무딩은 변 기준
+    이웃끼리만 섞이므로 **섬을 안 넘는다** = 벨트·어깨끈·치마가 서로 안 끌어당긴다.
+  ★둘레만 줄이고 **길이는 지킨다**(FIT_SZ 1.08). 통짜로 줄이면 치마가 15% 짧아지는데
+    오너가 지적한 것은 둘레지 길이가 아니다.
+  ★간격 목표를 높이 경사로만 주면 치마 윗단까지 같이 뜬다. **마주 본 몸이 다리인가**
+    (LEG_CLEAR)로 준다. 여유가 필요한 이유가 다리가 움직여서니까 다리 앞에서만 띄운다.
+
+  결과 (같은 잣대로 잰 전후. 옷 정점 -> 몸 표면 부호거리의 중앙값)
+                   전             후
+      전체       54.2mm   ->   17.6mm
+      벨트       46.1mm   ->   14.5mm   (최소 27.5 -> 2.2 = 이제 몸에 **닿는다**)
+      어깨끈     44.9mm   ->    4.7mm   (20mm 넘게 뜬 정점 90% -> 8%)
+      벨트 두께  14.9mm   ->   18.4mm   (스무딩이 지켰다. 안 하면 0 이 된다)
+  애니 7클립: 찢어짐(최대 늘음)이 전 구간에서 내려갔고(Run 4.81 -> 3.70,
+  1.2배 초과 모서리 1611 -> 845) 관통 최대깊이도 내려갔다(Run 70.8 -> 62.2mm).
+  대신 관통 **개수**는 걷기·달리기에서 늘었다(옷이 다리에 가까워졌으니 당연하다.
+  Walk 6.4 -> 23.3/프레임). 이건 웨이트로는 못 지운다 -- CROTCH_P·LEG_MAX 를
+  키워 다리 추종을 올려 봤더니 관통은 10%만 줄고 **찢어짐이 두 배**가 됐다
+  (Run 1.2배 초과 845 -> 1595). 그래서 안 썼다. 게임 화면(롤 시점)에서 확인한
+  판정이 최종 근거다.
 
 ★공정 (s15 [2] 절의 순서를 그대로 따른다)
   1) 옷 정점 용접  glTF 는 UV 이음매에서 정점을 쪼갠다. 섬 판정·웨이트 전이 전에 붙인다
   2) 벨트 섬을 찾아 허리 높이(HIP_F)에 앉히고 벨트 둘레에 맞춰 통째로 배율
-  3) conform  몸을 뚫는 옷 정점을 몸 표면 **바깥**으로 민다
+  3) conform(양방향)  옷을 몸 표면 + 목표간격으로 끌어당긴다. 목표간격은 높이에 따라
+     벨트선 4mm -> 치마밑단 24mm. 마지막에 한 방향 안전 패스로 관통 0 을 보장한다
      ("가려지는 몸 면을 지운다" 는 못 쓴다. 이 옷은 몸을 덮지 않아 지우면 구멍이 난다)
   4) 웨이트 전이  옷엔 뼈가 없다. 몸 정점그룹을 옷으로 옮기고 스무딩·가랑이 보정·4개 자르기
   5) 재질  MeshToonMaterial 계약(베이스컬러만)에 맞춰 normal/mr/emissive 링크를 끊는다
@@ -55,8 +87,15 @@
   CLOTH_GLB  옷            기본 incoming/basic_cloth.glb
   OUT_GLB    결과           기본 web/basic2.glb  (임시파일에 쓰고 os.replace 로 교체)
   HIP_F      벨트 높이 z/키  기본 0.560
-  CLOTH_S    벨트 최소배율에 곱할 여유  기본 1.035
-  CONFORM_M / CONFORM_HEM   벨트선 / 치마밑단 여유 간격(m)  기본 0.004 / 0.028
+  FIT_PCT    각도별 요구배율의 분위수(1.0 = 옛날 최댓값 = 헐렁)  기본 0.55
+  CLOTH_S    거기에 곱할 여유  기본 1.000
+  FIT_SZ     세로 배율 / 가로 배율(둘레만 줄이고 치마 길이는 지킨다)  기본 1.08
+  LEG_CLEAR  마주 본 몸이 다리일 때 더 띄우는 간격(m)  기본 0.032
+  CROTCH_P   가랑이 웨이트 이관 지수(키우면 관통↓ 찢어짐↑↑)  기본 1.0
+  CONFORM_M / CONFORM_HEM   벨트선 / 치마밑단 **목표** 간격(m)  기본 0.004 / 0.024
+  FIT_N      양방향 conform 반복 횟수    기본 4
+  FIT_SMOOTH 변위 스무딩 횟수(두께 보존)  기본 6
+  FIT_MAX    한 번에 당길 수 있는 최대(m) 기본 0.060
   LEG_MAX    치마 밑단이 다리를 따라가는 강도  기본 0.85
   SMOOTH_N   웨이트 라플라시안 스무딩 횟수     기본 14
   PRUNE      웨이트 가지치기 문턱             기본 0.02
@@ -89,10 +128,16 @@ CLOTH_GLB = _p(os.environ.get("CLOTH_GLB")) or os.path.join(INC, "basic_cloth.gl
 OUT_GLB = _p(os.environ.get("OUT_GLB")) or os.path.join(WEB, "basic2.glb")
 
 HIP_F = float(os.environ.get("HIP_F", "0.560"))       # 벨트를 앉힐 높이 z/키
-CLOTH_S = float(os.environ.get("CLOTH_S", "1.035"))   # 벨트 최소배율에 곱할 여유
+FIT_PCT = float(os.environ.get("FIT_PCT", "0.55"))    # 각도별 요구배율 분위수
+CLOTH_S = float(os.environ.get("CLOTH_S", "1.000"))   # 거기에 곱할 여유
 CONFORM_M = float(os.environ.get("CONFORM_M", "0.004"))
-CONFORM_HEM = float(os.environ.get("CONFORM_HEM", "0.028"))
+CONFORM_HEM = float(os.environ.get("CONFORM_HEM", "0.024"))
+FIT_SZ = float(os.environ.get("FIT_SZ", "1.08"))      # 세로 배율 / 가로 배율
+FIT_N = int(os.environ.get("FIT_N", "4"))
+FIT_SMOOTH = int(os.environ.get("FIT_SMOOTH", "6"))
+FIT_MAX = float(os.environ.get("FIT_MAX", "0.060"))
 LEG_MAX = float(os.environ.get("LEG_MAX", "0.85"))
+CROTCH_P = float(os.environ.get("CROTCH_P", "1.0"))   # 가랑이 이관 지수(클수록 덜 이관)
 SMOOTH_N = int(os.environ.get("SMOOTH_N", "14"))
 PRUNE = float(os.environ.get("PRUNE", "0.02"))
 VERIFY = os.environ.get("VERIFY", "1") == "1"
@@ -292,23 +337,42 @@ for v in body.data.vertices:
             armv.add(v.index)
             break
 ZC = FOOT + H * HIP_F
-band = [p for i, p in enumerate(BW)
-        if i not in armv and abs(p.z - ZC) <= (BZ1 - BZ0) * 0.5]
-WCX = (max(p.x for p in band) + min(p.x for p in band)) / 2
-WCY = (max(p.y for p in band) + min(p.y for p in band)) / 2
-RB = ring(band, WCX, WCY, "max")
-S_MIN = max(RB[i] / RIN[i] for i in range(NANG) if RIN[i] and RB[i])
-S = S_MIN * CLOTH_S
-print("  허리 밴드 정점 %d 중심(%.4f,%.4f) z %.4f" % (len(band), WCX, WCY, ZC))
-print("  벨트 최소배율 %.4f x 여유 %.3f = %.4f (키 대비 %.4f)"
-      % (S_MIN, CLOTH_S, S, S / H))
+# ★밴드 높이를 **배율 먹인 뒤의** 벨트 높이로 잡는다. 옛 코드는 옷 로컬 단위
+#   (BZ1-BZ0 = 0.202)를 그대로 미터로 써서 ±10cm 를 훑었다. 그 20cm 안에는
+#   허리보다 훨씬 굵은 엉덩이가 들어온다 = 벨트가 엉덩이 둘레로 커진다.
+#   배율과 밴드가 서로를 물고 있으므로 네 번 돌려 수렴시킨다.
+S = 0.39
+for _ in range(4):
+    half = max(H * 0.012, (BZ1 - BZ0) * 0.5 * S)
+    band = [p for i, p in enumerate(BW)
+            if i not in armv and abs(p.z - ZC) <= half]
+    WCX = (max(p.x for p in band) + min(p.x for p in band)) / 2
+    WCY = (max(p.y for p in band) + min(p.y for p in band)) / 2
+    RB = ring(band, WCX, WCY, "max")
+    RAT = sorted(RB[i] / RIN[i] for i in range(NANG) if RIN[i] and RB[i])
+    # ★최댓값이 아니라 분위수. 최댓값(=제일 굵은 각도)에 맞추면 나머지 각도가
+    #   전부 그만큼 뜬다(실측 앞뒤 40%). 분위수로 잡고 초과분은 아래 conform 이
+    #   밖으로 밀어낸다. 그래야 벨트가 몸에 **닿는다**.
+    S_FIT = RAT[min(len(RAT) - 1, int(len(RAT) * FIT_PCT))]
+    S = S_FIT * CLOTH_S
+print("  허리 밴드 정점 %d 중심(%.4f,%.4f) z %.4f (밴드 반높이 %.1fmm)"
+      % (len(band), WCX, WCY, ZC, half * 1000))
+print("  각도별 요구배율 최소 %.4f 중앙 %.4f 최대 %.4f (최대/중앙 %.2f배 = 허리 타원율)"
+      % (RAT[0], RAT[len(RAT) // 2], RAT[-1], RAT[-1] / RAT[len(RAT) // 2]))
+print("  벨트 배율 = %d%% 분위수 %.4f x 여유 %.3f = %.4f (키 대비 %.4f, 옛 최댓값 %.4f)"
+      % (FIT_PCT * 100, S_FIT, CLOTH_S, S, S / H, RAT[-1] * 1.035))
 
+# ★가로(둘레)와 세로(길이)를 따로 준다. 둘레를 줄이는 것이 "몸에 맞추는" 일인데
+#   통짜로 줄이면 치마 길이까지 15% 짧아진다(오너가 요구한 것은 길이가 아니다).
+#   FIT_SZ 로 세로만 되돌린다. 1.0 = 통짜.
+SZ = S * FIT_SZ
 for v in cloth.data.vertices:
     p = v.co
     v.co = Vector((WCX + (p.x - BCX) * S, WCY + (p.y - BCY) * S,
-                   ZC + (p.z - BMID) * S))
+                   ZC + (p.z - BMID) * SZ))
 cloth.data.update()
-BELT_TOP = ZC + (BZ1 - BMID) * S
+print("  세로 배율 %.4f (가로의 %.3f 배)" % (SZ, FIT_SZ))
+BELT_TOP = ZC + (BZ1 - BMID) * SZ
 CV = [v.co.copy() for v in cloth.data.vertices]
 knee_z = (A2W @ arm.data.bones["Bip001 R Calf"].head_local).z
 print("  배치 후 옷 z %.4f~%.4f  (벨트 윗선 %.4f, 무릎 %.4f)"
@@ -317,38 +381,164 @@ print("  치마 밑단 z/키 %.3f  무릎 z/키 %.3f  -> %s"
       % ((min(p.z for p in CV) - FOOT) / H, (knee_z - FOOT) / H,
          "무릎 위" if min(p.z for p in CV) > knee_z else "★무릎 아래(다리가 뚫을 수 있다)"))
 
-# ---- 2-1) 몸이 옷을 뚫는 문제: 옷 정점을 몸 표면 밖으로 밀어낸다 ----
+# ---- 2-1) 맞춤(conform): 옷을 몸 실루엣에 붙인다 (양방향) ----
 # ★"옷에 가려지는 몸 정점을 지운다" 는 쓸 수 없다. 이 옷은 몸을 덮는 옷이 아니라
 #   벨트 + 허리에서 늘어진 로인클로스 + 어깨끈이다. 가려지는 몸 면적이 거의 없고,
 #   치마 틈새로 맨살이 그대로 보이므로 지우면 구멍이 뚫린다.
 # ★"몸을 안쪽으로 줄인다" 도 안 쓴다. 실루엣(근육)이 캐릭터 정체성인데 옷 몇 개
 #   정점 때문에 몸 전체를 깎는 건 비용이 반대다.
-# ★여유 간격은 높이에 따라 다르게 준다. 벨트 선은 몸에 붙어야 벨트답고(4mm),
-#   치마 밑단은 넉넉히 떨어져 있어야 달릴 때 허벅지가 앞으로 나와도 안 뚫는다(28mm).
+# ★목표 간격은 높이에 따라 다르게 준다. 벨트 선·어깨끈은 살에 붙어야 가죽답고(4mm),
+#   치마 밑단은 떨어져 있어야 달릴 때 허벅지가 앞으로 나와도 안 뚫는다(24mm).
 Minv = body.matrix_world.inverted()
 M3 = body.matrix_world.to_3x3()
 SK_BOT0 = min(p.z for p in CV)
 SK_D0 = max(1e-6, BELT_TOP - SK_BOT0)
-moved, worst = 0, 0.0
-for v in cloth.data.vertices:
-    p = v.co
-    tt = min(1.0, max(0.0, (BELT_TOP - p.z) / SK_D0))
-    marg = CONFORM_M + (CONFORM_HEM - CONFORM_M) * (tt * tt * (3 - 2 * tt))
-    hit, loc, nrm, _ = body.closest_point_on_mesh(Minv @ p)
-    if not hit:
+
+# 변 기준 이웃. 스무딩이 이 표를 타므로 **섬을 안 넘는다**
+# (벨트를 조인다고 어깨끈이 끌려오지 않는다).
+NBV = {i: set() for i in range(len(cloth.data.vertices))}
+for e in cloth.data.edges:
+    a, b = e.vertices
+    NBV[a].add(b)
+    NBV[b].add(a)
+ISL_OF = {}
+for k, s in enumerate(isl):
+    for i in s:
+        ISL_OF[i] = k
+BELT_K = isl.index(belt)
+STRAP_K = isl.index(strap)
+
+
+# ★간격 목표를 높이만으로 정하면 안 된다. 여유가 필요한 진짜 이유는 **다리가
+#   움직이기 때문**이다. 그래서 "그 옷 정점이 마주 보는 몸 표면이 얼마나 다리인가"
+#   (허벅지·종아리 웨이트)를 재서 그만큼만 띄운다.
+#     - 골반·엉덩이를 마주 보면 -> 붙는다 (치마 윗단이 허리에 앉는다)
+#     - 허벅지를 마주 보면      -> 띄운다 (걷기·달리기에 허벅지가 앞으로 나온다)
+#   높이 경사만 쓰던 옛 방식은 치마 윗단까지 같이 띄워서 옷이 통째로 커 보였다.
+LEGG = [g.index for g in body.vertex_groups
+        if any(t in g.name for t in ("Thigh", "Calf"))]
+LEGW = [0.0] * len(body.data.vertices)
+for v in body.data.vertices:
+    LEGW[v.index] = min(1.0, sum(g.weight for g in v.groups if g.group in LEGG))
+LEG_CLEAR = float(os.environ.get("LEG_CLEAR", "0.032"))
+
+
+def gaps_now():
+    """정점마다 (부호거리, 표면점, 표면법선, 마주 본 몸의 다리성 0~1)."""
+    out = []
+    for v in cloth.data.vertices:
+        p = v.co
+        hit, loc, nrm, fi = body.closest_point_on_mesh(Minv @ p)
+        if not hit:
+            out.append(None)
+            continue
+        lw = body.matrix_world @ loc
+        nw = (M3 @ nrm).normalized()
+        vs = body.data.polygons[fi].vertices
+        lg = sum(LEGW[i] for i in vs) / len(vs)
+        out.append(((p - lw).dot(nw), lw, nw, lg))
+    return out
+
+
+def marg_at(z, lg):
+    """그 옷 정점이 몸 표면과 두고 싶은 간격(m). 높이 경사 + 다리성 가산."""
+    tt = min(1.0, max(0.0, (BELT_TOP - z) / SK_D0))
+    base = CONFORM_M + (CONFORM_HEM - CONFORM_M) * (tt * tt * (3 - 2 * tt))
+    return base + LEG_CLEAR * (lg * lg * (3 - 2 * lg))
+
+
+def hist(tag, gs):
+    """간격 히스토그램. 이게 이번 작업의 증거다."""
+    a = sorted(g[0] for g in gs if g)
+    n = len(a)
+    q = lambda f: a[min(n - 1, int(n * f))]
+    print("    %-12s n%-5d 최소%7.1f  10%%%7.1f  50%%%7.1f  90%%%7.1f  최대%7.1f (mm)"
+          % (tag, n, a[0] * 1000, q(.1) * 1000, q(.5) * 1000, q(.9) * 1000, a[-1] * 1000))
+
+
+def belt_thick():
+    """벨트 띠 두께(안쪽면-바깥면). 스무딩이 모자라면 이 값이 0 으로 죽는다.
+
+    ★각도칸 **안에서** 재야 한다. 그냥 max-min 반경으로 재면 허리 타원율이
+      두께로 잡혀서 두께가 죽어도 눈치를 못 챈다."""
+    bins = {}
+    for i in belt:
+        p = cloth.data.vertices[i].co
+        d = math.hypot(p.x - WCX, p.y - WCY)
+        k = int((math.atan2(p.y - WCY, p.x - WCX) + math.pi) / (2 * math.pi) * NANG) % NANG
+        bins.setdefault(k, []).append(d)
+    t = sorted(max(v) - min(v) for v in bins.values() if len(v) >= 2)
+    return t[len(t) // 2] if t else 0.0
+
+
+G0 = gaps_now()
+print("  [conform] 조이기 전 간격")
+hist("전체", G0)
+hist("벨트", [G0[i] for i in belt])
+hist("어깨끈", [G0[i] for i in strap])
+TH0 = belt_thick()
+
+for it in range(FIT_N):
+    G = gaps_now()
+    disp = [None] * len(cloth.data.vertices)
+    for i, v in enumerate(cloth.data.vertices):
+        if G[i] is None:
+            disp[i] = Vector((0, 0, 0))
+            continue
+        d, lw, nw, lg = G[i]
+        e = d - marg_at(v.co.z, lg)             # 양수 = 그만큼 떠 있다
+        e = max(-FIT_MAX, min(FIT_MAX, e))
+        disp[i] = -nw * e
+    # ★변위 스무딩. 안 하면 벨트의 안쪽면과 바깥면이 각자 살에 붙어 두께가 0 이 된다.
+    #   이웃 평균이라 저주파(고리 전체가 타원으로 눌리는 성분)는 살고
+    #   고주파(정점 하나가 튀는 성분 = 두께·모피 톱니)는 죽는다.
+    for _ in range(FIT_SMOOTH):
+        nd = []
+        for i, dv in enumerate(disp):
+            acc = dv.copy()
+            for j in NBV[i]:
+                acc = acc + disp[j]
+            nd.append(acc / (1 + len(NBV[i])))
+        disp = nd
+    mv = 0.0
+    for i, v in enumerate(cloth.data.vertices):
+        v.co = v.co + disp[i]
+        mv = max(mv, disp[i].length)
+    cloth.data.update()
+    print("    %d회차 최대 이동 %.1fmm" % (it + 1, mv * 1000))
+
+# ★마지막 안전 패스는 **한 방향**이다. 조인 뒤에도 뚫린 정점이 남으면 그것만
+#   표면 밖으로 민다(스무딩 없이). 관통 0 을 여기서 보장한다.
+SAFE = 0.55        # 목표 간격의 절반쯤까지는 허용(그 아래만 밀어낸다)
+pushed, worst = 0, 0.0
+GS = gaps_now()
+for i, v in enumerate(cloth.data.vertices):
+    if GS[i] is None:
         continue
-    lw = body.matrix_world @ loc
-    nw = (M3 @ nrm).normalized()
-    d = (p - lw).dot(nw)
-    if d < marg:
-        v.co = lw + nw * marg
-        moved += 1
-        worst = max(worst, marg - d)
+    d, lw, nw, lg = GS[i]
+    lim = marg_at(v.co.z, lg) * SAFE
+    if d < lim:
+        v.co = lw + nw * lim
+        pushed += 1
+        worst = max(worst, lim - d)
 cloth.data.update()
 CV = [v.co.copy() for v in cloth.data.vertices]
-print("  [conform] 몸에 너무 붙은 정점 %d개를 표면 밖(벨트 %.0fmm ~ 밑단 %.0fmm)으로 밀어냄"
-      " (최대 이동 %.1fmm)"
-      % (moved, CONFORM_M * 1000, CONFORM_HEM * 1000, worst * 1000))
+G1 = gaps_now()
+print("  [conform] 안전 패스: 아직 붙어 있던 %d개를 밖으로 (최대 %.1fmm)"
+      % (pushed, worst * 1000))
+print("  [conform] 조인 뒤 간격 (목표: 벨트선 %.0fmm ~ 밑단 %.0fmm)"
+      % (CONFORM_M * 1000, CONFORM_HEM * 1000))
+hist("전체", G1)
+hist("벨트", [G1[i] for i in belt])
+hist("어깨끈", [G1[i] for i in strap])
+for k, s in enumerate(isl):
+    if k in (BELT_K, STRAP_K):
+        continue
+    hist("섬%d" % k, [G1[i] for i in s])
+TH1 = belt_thick()
+print("  [conform] 벨트 띠 두께 %.1fmm -> %.1fmm (%.0f%% 보존)"
+      % (TH0 * 1000, TH1 * 1000, TH1 / max(1e-9, TH0) * 100))
+assert min(g[0] for g in G1 if g) > -1e-6, "조인 뒤에도 몸을 뚫은 옷 정점이 남았다"
 
 # ---- 2-2) 웨이트 전이 ----
 # 옷에 뼈가 없다. 몸의 정점 그룹을 옷으로 옮긴다.
@@ -427,13 +617,19 @@ for _ in range(SMOOTH_N):
 # ★가랑이 함정: 앞판이 **두 허벅지를 동시에** 물면 다리를 벌릴 때 양쪽으로 찢어진다.
 #   ★이 보정은 반드시 **스무딩 뒤**에 해야 한다. 앞에서 하면 스무딩이 이웃한테서
 #     허벅지 웨이트를 다시 끌어와 그대로 원복된다.
+# ★c 를 그대로 쓰면 **한쪽 허벅지 위에 있는 정점까지** 골반으로 끌려간다.
+#   스무딩 14회가 반대쪽 허벅지 웨이트를 조금씩 번지게 하기 때문이다(왼 엉덩이
+#   정점도 wr 이 0.1쯤 묻는다 -> c 0.22 -> 다리 추종의 22%를 잃는다).
+#   옷을 몸에 붙인 뒤로는 이 손실이 그대로 관통이 된다(달릴 때 허벅지가 나온다).
+#   c^CROTCH_P 로 눌러서 **진짜 가랑이(c~1)만** 골반으로 보낸다.
 LT, RT = "Bip001 L Thigh", "Bip001 R Thigh"
-merged = 0
+merged, gave = 0, 0.0
 for i, w in enumerate(WT):
     wl, wr = w.get(LT, 0.0), w.get(RT, 0.0)
     if wl + wr < 1e-6:
         continue
     c = 2.0 * min(wl, wr) / (wl + wr)     # 1 = 양다리를 똑같이 뭄 = 가랑이
+    c = c ** CROTCH_P
     if c < 1e-3:
         continue
     give = c * (wl + wr)
@@ -441,7 +637,9 @@ for i, w in enumerate(WT):
     w[RT] = wr * (1 - c)
     w["Bip001 Pelvis"] = w.get("Bip001 Pelvis", 0.0) + give
     merged += 1
-print("  [웨이트] 양다리를 같이 문 정점 %d개의 다리 웨이트를 골반으로 이관" % merged)
+    gave += give
+print("  [웨이트] 양다리를 같이 문 정점 %d개의 다리 웨이트 %.1f(정점당 %.3f)를 골반으로 이관"
+      " (CROTCH_P %.1f)" % (merged, gave, gave / max(1, merged), CROTCH_P))
 
 # ★glTF 는 정점당 뼈 4개까지다. 여기서 안 자르면 익스포터가 조용히 잘라 정규화해
 #   내가 검증한 것과 다른 게 나간다.
