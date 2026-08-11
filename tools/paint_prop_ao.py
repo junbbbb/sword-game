@@ -6,12 +6,17 @@
     python3 tools/paint_prop_ao.py --dry      # 안 쓰고 숫자만
     python3 tools/paint_prop_ao.py --restore  # .bak_v96ao 로 되돌린다
 
-★★2026-08-11 (12-소품원색) — **여섯 종은 이 파일로 칠하지 마라**
-  tree · rock · boulder_xl · crag · bush · cliff_tall_b 는 tools/raw_props.py 가
+★★2026-08-11 (12-소품원색 1차+2차) — **열한 종 전부 이 파일로 칠하지 마라**
+  tree · rock · boulder_xl · crag · bush · cliff_tall_b (1차)
+  cliff_tall · outcrop · bank · slab · thicket (2차) 은 tools/raw_props.py 가
   원본 -> **AO 곱(화면 쪽)** -> ACES 역산 을 한 번에 한다(순서가 여기와 다르다).
-  이 파일로 덧칠하면 가림이 두 번 들어간다. `--restore` 도 그 여섯에는 쓰지 마라 —
+  이 파일로 덧칠하면 가림이 두 번 들어간다. `--restore` 도 쓰지 마라 —
   `.bak_v96ao` 는 **재칠 시절의 가림 전** 텍스처라 원색판이 팔레트판으로 되돌아간다
   (되돌릴 자리는 `.bak_v98_regrade` 이고 손잡이는 `raw_props.py --restore` 다).
+  ★단 outcrop 의 `.bak_v96ao` 는 지우면 안 된다. 원자재가 없어서 raw_props.py 의
+    SRC 가 그 파일을 **출발점으로 읽는다**(지우면 outcrop 은 다시 못 굽는다).
+  ★이 파일 자체는 살아 있다. AO 맵(blender/tex/prop_ao/)을 다시 구우면 세기 표(SPEC)를
+    raw_props.py 가 그대로 가져다 쓴다 — 가림의 정본은 아직 여기다.
 
 왜 필요한가 — 11차 소품 진단(2026-08-11)의 결론
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

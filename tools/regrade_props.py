@@ -312,7 +312,12 @@ def regrade(img, spec):
 
 # ★12-소품원색(2026-08-11)에서 tools/raw_props.py 로 넘어간 종류. 여기서 칠하면
 #   오너가 고른 Meshy 원색이 팔레트로 도로 덮인다. --force 없이는 손대지 않는다.
-MOVED_TO_RAW = {"tree", "rock", "boulder_xl", "crag", "bush", "cliff_tall_b"}
+# ★★2차(같은 날)에서 **남은 다섯 종까지 전부** 넘어갔다. 그래서 이 표는 이제
+#   TARGET 의 열한 종과 같다 = 이 파일은 사실상 **읽기 전용 기록**이다.
+#   위의 TARGET 표는 지우지 않는다 — "그때 무엇을 어떻게 칠했는가"가 남아 있어야
+#   원색판이 무엇을 걷어낸 것인지 다음 사람이 읽을 수 있다(그 근거가 LOG 12차다).
+MOVED_TO_RAW = {"tree", "rock", "boulder_xl", "crag", "bush", "cliff_tall_b",
+                "cliff_tall", "outcrop", "bank", "slab", "thicket"}
 
 
 def main(argv):

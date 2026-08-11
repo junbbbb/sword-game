@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """소품 텍스처 **원색 장착** — Meshy 원본 색을 게임 화면에 그대로 앉힌다.
 
-    python3 tools/raw_props.py                 # 여섯 종 전부
+    python3 tools/raw_props.py                 # 열한 종 전부
     python3 tools/raw_props.py tree rock       # 몇 개만
     python3 tools/raw_props.py --dry           # 안 쓰고 숫자만
     python3 tools/raw_props.py --no-ao         # 가림(AO) 없이 색만
+    python3 tools/raw_props.py --lit1          # 조명배수를 전부 1.0 으로 (lit 실측 1차용)
     python3 tools/raw_props.py --restore       # .bak_v98_regrade 로 되돌린다
 
 왜 필요한가 — 오너 판정 (2026-08-11, 12차 파도 12-소품원색)
@@ -85,6 +86,11 @@ BAK = ".bak_v98_regrade"        # 재칠판(12차 파도 이전 상태)
 
 # 종류 -> (원본 glb, 베이스컬러 이미지 인덱스)
 # ★dl_a/b/c 의 짝은 s30_props_v2.py 의 KINDS 표가 정본이다(메시 통계로 갈랐다).
+# ★2차(12-소품원색2차, 2026-08-11): 남은 다섯 종을 여기로 들였다. 1차가 여섯 종만
+#   옮겨서 **맵에 색 언어가 둘**이 됐기 때문이다(특히 cliff_tall 과 cliff_tall_b 는
+#   props.js 의 VARIANT 가 같은 줄에 섞어 심는 변주 짝인데 색이 갈렸다).
+#   네 종은 incoming 에 원자재가 있고(전부 2048x2048 · 이미지 #0 이 base_color),
+#   outcrop 만 원자재가 없다 — 아래 SEAT 참고.
 SRC = {
     "tree":         ("incoming/meshy_props_v3/dl_c.glb", 0),
     "rock":         ("incoming/meshy_props_v3/dl_b.glb", 0),
@@ -92,6 +98,44 @@ SRC = {
     "crag":         ("incoming/meshy_props_v2/crag_v2.glb", 0),
     "bush":         ("incoming/meshy_props_v2/bush_v2.glb", 0),
     "cliff_tall_b": ("incoming/meshy_props_v2/cliff_var_v2.glb", 0),
+    # ── 2차 ──  (#1 러프니스 · #2 노멀 · #3 이미시브는 안 쓴다)
+    "cliff_tall":   ("incoming/meshy_terrain/cliff_wall_tall.glb", 0),
+    "bank":         ("incoming/meshy_terrain/river_bank_stones.glb", 0),
+    "slab":         ("incoming/meshy_terrain/flagstone_slab.glb", 0),
+    "thicket":      ("incoming/meshy_props/thicket.glb", 0),
+    # ★outcrop 은 Meshy 원자재가 없다(blender/s22_props.py 가 절차적으로 만든 텍스처다).
+    #   그래서 출발점이 **재칠판의 가림 전 텍스처**이고, 아래 SEAT 두 손잡이로
+    #   rock 원색판의 화면 통계에 앉힌다. 팔레트 목표색으로 다시 칠하는 게 아니다.
+    "outcrop":      ("web/props/outcrop.glb.bak_v96ao", 0),
+}
+
+# ★원자재가 없는 종류만 — (채도 곱, 전역 곱[선형]).
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# outcrop 은 남은 다섯 중 유일하게 되돌릴 원본이 없다. 그렇다고 재칠판 그대로 두면
+# rock(화면 L 78) 옆에서 L~104 로 튀고 혼자 푸르다(재칠 목표 0x5b6b77 + 채도 1.50).
+# 그래서 **덩어리째 옮기는 손잡이 둘**만 쓴다. 팔레트 목표색·명암폭·채널 평균
+# 맞추기·자홍 제거는 여전히 전부 꺼져 있다(그게 재칠 부활이다).
+#   채도 곱  : 화소마다 제 휘도 쪽으로 당긴다. **색상(hue)은 안 움직인다.**
+#   전역 곱  : 선형에서 밝기를 곱한다. 명암 구조(붓자국·지층)는 비율이라 그대로 산다.
+# 값은 감이 아니라 실측이다 — rock 원색판의 화면 통계(L 77.9 · S 12.0%)에 앉게
+# 잡았다. 자세한 것은 LOG 12-소품원색2차.
+#
+# ★★여기에 cliff_tall_b 를 적고 싶어지면 먼저 이 문단을 읽어라 (2026-08-11 2차 실측)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 2차의 전제는 "cliff_tall 을 원색으로 옮기면 변주 짝(cliff_tall_b)과 색이 다시
+# 맞는다" 였다. **틀렸다.** 갈린 원인은 재칠이 아니라 **원자재 두 벌이 실제로 다른
+# 것**이었다. 같은 프레임에서 잰 값:
+#     재칠 기둥 + 원색 변주 : 기둥 L112 / 변주 L52  -> 휘도 델타 +60 · 색상 델타 +17.4도
+#     둘 다 원색판          : 기둥 L114 / 변주 L52  -> 휘도 델타 +63 · 색상 델타 -11.3도
+# 휘도 델타는 그대로고 **색상·채도 델타만 줄었다**(채도 델타 -3.2 -> -0.7).
+# 눈으로도 그렇다 — 갈린 인상의 정체는 밝기가 아니라 재칠이 넣은 **푸른 기**였고,
+# 그건 없어졌다(판정지 SHEET_pair.jpg).
+# 굳이 휘도까지 맞추려면 변주에 **전역 x4.26 · 채도 x0.15** 를 걸어야 한다(풀이값).
+# 그건 최소 보정이 아니라 **재칠 부활**이고, 오너가 고른 원색을 지우는 짓이다.
+# 그래서 안 했다. 오너가 "변주가 너무 어둡다" 고 판정하면 그때 이 표에 한 줄 적고
+# `--lit1` 로 한 번 재면 끝난다(bush 를 다루는 방식과 같다).
+SEAT = {
+    "outcrop": (0.24, 0.60),
 }
 
 # 조명배수. 1.0 = 평평한 바닥과 같은 빛(색계약 기본값).
@@ -111,6 +155,19 @@ SRC = {
 #         lit 로 되돌리면 그 장치를 통째로 지우고 볕 든 겉잎이 원본보다 18% 밝아진다.
 #         (재칠 시절에도 bush 는 화면이 목표의 0.75 였고 아무도 안 고쳤다 — 같은 이유다.)
 #         ※ 오너가 "수풀이 어둡다" 고 판정하면 여기 0.70 을 적는 것으로 끝난다.
+#
+# ★2026-08-11 2차 실측(남은 다섯 종. `--lit1` 로 한 벌 굽고 화면에서 재고 이분법).
+#   실측비(화면/원본 텍스처) -> 풀어낸 lit:
+#       cliff_tall x0.99 -> 0.98  **안 고친다**(오차 2% 안. tree·boulder_xl 과 같은 판정).
+#         ★기둥인데 왜 안 뜨나: 이 종은 s30 의 봉투가 **민짜 직육면체**라 위를 보는
+#           면이 안 늘었다. 각진 판으로 갈라진 것은 변주(cliff_tall_b 1.40)쪽이다.
+#           "돌이면 무조건 1.4" 가 아니다 — 종마다 재야 한다.
+#       bank    x1.23 -> 1.42     각진 판 무더기(강둑 자갈)
+#       slab    x1.20 -> 1.34     각진 판 무더기(판석)
+#       outcrop x1.18 -> 1.33     각진 판 무더기
+#       thicket x0.94 -> 0.94     초목인데 **어두운 쪽**이다. bush 와 달리 정점색
+#         그늘 장치가 없으므로(props.js 는 BUSH_KIND 에만 vertexColors 를 켠다)
+#         되돌려도 지우는 연출이 없다. 그래서 이건 고쳤다.
 LIT = {
     "tree":         1.00,
     "rock":         1.48,
@@ -118,6 +175,12 @@ LIT = {
     "crag":         1.32,
     "bush":         1.00,
     "cliff_tall_b": 1.40,
+    # ── 2차 ──
+    "cliff_tall":   1.00,
+    "bank":         1.42,
+    "slab":         1.34,
+    "thicket":      0.94,
+    "outcrop":      1.33,
 }
 
 LUMW = np.array([0.2126, 0.7152, 0.0722], np.float32)
@@ -143,6 +206,20 @@ def describe(a01, tag):
     m = a01.reshape(-1, 3).mean(0)
     return "%s %s S%5.1f%% 휘도%6.1f" % (tag, CC.hexs(m), sat_mean(a01) * 100,
                                         float((a01 @ LUMW).mean()) * 255)
+
+
+def seat(a01, sat_k, gain):
+    """채도 곱 + 전역 곱. **팔레트를 향해 미는 게 아니라 덩어리째 옮기는** 손잡이다.
+
+    채도는 화소마다 제 휘도 쪽으로 당긴다 -> 색상(hue)이 안 움직이고 채도 **분포**의
+    모양도 그대로다(전부 같은 비율로 줄 뿐이다). 밝기는 선형에서 곱하므로 명암
+    구조(붓자국·지층)는 비율로 살아남는다. regrade 의 ③(채널 평균 맞추기)과 다른 점이
+    여기다 — 저건 채널마다 다른 수를 곱해 **색상을 옮긴다**.
+    """
+    y = (a01 @ LUMW)[:, :, None]
+    out = np.clip(y + (a01 - y) * sat_k, 0.0, 1.0)
+    lin = np.clip(CC.srgb_to_lin(out) * gain, 0.0, 1.0)
+    return np.asarray(CC.lin_to_srgb(lin), np.float64)
 
 
 def apply_ao(target01, ao, spec):
@@ -225,6 +302,7 @@ def main(argv):
         return
     dry = "--dry" in argv
     use_ao = "--no-ao" not in argv
+    lit1 = "--lit1" in argv          # 조명배수를 전부 1.0 으로 (lit 실측 1차용)
     names = [a for a in argv if not a.startswith("-")]
     for kind in (names or list(SRC)):
         if kind not in SRC:
@@ -234,10 +312,15 @@ def main(argv):
         dst_path = os.path.join(PROPS, kind + ".glb")
         orig = np.asarray(read_tex(src_path, SRC[kind][1]), np.float64) / 255.0
         cur = np.asarray(read_tex(dst_path), np.float64) / 255.0
-        lit = LIT.get(kind, 1.0)
+        lit = 1.0 if lit1 else LIT.get(kind, 1.0)
         print("\n===== %s  (lit %.2f%s) =====" % (kind, lit, "" if use_ao else " · AO 없음"))
         print("   " + describe(orig, "원본 텍스처 "))
         print("   " + describe(cur, "현 재칠판   "))
+        if kind in SEAT:
+            sk, gn = SEAT[kind]
+            orig = seat(orig, sk, gn)
+            print("   " + describe(orig, "앉힌 뒤    ")
+                  + "   (채도 x%.2f · 전역 x%.2f · 원자재 없음)" % (sk, gn))
 
         target = orig
         if use_ao:

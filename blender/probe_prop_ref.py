@@ -42,6 +42,14 @@ SRC = {
     "crag":         "incoming/meshy_props_v2/crag_v2.glb",
     "bush":         "incoming/meshy_props_v2/bush_v2.glb",
     "cliff_tall_b": "incoming/meshy_props_v2/cliff_var_v2.glb",
+    # ── 2차(12-소품원색2차) ──
+    "cliff_tall":   "incoming/meshy_terrain/cliff_wall_tall.glb",
+    "bank":         "incoming/meshy_terrain/river_bank_stones.glb",
+    "slab":         "incoming/meshy_terrain/flagstone_slab.glb",
+    "thicket":      "incoming/meshy_props/thicket.glb",
+    # ★outcrop 은 Meshy 원자재가 없다(s22 생성물). 이 열은 "원자재" 가 아니라
+    #   **출발점**(재칠판의 가림 전 텍스처)을 보여 주는 칸이 된다 — 판정지에 그렇게 적는다.
+    "outcrop":      "web/props/outcrop.glb.bak_v96ao",
 }
 
 
@@ -94,8 +102,18 @@ def render_one(kind, path):
         if any(c.name == "glTF_not_exported" for c in o.users_collection):
             bpy.data.objects.remove(o, do_unlink=True)
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
-    assert len(meshes) == 1, "%s: 메시가 %d개다" % (kind, len(meshes))
-    ob = meshes[0]
+    assert meshes, "%s: 메시가 없다" % kind
+    # ★2차: 지형 원자재(cliff_wall_tall 등)는 조각이 여럿으로 들어온다. 제일 큰 것만
+    #   쓰면 색 통계가 기울므로 **합친다**(이 그림은 색 인상을 보는 칸이다).
+    ob = max(meshes, key=lambda o: len(o.data.vertices))
+    if len(meshes) > 1:
+        print("  메시 %d개 -> 합친다" % len(meshes))
+        bpy.ops.object.select_all(action="DESELECT")
+        for o in meshes:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.join()
+        ob = bpy.context.view_layer.objects.active
     bpy.ops.object.select_all(action="DESELECT")
     ob.select_set(True)
     bpy.context.view_layer.objects.active = ob
