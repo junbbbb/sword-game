@@ -131,7 +131,9 @@ const IS_DUNGEON = (() => {
 //   정본이 incoming/codex_dungeon2/ 로 갈렸다. 배경도 같이 갈린다:
 //   컨셉의 빈 공간은 **검정이 아니라 깊은 남보라**(실측 #1a1636, 화면의 13.6%)다.
 //   0x0b1420(13차)은 그 자리를 검게 죽여서 벽 위가 구멍으로 보인다.
-const SKY = IS_DUNGEON ? 0x1a1636 : 0x9fc2d8;
+// ★15차. 0x1a1636 -> 0x0b1020. 컨셉의 빈 공간 실측은 #080b0f ~ #06060b 이고
+//   우리 화면은 그보다 한 단 밝게 둔다(벽 위가 완전한 구멍이 되면 안 된다).
+const SKY = IS_DUNGEON ? 0x0b1020 : 0x9fc2d8;
 scene.background = new THREE.Color(SKY);
 // ★안개 거리는 **카메라 거리에 물려 있다.** near 가 카메라-플레이어 거리보다 멀어야
 //   플레이어 자신이 안개를 먹지 않는다. 카메라가 34m 였던 시절 값이 34~66 이었고,
@@ -242,11 +244,27 @@ for (const ev of ['keydown', 'pointerdown', 'touchstart']) {
 //     윗빛만 조금 데운다(R/B 0.89 -> 1.11). 더 데우면 **벽까지 갈색**이 되어
 //     보라 석조가 사라진다(안 B·C 를 계산해 보고 버린 이유가 그것이다:
 //     벽면 E R/B 가 1.68 까지 뜬다).
+// ★★★15차(롤·나혼렙). 오너가 14차 브롤 방향을 기각했다. 던전 조명을 다시 갈았다.
+//       14차  E_top (0.993,0.830,0.895) Y0.87 · E_wall (0.469,0.374,0.540) Y0.41
+//       15차  E_top (1.036,0.911,0.913) Y0.92 · E_wall (0.427,0.396,0.524) Y0.39
+//   ★2차 조정. 아랫빛 0x4d4070->0x6a5a90 · 키 2.35->2.70. **캐릭터가 수직면**
+//     이라 E_wall 이 캐릭터 밝기를 정한다. 1차 값에서는 캐릭터/바닥이 1.45~3.05 로
+//     자리마다 갈려 2.5배 계약을 못 지켰다(맵은 PAL 이 같이 내려 상쇄한다).
+//   ★윗면 조도는 **거의 그대로** 두고 수직면만 25% 어둡게 했다. 이유가 계약이다:
+//     캐릭터 밝기는 윗면 조도가 정하고(실측 4자리 x 4조명 = 캐릭터 휘도 0.19~0.27),
+//     처방전 A표가 **캐릭터/바닥 2.5배 이상**을 요구한다. 조명을 통째로 내리면
+//     캐릭터까지 같이 죽어서 그 계약이 깨진다(14차가 정확히 그 함정에 빠져 1.39배였다).
+//     맵을 어둡게 만드는 일은 조명이 아니라 **팔레트(s40 의 PAL)** 가 한다.
+//   ★반구광 아랫빛을 짙은 보라(0x4d4070)로 두고 세기를 올려, 수직면(벽)만
+//     찬 보랏빛 어둠에 잠기게 한다. 컨셉 실측이 그렇다 — 최암 15% #080b0f(H216) ·
+//     최명 3% #90713c(H38). 어두우면 차고 밝으면 뜨겁다.
+//   ★이 숫자를 건드리면 tools/color_contract.py 의 IRR_DUNGEON(_WALL) 과
+//     blender/s40_dungeon1.py 의 PAL 이 같이 거짓이 된다. 셋은 한 짝이다.
 scene.add(IS_DUNGEON
-  ? new THREE.HemisphereLight(0xd6cdf2, 0x8a68b8, 2.05)
+  ? new THREE.HemisphereLight(0x9aaee0, 0x6a5a90, 1.95)
   : new THREE.HemisphereLight(0xcfe4f2, 0x5b5140, 1.55));
 const key = IS_DUNGEON
-  ? new THREE.DirectionalLight(0xffe4b4, 1.62)            // 횃불 쪽에서 오는 따뜻한 키
+  ? new THREE.DirectionalLight(0xffe3b4, 2.70)            // 횃불 쪽에서 오는 따뜻한 키
   : new THREE.DirectionalLight(0xfff0d4, 2.35);           // 따뜻한 해
 key.position.set(...(IS_DUNGEON ? [2.5, 12, 3.5] : [5, 9, 4]));
 key.castShadow = true;
@@ -272,7 +290,7 @@ scene.add(key.target);       // 캐릭터를 따라가게(범위가 좁아야 �
 // 반대쪽 하늘빛. 그림자 쪽 실루엣이 배경에 녹지 않게 잡아 주는 역할이라 남긴다.
 // 밤에는 진한 파랑(0x66aaff)이었는데 아침에는 옅게 깔아야 색이 안 튄다.
 const rim = IS_DUNGEON
-  ? new THREE.DirectionalLight(0x7a63c8, 0.55)            // 보라 반사광
+  ? new THREE.DirectionalLight(0x6f5cc4, 0.55)            // 보라 반사광
   : new THREE.DirectionalLight(0x9dc8ee, 0.55);
 rim.position.set(-6, 4, -5);
 scene.add(rim);

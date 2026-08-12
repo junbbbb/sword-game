@@ -379,12 +379,23 @@ export async function loadLevel(scene, search) {
     new GLTFLoader().load(glbUrl('./' + base + '.glb', q), ok, undefined, bad);
   });
   ROOT = glb.scene;
+  // ★★15차 던전. **벽과 띠는 그림자를 안 던진다.**
+  //   던전에는 해가 없다. 그런데 씬에는 캐릭터 접지 그림자를 위해 방향광이 하나
+  //   서 있고(main.js key), 그게 3.6~7.5m 벽을 바닥에 **대각선 슬래브**로 눕혀서
+  //   화면 절반을 덮었다(15차 판정 컷 corridor: 캐릭터가 그 그림자에 들어가 안 보였다).
+  //   컨셉(incoming/codex_dungeon3)에는 그런 그림자가 한 장도 없다 — 빛은 횃불뿐이다.
+  //   ★그래도 **받기는 한다**(receiveShadow). 캐릭터·요괴 그림자는 그대로 바닥에
+  //     떨어진다(v90 이후 이 게임 손맛의 일부다). 기둥·잔해(COL_CUT/COL_RUBBLE)도
+  //     계속 던진다 — 짧아서 접지로 읽히고, 그게 없으면 기둥이 뜬다.
+  const noCast = (n) => n.startsWith('FLOOR') || n.startsWith('COL_WALL')
+    || n.startsWith('DECO_TRIM');
+  const dungeon = (mapName() === 'level2');
   ROOT.traverse(o => {
     if (!o.isMesh) return;
     // 바닥은 그림자를 받기만 한다. 던지게 두면 자기 자신에게 얼룩이 생긴다.
     const isFloor = o.name.startsWith('FLOOR');
     o.receiveShadow = true;
-    o.castShadow = !isFloor;
+    o.castShadow = dungeon ? !noCast(o.name) : !isFloor;
   });
   // 바닥에만 결을 얹는다. 실패해도 맵은 그대로 뜬다.
   // ★13차. 던전(level2)은 `floorLook: false` 다. 아래 결·타일·스플랫은 전부 **초원용**
