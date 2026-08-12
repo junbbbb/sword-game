@@ -1093,6 +1093,362 @@ body.uiCleared #uiClearDim{opacity:1}
   #uiDeath .glyph{font-size:clamp(60px,10vh,82px)}
 }
 
+/* ══ 14차: 아래 스킬창을 롤·메이플 문법으로 ═══════════════════════════════════
+   오너 지시 「가장 하단에 그 스킬창 그 부분 롤이나 메이플처럼 좀 수정해줘.
+   전체 UI 도 좀 더 메이플 느낌으로 다시 손봐주고.」
+   레퍼런스 정본 = renders/history/v99_wave13/uimaple2/ref/ (실게임 스크린샷 · 출처는
+   같은 폴더 SOURCES.txt). 두 실물에서 뽑아 온 문법은 셋뿐이다.
+
+     (가) 슬롯은 **정사각**이다. 롤도 메이플 퀵슬롯도 가로로 누운 알약이 아니다.
+          한 칸이 한 기술이고, 칸의 크기가 곧 「누를 것」이라는 신호다.
+     (나) **바 - 슬롯 - 이름** 이 한 몸으로 붙어 있다. 롤은 체력·자원 바가 슬롯 열
+          바로 위에 같은 폭으로 얹혀 있어서 눈이 한 덩어리로 읽는다. 우리는 세 층이
+          제각각 폭이 달라 「따로 뜬 칩 세 개」로 읽혔다.
+     (다) 쿨다운은 **덮개 + 숫자**다. 롤은 어두운 시계 쓸기 위에 남은 초를 크게 쓴다.
+          우리는 쓸기만 있었고 숫자가 없어서 「얼마나 더」가 화면에 없었다.
+
+   ★현행(13차)과의 차이 — 이 벌이 고치는 다섯 가지
+     1. 70x50/96x68 라운드 알약  ->  정사각 슬롯(66/56/46). 모서리 반경도 절반으로
+     2. 뜻 없는 활 장식          ->  기술을 말하는 획(세로 호 · 가로 호 · 속도선)
+     3. 쿨다운 = 갈색 쓸기만     ->  쓸기 + 남은 초 숫자(1초 위는 정수, 밑은 소수 한 자리)
+     4. 체력 · 슬롯 · 칼 세 줄   ->  체력 바(숫자를 바 안으로) + [슬롯 열 · 칼] 두 줄
+     5. 슬롯 셋에서 끝          ->  잠긴 칸 둘을 뒤에 세워 「더 붙는다」를 말한다
+
+   ★안 건드린 것: 정보 · 문구 · 키 배정 · 발화 타이밍 · 수명 · safeBox · 연출 물림 ·
+     레벨 뱃지 · 머리 위 바 추적. 이 블록은 표면과 배치뿐이다.
+   ★이 블록은 13차 미디어 분기보다 **뒤**에 있어야 한다(같은 특이도라 뒤가 이긴다).
+     그리고 맨 끝 「연출이 화면을 소유한다」 블록보다는 **앞**이어야 한다. */
+
+/* ── 계기판 = 메이플 창 크롬 (이중 테 · 모서리 리벳 · 미세 결) ────────────────
+   ★리벳과 안쪽 테를 **가상요소 하나**로 만든다. 네 귀퉁이를 각각 요소로 두면 DOM 이
+     넷 늘고, box-shadow 로 복제하면 판 폭이 바뀔 때 오른쪽 두 개가 어긋난다.
+     radial-gradient 를 네 장 깔면 calc(100% - n) 으로 오른쪽이 따라온다.
+   ★결(grain)은 3px 주기 가로줄 3% 다. 이보다 진하면 종이가 아니라 줄무늬가 된다. */
+#uiDock{position:fixed;gap:10px;padding:13px 18px 15px;
+  background:
+    repeating-linear-gradient(0deg,rgba(122,86,45,.030) 0 1px,rgba(255,255,255,0) 1px 3px),
+    linear-gradient(180deg,var(--rb-panel-a),var(--rb-panel-b) 66%,var(--rb-panel-c));
+  box-shadow:inset 0 0 0 2px #fff8e8,inset 0 0 0 4px #d3a662,
+             0 4px 0 #3b2514,0 12px 22px rgba(59,37,20,.24)}
+#uiDock::before{content:'';position:absolute;inset:7px;border-radius:14px;pointer-events:none;
+  border:1px solid rgba(154,118,70,.34);
+  background:
+    radial-gradient(circle 2.6px at 7px 7px,#c08a45 0 100%,rgba(0,0,0,0) 0),
+    radial-gradient(circle 2.6px at calc(100% - 7px) 7px,#c08a45 0 100%,rgba(0,0,0,0) 0),
+    radial-gradient(circle 2.6px at 7px calc(100% - 7px),#c08a45 0 100%,rgba(0,0,0,0) 0),
+    radial-gradient(circle 2.6px at calc(100% - 7px) calc(100% - 7px),#c08a45 0 100%,rgba(0,0,0,0) 0)}
+/* 세 줄이 **같은 폭**으로 선다. 이 한 줄이 「한 몸」의 전부다(레퍼런스 (나)) */
+#uiDock .dkRow{align-self:stretch}
+
+/* ── 1층: 체력 게이지 ────────────────────────────────────────────────────────
+   ★숫자를 트랙 **안 가운데**로 넣는다. 메이플도 롤도 수치를 바 위에 얹는다.
+     13차는 눈금 실선이 숫자를 가로질러 갈라 읽혀서 오른쪽에 세웠던 것인데,
+     그 진범은 자리가 아니라 **눈금의 진하기**였다. 눈금을 절반으로 내리고
+     숫자에 크림 그림자를 깔면 겹쳐도 안 갈라진다(실측은 판정지에).
+   ★자리 옮기기는 JS 가 한다(#eBar 안으로 넣는다). 여기서는 얼굴만 잡는다. */
+#uiDock .dkGauge{align-items:center;gap:10px}
+#eHud{flex:1 1 auto;gap:10px;min-width:0}
+#eBar{flex:1 1 auto;width:auto;min-width:96px;height:22px;
+  border:3px solid var(--rb-line);border-radius:999px;background:#3a2415;
+  box-shadow:inset 0 2px 4px rgba(32,17,7,.44)}
+#eBar::after{
+  background:linear-gradient(90deg,rgba(0,0,0,0) 0 calc(25% - 1px),rgba(75,50,29,.34) calc(25% - 1px) 25%,rgba(0,0,0,0) 25%),
+             linear-gradient(90deg,rgba(0,0,0,0) 0 calc(50% - 1px),rgba(75,50,29,.34) calc(50% - 1px) 50%,rgba(0,0,0,0) 50%),
+             linear-gradient(90deg,rgba(0,0,0,0) 0 calc(75% - 1px),rgba(75,50,29,.34) calc(75% - 1px) 75%,rgba(0,0,0,0) 75%)}
+/* 트랙 안 숫자. ★z-index 3 - 채움(#eFill)과 눈금(::after) 둘 다보다 위여야 한다 */
+#uiHpNum{position:absolute;left:0;right:0;top:0;bottom:0;z-index:3;min-width:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;letter-spacing:.01em;color:#2e1c0d;
+  text-shadow:0 1px 0 rgba(255,250,236,.72),0 0 3px rgba(255,250,236,.6)}
+#uiHpNum s,#uiHpNum u{color:#5c3f27;font-size:11.5px}
+#uiHpNum.low{color:#7d1a10}
+#uiDock .hrt{font-size:22px;margin-right:0}
+#eTxt{padding-left:12px;flex:0 0 auto}
+
+/* ── 2층: 슬롯 열 ───────────────────────────────────────────────────────────
+   ★자리 순서는 **CSS order** 가 정한다. 회피 슬롯은 main.js 가 나중에 붙이기 때문에
+     DOM 순서로는 잠긴 칸 뒤에 선다. order 로 잡아 두면 누가 언제 붙어도 열이 안 흐트러진다.
+     (main.js 의 mountDashChip 이 이 파일과 구조를 나눠 쓰는 유일한 자리다) */
+#uiDock .dkSlots{align-items:flex-start;justify-content:center;gap:14px}
+#uiSkills{gap:8px;align-items:flex-start}
+#uiSkills .sk[data-k="Heavy"]{order:1}
+#uiSkills .sk[data-k="Wide"]{order:2}
+#uiSkills .sk[data-k="Dash"]{order:3}
+#uiSkills .skLock{order:4}
+/* 슬롯 한 칸. 정사각 + 이중 테(크림 안쪽 선 + 월넛 바깥 테) */
+#uiSkills .sk,#uiSkills .skLock{
+  position:relative;width:66px;height:66px;border-radius:11px;padding:0;
+  border:3px solid #8d6236;background:linear-gradient(180deg,#fffdf7,#f0dcb9);
+  box-shadow:inset 0 0 0 2px #fff8e8,inset 0 0 0 3px #dcb476;
+  overflow:visible;display:block;
+  transition:background .16s ease,border-color .16s ease,box-shadow .16s ease}
+/* 기술 획. 슬롯 위쪽 2/3 에 앉는다 - 아래는 이름 자리다.
+   ★13차의 「활 장식」을 여기서 걷는다(border-bottom·radius·filter 를 전부 되돌린다).
+     세 기술이 같은 붓에서 나온 획으로 읽혀야 해서 호(弧) 한 벌로 통일했다. */
+/* ★★획은 기술마다 **따로** 만든다. 하나의 원을 돌려 쓰려다 한 판을 날렸다 -
+     원에 큰 회전을 걸면 색칠된 호가 상자 밖으로 나가고(슬롯은 overflow:visible 이라
+     키캡 때문에 못 막는다) 옆 슬롯 자리에 초록 획이 떠 있었다(실측 컷에 남겼다).
+     회전을 20도 밑으로 묶고, 형태는 border-radius 로 만든다. */
+#uiSkills .sk::after{content:'';position:absolute;left:50%;z-index:1;
+  border:0;border-radius:0;background:none;
+  filter:drop-shadow(0 1.5px 0 rgba(90,61,36,.30));
+  transition:opacity .16s ease}
+/* 수면참 = 세로로 크게 한 번. 오른쪽으로 부푼 긴 호 */
+#uiSkills .sk[data-k="Heavy"]::after{
+  top:8px;width:20px;height:24px;margin-left:-11px;
+  border-right:6px solid var(--sk-accent);
+  border-radius:0 100% 100% 0/0 50% 50% 0;
+  transform:rotate(-15deg)}
+/* 횡일섬 = 가로로 넓게. 납작한 사발(13차가 쓰던 그 형태를 이 자리로 옮겼다) */
+#uiSkills .sk[data-k="Wide"]::after{
+  top:10px;width:34px;height:16px;margin-left:-17px;
+  border-bottom:6px solid var(--sk-accent);
+  border-radius:0 0 100% 100%/0 0 100% 100%;
+  transform:rotate(-4deg)}
+/* 회피 = 획이 아니라 **속도선** 셋. 베는 기술이 아니라는 것을 형태가 먼저 말한다 */
+#uiSkills .sk[data-k="Dash"]::after{
+  top:20px;width:30px;height:0;margin-left:-15px;border-radius:2px;
+  border-top:5px solid var(--sk-accent);
+  box-shadow:0 8px 0 0 var(--sk-accent),0 -8px 0 0 var(--sk-accent);
+  transform:skewX(-20deg) scaleX(.84)}
+/* 이름. 슬롯 아래쪽, 키캡 위.
+   ★★line-height 를 못박는다. normal 로 두면 글자 상자 높이가 서체마다 달라져서
+     「획과 안 겹친다」를 분기마다 계산할 수가 없다(13차 QA 가 5px 물림으로 두 번 걸렸다).
+     지금 규칙: 획의 아래끝 < 이름의 위끝. 세 분기 다 이 부등식으로 값을 잡았다. */
+#uiSkills .sk .nm{position:absolute;left:2px;right:2px;bottom:11px;z-index:2;margin:0;
+  text-align:center;font-size:12.5px;line-height:1.15;font-weight:800;letter-spacing:-.01em;
+  color:var(--rb-txt);text-shadow:0 1px 0 #fff8e8}
+/* 키캡. 아래 변에 걸친다.
+   ★★slot 안으로 들어오는 깊이가 곧 이름을 밀어내는 힘이다. 13차는 -12px(안쪽 12px)라
+     이름과 3~5px 겹쳤다(커밋본 실측 -3/-4/-5). 레퍼런스의 롤 키캡도 슬롯 **밖**에
+     거의 다 나가 있다 - 안으로 7px 만 물린다. */
+#uiSkills .sk .key{bottom:-15px;z-index:5;min-width:30px;height:22px;line-height:16px;
+  padding:1px 7px;border:2px solid var(--rb-line);border-radius:6px;background:#fffaf0;
+  box-shadow:0 2px 0 #bd8743,0 0 0 2px #f7e8cc;color:var(--rb-txt);
+  font-size:11.5px;font-weight:800;text-shadow:none}
+/* 준비 */
+#uiSkills .sk.rdy{border-color:#8d6236;background:linear-gradient(180deg,#fffdf7,#f0dcb9);
+  box-shadow:inset 0 0 0 2px #fff8e8,inset 0 0 0 3px #dcb476,
+             0 3px 0 #5a3d24,0 7px 12px rgba(59,37,20,.16)}
+/* 불가(쿨 · 휘두르는 중). 면을 내리고 획·이름을 같이 물린다 */
+#uiSkills .sk.off{border-color:#9c8261;background:linear-gradient(180deg,#e6d9c2,#d3bd99);
+  box-shadow:inset 0 0 0 2px #f2e6cf,inset 0 0 0 3px #c0a67f}
+#uiSkills .sk.off .nm{color:#8a7057;text-shadow:none}
+#uiSkills .sk.off::after{opacity:.34}
+#uiSkills .sk.off .key{color:#9c8061;border-color:#9a7b5a;background:#e8dac3;
+  box-shadow:0 2px 0 #b09371,0 0 0 2px #ece0c9}
+/* 쿨다운 덮개. JS 가 conic-gradient 를 20Hz 로 다시 쓴다(페인트만 도는 일이다).
+   ★모서리 반경은 슬롯 안쪽(테 3px)과 같아야 덮개가 테를 안 넘는다 - 11 - 3 = 8 */
+#uiSkills .sk .cd{position:absolute;inset:0;border-radius:8px;z-index:4;
+  opacity:0;pointer-events:none;transition:opacity .1s ease}
+#uiSkills .sk.off .cd{opacity:1}
+/* 남은 초. 롤 문법 - 덮개 한가운데 큰 숫자 하나 */
+#uiSkills .sk .cds{position:absolute;left:0;right:0;top:50%;z-index:6;
+  margin-top:-13px;height:26px;line-height:26px;text-align:center;pointer-events:none;
+  font-family:var(--rb-font);font-size:21px;font-weight:800;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;color:#fffaf0;
+  text-shadow:0 0 3px rgba(48,28,10,.9),0 2px 0 #5a3d24}
+#uiSkills .sk .cds:empty{display:none}
+/* 회피 슬롯의 조건. 「이동+」는 키가 아니라 조건이라 키캡 밖에 둔다(판정 S8 규칙).
+   ★13차는 이 글자를 슬롯 한가운데 위에 놓아 획과 겹쳤다. 왼쪽 위 귀퉁이 리본으로 내린다. */
+#uiSkills .sk[data-k="Dash"]::before{content:'이동+';
+  position:absolute;left:0;right:auto;top:0;z-index:3;
+  padding:0 5px 1px;border-radius:8px 0 8px 0;
+  background:#8d6236;color:#fff6e2;
+  font-size:8.5px;font-weight:800;letter-spacing:-.02em;line-height:1.2;
+  text-align:left;transition:background .16s ease}
+#uiSkills .sk.off[data-k="Dash"]::before{background:#a8916f;color:#f3e8d5}
+#uiSkills .sk[data-k="Dash"] .nm{margin-top:0}
+/* 잠긴 칸. 「여기 더 붙는다」만 말하고 그 이상은 안 말한다(문구도 안 붙인다) */
+#uiSkills .skLock{border-color:#a9977a;background:linear-gradient(180deg,#eee3cf,#ddccae);
+  box-shadow:inset 0 0 0 2px #f7eeda,inset 0 0 0 3px #cbb692}
+#uiSkills .skLock .lk{position:absolute;left:50%;top:50%;width:16px;height:13px;
+  margin:-1px 0 0 -8px;border-radius:3px;background:#b6a081;
+  box-shadow:inset 0 0 0 1px #907a5c}
+#uiSkills .skLock .lk::before{content:'';position:absolute;left:50%;bottom:100%;
+  width:12px;height:9px;margin-left:-6px;
+  border:2.5px solid #b6a081;border-bottom:0;border-radius:7px 7px 0 0}
+
+/* 칼 알약. 슬롯 열 오른쪽에 붙는다(롤이 스킬 옆에 장비를 두는 자리).
+   ★세 번째 줄을 없앤 자리다. 계기판 높이가 188 -> 150 대로 내려간다. */
+#uiDock .dkSword{align-self:center;gap:7px;padding:6px 14px 7px;border-radius:999px;
+  border:2px solid var(--rb-line);background:linear-gradient(180deg,#fffdf6,#efd7ad);
+  box-shadow:0 2px 0 #c08a45}
+#uiDock .dkSword .lb{font-size:9.5px;letter-spacing:.08em}
+#sword{font-size:13px}
+/* 은신 라벨은 계기판 윗선 위에 선다. ★계기판이 세 줄에서 두 줄 반으로 낮아졌다
+   (161 / 144 / 126px 실측). 13차 값(212/196/170)을 그대로 두면 라벨만 허공에 뜬다.
+   여유는 13차가 정한 그대로 10px 이다 - 계기판 아래여백 + 높이 + 10. */
+#stHud{bottom:185px}
+
+/* ── 3층: 성장 띠 ───────────────────────────────────────────────────────────
+   메이플 화면 맨 아래의 EXP 바와 같은 자리·같은 뜻이다. 처치 5 마다 머리 위 뱃지가
+   한 단 오르는데, 그 사이가 화면 어디에도 없어서 뱃지가 갑자기 바뀌는 것처럼 보였다.
+   ★글자는 안 붙인다. 새 정보가 아니라 **이미 있던 레벨의 진행도**를 그린 것뿐이다. */
+#uiDock .dkExp{position:relative;display:block;height:6px;margin-top:13px;
+  border-radius:999px;border:2px solid var(--rb-line);background:#6d4d32;
+  box-shadow:inset 0 1px 2px rgba(32,17,7,.42);overflow:hidden}
+#uiDock .dkExp i{position:absolute;left:0;top:0;bottom:0;right:0;display:block;
+  transform:scaleX(0);transform-origin:0 50%;border-radius:999px;
+  background:linear-gradient(180deg,#ffe08a,#f4b62d 60%,#dd9018);
+  transition:transform .3s cubic-bezier(.22,.8,.3,1)}
+
+/* ══ 창 = 메이플 창 크롬 (네이비 타이틀 띠 + 놋쇠 실선 + 아이보리 몸통) ═════════
+   레퍼런스 maple_04 · maple_05 · maple_06 (클래식 인벤토리·스탯 창)의 지배 문법이다.
+     · 창 머리는 **띠**다. 몸통보다 어둡고, 그 안에 창 이름이 작게 한 줄 눕는다
+     · 띠와 몸통 사이에 **놋쇠 실선** 한 겹
+     · 몸통은 아이보리, 바깥 테는 굵고 어둡다
+   13차는 머리 낱말(「알림」·「경고」)이 아이보리 위에 뜬 작은 금색 글자였다.
+   창인지 카드인지가 안 갈렸다 - 띠 하나가 그것을 가른다.
+
+   ★띠를 **요소가 아니라 배경 한 겹**으로 그린다. 요소로 두면 카드마다 padding 이
+     달라(25/20/24/0) 좌우 여백을 일일이 상쇄해야 하고, #bClear 는 남의 DOM 이라
+     가상요소가 이미 둘 다 차 있다(뱃지 · 라벨). 배경은 border-radius 가 알아서 물어
+     위쪽 두 모서리도 저절로 둥글게 잘린다.
+   ★그래서 각 창의 padding-top 을 띠 높이(36px)만큼 밀어 준다. 좁은 분기에서
+     padding 을 다시 잡는 자리마다 이 값을 **같이** 고쳐야 한다(아래 미디어 분기).
+   ★유치해지지 않게: 띠는 한 겹, 글자는 12px 자간 .16em, 광택·발광 없음. */
+#uiTitle .win,#uiBanner .win,#uiDeath .win,#bClear{
+  background:
+    linear-gradient(180deg,#4a4571 0%,#332e52 100%) no-repeat left top / 100% 36px,
+    repeating-linear-gradient(0deg,rgba(122,86,45,.030) 0 1px,rgba(255,255,255,0) 1px 3px),
+    linear-gradient(180deg,var(--rb-panel-a) 0%,var(--rb-panel-b) 68%,var(--rb-panel-c) 100%)}
+/* 붉은 변주(보스 경고 · 사망). 몸통은 그대로 두고 **띠만** 붉힌다 - 13차 규칙 그대로 */
+#uiBanner .win,#uiDeath .win{
+  background:
+    linear-gradient(180deg,#8f3327 0%,#66211a 100%) no-repeat left top / 100% 36px,
+    repeating-linear-gradient(0deg,rgba(122,86,45,.030) 0 1px,rgba(255,255,255,0) 1px 3px),
+    linear-gradient(180deg,#fff8e8,#f5dfc0 70%,#efcba8)}
+/* 놋쇠 실선. 13차의 .fr(금색 헤어라인)이 있던 자리를 그대로 물려받아 띠 밑으로 내려간다 */
+#uiTitle .fr,#uiBanner .fr,#uiDeath .fr{
+  left:0;right:0;top:33px;width:auto;height:3px;margin:0;border:0;border-radius:0;
+  background:linear-gradient(90deg,rgba(201,149,78,0),#e8bf6d 18%,#f7dda2 50%,#e8bf6d 82%,rgba(201,149,78,0))}
+#uiBanner .fr,#uiDeath .fr{
+  background:linear-gradient(90deg,rgba(201,149,78,0),#f0a46a 18%,#ffd7a8 50%,#f0a46a 82%,rgba(201,149,78,0))}
+/* 창 이름. 띠 안에 눕는다(자리를 absolute 로 못박아야 카드마다 다른 padding 을 안 탄다) */
+#uiTitle .hd b,#uiBanner .hd b,#uiDeath .hd b,#bClear::after{
+  position:absolute;left:0;right:0;top:0;z-index:2;
+  height:33px;line-height:34px;text-align:center;
+  font-size:12px;font-weight:800;letter-spacing:.16em;padding-left:.16em;
+  color:#efe6ff;text-shadow:0 1px 0 rgba(18,14,34,.6)}
+#uiBanner .hd b,#uiDeath .hd b{color:#ffe6dc}
+/* ★원 뱃지는 **13차 자리 그대로** 둔다(왼쪽 변에 걸린 채 몸통 높이 가운데).
+   띠 위로 올려 봤더니 60px 원이 36px 띠보다 커서 위로 15px 삐져나왔다 - 창이 아니라
+   「스티커 붙은 카드」가 된다. 지금 자리에서는 띠와 안 만난다(경고창만 왼쪽 끝에서
+   10px 스치는데 그 자리에는 글자가 없다). */
+/* 몸통을 띠 밑으로 민다 */
+#uiTitle .win{padding:52px 42px 26px}
+#uiBanner .win{padding:48px 52px 22px}
+#uiDeath .win{padding:50px 42px 26px}
+#uiTitle .bd,#uiBanner .bd,#uiDeath .bd{padding-top:0}
+
+/* 결과창(층 돌파). ★DOM 은 boss.js 것이라 못 만진다 - ::before 는 뱃지, ::after 는
+   창 이름으로 이미 둘 다 차 있다. 그래서 띠는 위 배경 한 겹이 대신하고, 여기서는
+   두 가상요소의 자리만 띠에 맞춰 옮긴다. */
+#bClear::before{left:-30px;top:50%;margin:-33px 0 0 0}
+#bClear::after{top:0;color:#efe6ff;text-shadow:0 1px 0 rgba(18,14,34,.6)}
+#bClear h1{padding-top:52px}
+
+/* 기술 이름 팝. 같은 창 문법의 **작은 판**이다(띠 26px). 크기는 안 키운다 - 오너 기조.
+   ★transform 은 main.js 가 인라인으로 쓴다. 여기서 절대 잡지 말 것(13차 주석 그대로). */
+#combo .uiCall{padding:34px 22px 12px;
+  background:
+    linear-gradient(180deg,#4a4571 0%,#332e52 100%) no-repeat left top / 100% 26px,
+    repeating-linear-gradient(0deg,rgba(122,86,45,.030) 0 1px,rgba(255,255,255,0) 1px 3px),
+    linear-gradient(180deg,#fffaf0,#efd7ae)}
+#combo .uiCall .hd{position:absolute;left:0;right:0;top:0;height:24px;line-height:25px;
+  text-align:center;font-size:10px;letter-spacing:.16em;padding-left:.16em;
+  color:#efe6ff;text-shadow:0 1px 0 rgba(18,14,34,.6);-webkit-text-stroke:0}
+#combo .uiCall .nm{margin-top:0}
+
+/* 조작 안내 판에도 같은 창 크롬을 한 겹(띠는 안 붙인다 - 이 판에는 이름이 없다).
+   안쪽 실선과 네 귀퉁이 리벳만 둬서 계기판과 한 벌로 읽히게 한다. */
+#help::before{content:'';position:absolute;inset:6px;border-radius:13px;pointer-events:none;
+  border:1px solid rgba(154,118,70,.30);
+  background:
+    radial-gradient(circle 2.2px at 6px 6px,#c08a45 0 100%,rgba(0,0,0,0) 0),
+    radial-gradient(circle 2.2px at calc(100% - 6px) 6px,#c08a45 0 100%,rgba(0,0,0,0) 0),
+    radial-gradient(circle 2.2px at 6px calc(100% - 6px),#c08a45 0 100%,rgba(0,0,0,0) 0),
+    radial-gradient(circle 2.2px at calc(100% - 6px) calc(100% - 6px),#c08a45 0 100%,rgba(0,0,0,0) 0)}
+#help{position:fixed;box-shadow:inset 0 0 0 2px #fff8e8,inset 0 0 0 3px #dcb476,
+  0 3px 0 rgba(59,37,20,.55),0 8px 16px rgba(59,37,20,.22);
+  background:
+    repeating-linear-gradient(0deg,rgba(122,86,45,.030) 0 1px,rgba(255,255,255,0) 1px 3px),
+    linear-gradient(180deg,rgba(255,250,240,.98),rgba(246,236,216,.98))}
+
+/* ── 좁은 창 ────────────────────────────────────────────────────────────────
+   ★13차와 같은 두 분기를 그대로 쓴다(새 벽을 만들지 않는다). 깎는 순서도 같다 -
+     여백 -> 슬롯 크기 -> 글자. 슬롯이 줄면 획·이름·키캡·초 숫자를 **같이** 줄인다
+     (13차 QA 가 밟은 함정: 칩만 줄이고 장식은 안 줄여서 획이 이름을 5px 물었다). */
+@media (max-width:1000px){
+  #uiDock{padding:11px 15px 13px;gap:9px}
+  #eBar{height:20px;min-width:88px}
+  #uiHpNum{font-size:12.5px}
+  #uiSkills{gap:7px}
+  #uiDock .dkSlots{gap:11px}
+  #uiSkills .sk,#uiSkills .skLock{width:56px;height:56px;border-radius:10px}
+  #uiSkills .sk[data-k="Heavy"]::after{top:5px;width:17px;height:22px;margin-left:-9.5px;border-right-width:5px}
+  #uiSkills .sk[data-k="Wide"]::after{top:9px;width:29px;height:13px;margin-left:-14.5px;border-bottom-width:5px}
+  /* ★1000px 밑에서는 속도선을 **둘**로 줄인다. 슬롯 안쪽이 50px 인데 셋을 그리면
+     맨 윗줄이 「이동+」 리본을 0.2px 물었다(실측). 리본을 더 줄이면 글자가 안 읽히고,
+     이름을 더 내리면 키캡을 문다 - 줄 하나를 빼는 것이 가장 싸다. */
+  #uiSkills .sk[data-k="Dash"]::after{top:15px;width:26px;height:0;margin-left:-13px;
+    border-top-width:4px;box-shadow:0 8px 0 0 var(--sk-accent)}
+  #uiSkills .sk[data-k="Dash"]::before{font-size:8px;padding:0 4px 1px}
+  #uiSkills .sk .nm{font-size:11.5px;bottom:8px}
+  #uiSkills .sk .key{bottom:-15px;min-width:27px;height:20px;line-height:14px;font-size:11px}
+  #uiSkills .sk .cd{border-radius:7px}
+  #uiSkills .sk .cds{font-size:18px;margin-top:-11px;height:22px;line-height:22px}
+  #uiSkills .skLock .lk{width:14px;height:11px;margin-left:-7px}
+  #uiDock .dkExp{margin-top:12px}
+  #sword{font-size:12.5px}
+  #stHud{bottom:168px}          /* 14 + 144 + 10 */
+}
+@media (max-width:860px){
+  #uiDock{padding:9px 12px 11px;gap:8px}
+  #eBar{height:18px;min-width:74px}
+  #uiHpNum{font-size:11.5px}
+  #uiHpNum s,#uiHpNum u{font-size:10.5px}
+  #uiDock .hrt{font-size:18px}
+  #eTxt{padding-left:9px}
+  #uiSkills{gap:6px}
+  #uiDock .dkSlots{gap:9px}
+  #uiSkills .sk,#uiSkills .skLock{width:50px;height:50px;border-radius:9px}
+  #uiSkills .sk[data-k="Heavy"]::after{top:5px;width:15px;height:20px;margin-left:-8.5px;border-right-width:4px}
+  #uiSkills .sk[data-k="Wide"]::after{top:9px;width:26px;height:12px;margin-left:-13px;border-bottom-width:4px}
+  #uiSkills .sk[data-k="Dash"]::after{top:14px;width:21px;height:0;margin-left:-10.5px;
+    border-top-width:3.5px;box-shadow:0 6px 0 0 var(--sk-accent)}
+  #uiSkills .sk .nm{font-size:10px;bottom:6px}
+  #uiSkills .sk .key{bottom:-14px;min-width:23px;height:18px;line-height:13px;padding:1px 5px;font-size:10px}
+  #uiSkills .sk .cd{border-radius:6px}
+  #uiSkills .sk .cds{font-size:15px;margin-top:-9px;height:18px;line-height:18px}
+  #uiSkills .sk[data-k="Dash"]::before{font-size:8px;padding:0 4px 1px}
+  #uiSkills .skLock .lk{width:12px;height:9px;margin:-1px 0 0 -6px}
+  #uiSkills .skLock .lk::before{width:10px;height:7px;margin-left:-5px;border-width:2px}
+  #uiDock .dkSword{padding:5px 11px 6px;gap:6px}
+  #uiDock .dkExp{margin-top:11px;height:5px}
+  #sword{font-size:11.5px}
+  #stHud{bottom:146px}          /* 10 + 126 + 10 */
+  /* ★13차가 이 분기에서 창 여백을 다시 잡는다. 띠 높이(36px)를 여기서도 더해 준다 -
+     안 더하면 좁은 창에서만 큰 글자가 띠 밑으로 파고든다. */
+  #uiTitle .win{padding:48px 30px 22px}
+  #uiBanner .win{padding:46px 36px 20px}
+}
+/* 세로가 짧은 창. ★1000x560 에서 안내판 아래끝이 계기판 윗선을 **50px** 파고들고 있었다
+   (커밋본 실측. 13차의 여백 축소만으로는 30px 이 모자랐다). 계기판은 이 벌에서 이미
+   30px 낮아졌으니, 남은 20px 은 안내판의 **줄 간격**에서 뺀다.
+   ★글자 크기는 마지막에 건드린다는 순서 그대로다 - 줄 간격 1.6 -> 1.45 가 13줄에서
+     26px 을 돌려준다. 글자 크기는 안 건드렸다. */
+@media (max-height:620px){
+  #help{line-height:1.45;padding:8px 12px 9px}
+  #help .hSep{margin:4px 4px 5px 0}
+  #help::before{inset:5px;border-radius:12px}
+  #help .hNote{line-height:1.4}
+}
+@media (max-height:560px){
+  #uiTitle .win{padding:46px 28px 18px}
+}
+
 /* ══ 연출이 화면을 소유한다 (판정 S4 · S5 · S6 · S7) ═══════════════════════
    ★★이 블록은 **반드시 이 파일 CSS 의 맨 끝**에 있어야 한다. 여기 적힌 선택자는
      전부 (0,2,0) 이라 「body.uiHelpOff #uiHelpChip{opacity:1}」 같은 앞쪽 규칙과
@@ -1202,11 +1558,20 @@ export function initUI() {
   // 클리어 암막
   const dim = el('div', 'uiClearDim');
 
-  // 스킬 칩 두 장. 이름은 index.html 조작 안내와 같은 말을 쓴다.
+  // 스킬 슬롯 두 칸 + 잠긴 칸 둘. 이름은 index.html 조작 안내와 같은 말을 쓴다.
+  // ★첫 자식은 반드시 <i class="cd"> 다(setSkill 이 firstElementChild 로 잡는다).
+  //   그 다음이 남은 초 <b class="cds">, 그 뒤가 키캡·이름이다.
+  // ★회피 슬롯은 main.js(mountDashChip)가 나중에 붙인다. 그래서 잠긴 칸이 DOM 상으로는
+  //   회피보다 앞에 서고, 눈에 보이는 순서는 CSS order 가 바로잡는다(14차 블록).
   const skills = el('div', 'uiSkills');
+  const slotHtml = (k, key, nm) =>
+    '<div class="sk" data-k="' + k + '"><i class="cd"></i><b class="cds"></b>'
+    + '<span class="key">' + key + '</span><span class="nm">' + nm + '</span></div>';
   skills.innerHTML =
-    '<div class="sk" data-k="Heavy"><i class="cd"></i><span class="key">X</span><span class="nm">수면참</span></div>' +
-    '<div class="sk" data-k="Wide"><i class="cd"></i><span class="key">C</span><span class="nm">횡일섬</span></div>';
+    slotHtml('Heavy', 'X', '수면참') + slotHtml('Wide', 'C', '횡일섬')
+    // 잠긴 칸. 글자를 안 붙인다 - 자물쇠 하나가 「여기 더 붙는다」를 다 말한다.
+    + '<div class="skLock"><i class="lk"></i></div>'
+    + '<div class="skLock"><i class="lk"></i></div>';
   const skHeavy = skills.querySelector('[data-k="Heavy"]');
   const skWide = skills.querySelector('[data-k="Wide"]');
 
@@ -1251,26 +1616,36 @@ export function initUI() {
     gaugeRow.append(heart, eHudEl);
     dock.append(gaugeRow);
   }
-  // 2층
+  // 2층. 슬롯 열 + 칼 알약이 **한 줄**에 선다(14차. 롤이 스킬 옆에 장비를 두는 자리).
+  // ★칼이 없는 몸(궁수)에서는 아래 fixSword 가 이 칸째로 접는다. 줄이 아니라 칸이
+  //   접히는 것이라 슬롯 열은 그대로 서 있는다.
   const slotRow = row('dkSlots');
   slotRow.append(skills);
-  dock.append(slotRow);
-  // 3층. 칼이 없는 몸(궁수)에서는 아래 fixSword 가 이 줄째로 접는다.
   const swordCell = swordEl ? row('dkSword') : null;
   if (swordCell) {
     const lb = document.createElement('span');
     lb.className = 'lb';
     lb.textContent = '칼';
     swordCell.append(lb, swordEl);
-    dock.append(swordCell);
+    slotRow.append(swordCell);
   }
+  dock.append(slotRow);
+  // 3층. 성장 띠(메이플 EXP 자리). 값은 updateHp 가 쓴다.
+  const expBar = document.createElement('i');
+  expBar.className = 'dkRow dkExp';
+  const expFill = document.createElement('i');
+  expBar.append(expFill);
+  dock.append(expBar);
   document.body.append(dock);
 
-  // 체력 숫자. 트랙(#eBar) 바로 오른쪽에 세운다.
-  // ★enemy.js 는 #eBar·#eFill 만 만진다. 그 뒤에 형제를 하나 더 넣어도 안 부딪힌다.
+  // 체력 숫자. 트랙(#eBar) **안 가운데**에 얹는다(14차. 메이플·롤 둘 다 수치를 바 위에 쓴다).
+  // ★enemy.js 는 만들 때 한 번 innerHTML 을 쓰고 그 뒤로는 #eFill 의 style 과 #eTxt 만
+  //   만진다. 그래서 #eBar 안에 자식을 하나 더 넣어도 안 지워진다(실측으로 확인).
+  // ★#eBar 가 없는 낡은 빌드에서는 옛 자리(트랙 오른쪽)로 떨어진다.
   const hpNum = el('b', 'uiHpNum');
   const barEl = document.getElementById('eBar');
-  if (barEl && barEl.parentNode) barEl.parentNode.insertBefore(hpNum, barEl.nextSibling);
+  if (barEl) barEl.appendChild(hpNum);
+  else if (eHudEl) eHudEl.appendChild(hpNum);
 
   // 머리 위 체력바. 레벨 배지와 트랙은 같은 transform 노드 안에서 함께 추적된다.
   const hpFloat = el('div', 'uiHpFloat');
@@ -1503,28 +1878,86 @@ export function initUI() {
     const acts = (d && d.actions) || null;
     const busy = !!(d && d.atk);
     if (!busy) noteBusyEnd();
-    const left = busy ? busyLeft(d) : 0;
-    setSkill(skHeavy, !!(acts && acts.Heavy), busy, left);
-    setSkill(skWide, !!(acts && acts.Wide), busy, left);
+    const lf = busy ? busyLeft(d) : null;
+    setSkill(skHeavy, !!(acts && acts.Heavy), busy, lf);
+    setSkill(skWide, !!(acts && acts.Wide), busy, lf);
+    updateDash();
   }
-  function setSkill(node, has, busy, left) {
+  function setSkill(node, has, busy, lf) {
     node.classList.toggle('gone', !has);
     node.classList.toggle('off', busy);
     node.classList.toggle('rdy', has && !busy);
-    // 쿨다운 라디얼. 12시에서 시작해 시계 방향으로 남은 만큼 덮여 있다가 걷힌다.
-    // ★색은 이 벌의 월넛 트랙 색과 같다. 칩 밖의 판과 한 벌로
-    //   읽혀야 해서, 스킨을 갈아입을 때마다 이 한 줄도 같이 본다.
-    const g = node.firstElementChild;              // .cd
-    if (!g) return;
-    if (!busy) { if (g.style.background) g.style.background = ''; return; }
-    const turn = Math.max(0, Math.min(1, left)).toFixed(3);
-    g.style.background = 'conic-gradient(from 0deg,rgba(75,50,29,.72) 0turn ' + turn
-      + 'turn,rgba(75,50,29,0) ' + turn + 'turn)';
+    paintCd(node, busy && lf ? lf.r : 0, busy && lf ? lf.sec : 0);
   }
-  // 남은 시간 비율(1 = 방금 시작, 0 = 곧 끝).
+  // ── 회피 슬롯 ──
+  // ★★이 칸은 **소유가 다르다.** DOM 도 main.js(mountDashChip)가 만들고, 쿨다운 덮개와
+  //   rdy/off 도 main.js 가 **매 프레임** 직접 쓴다(main.js 의 「대시 칩」 블록).
+  //   그래서 여기서 같은 것을 또 쓰면 60Hz 와 20Hz 가 서로 다른 색을 번갈아 칠한다
+  //   (첫 판에서 실제로 두 색이 깜빡였다 - 라디얼 색이 내 값이 아니라 main.js 값으로
+  //   찍혀 나오는 것을 보고 잡았다).
+  //   ★그래서 이 파일이 이 칸에 더하는 것은 **남은 초 글자 한 칸뿐**이다.
+  //     덮개 색도 main.js 와 같은 값을 쓴다(아래 CD_INK) - 안 그러면 X·C 와 Space 의
+  //     쿨다운이 서로 다른 색으로 보인다.
+  let skDash = null;
+  function dashNode() {
+    if (skDash && skDash.isConnected) return skDash;
+    skDash = skills.querySelector('[data-k="Dash"]');
+    // main.js 가 만든 칩에는 초 칸이 없다. 구조는 안 바꾸고 자식만 하나 더한다
+    // (#uiHpNum 을 #eBar 안에 넣은 것과 같은 수법).
+    if (skDash && !skDash.querySelector('.cds') && skDash.firstElementChild) {
+      const b = document.createElement('b');
+      b.className = 'cds';
+      skDash.insertBefore(b, skDash.firstElementChild.nextSibling);
+    }
+    return skDash;
+  }
+  function updateDash() {
+    const node = dashNode();
+    if (!node) return;
+    const s = node.querySelector('.cds');
+    if (!s) return;
+    const f = window.__dash;
+    // 낡은 빌드(창구가 없다)에서는 글자를 안 쓴다. 덮개는 main.js 가 그대로 그린다.
+    if (typeof f !== 'function') { if (s.textContent) s.textContent = ''; return; }
+    let d;
+    try { d = f(); } catch (e) { return; }
+    setSec(s, d ? Math.max(0, d.cdLeft || 0) : 0);
+  }
+  // 쿨다운 덮개 + 남은 초. 12시에서 시작해 시계 방향으로 남은 만큼 덮여 있다가 걷힌다.
+  // ★★색은 **main.js 의 대시 칩과 같은 값**이어야 한다(위 설명). 한쪽만 바꾸면
+  //   같은 열의 슬롯 셋이 서로 다른 쿨다운 색을 갖는다.
+  const CD_INK = 'rgba(4,4,3,.80)';
+  function paintCd(node, turn, sec) {
+    const g = node.firstElementChild;              // .cd
+    const s = node.querySelector('.cds');
+    if (!g) return;
+    if (!(turn > 0)) {
+      if (g.style.background) g.style.background = '';
+      setSec(s, 0);
+      return;
+    }
+    const t = Math.max(0, Math.min(1, turn)).toFixed(3);
+    g.style.background = 'conic-gradient(from 0deg,' + CD_INK + ' 0turn ' + t
+      + 'turn,rgba(4,4,3,0) ' + t + 'turn)';
+    setSec(s, sec);
+  }
+  // 남은 초 한 칸. ★1초 위는 정수(롤 문법), 밑은 소수 한 자리. 0.35초 밑에서는 아예
+  //   안 쓴다 - 숫자가 사라지는 그 순간이 「이제 된다」는 신호라 마지막 한 칸은 비워 둔다.
+  function setSec(s, sec) {
+    if (!s) return;
+    const want = sec >= 1 ? String(Math.ceil(sec))
+      : (sec >= 0.35 ? sec.toFixed(1) : '');
+    if (s.textContent !== want) s.textContent = want;
+  }
+  // 남은 시간(비율 r 과 초 sec). r 1 = 방금 시작, 0 = 곧 끝.
   // ★main.js 는 attackEnd(게임시계)를 밖에 안 내놓는다. 그래서 **지금 도는 클립의
   //   진행도**를 읽는다. 클립 시간은 재생속도와 무관하게 0..duration 이라 그대로 비율이다.
   //   클립을 못 읽는 몸(궁수 등)에서는 아래 EMA 로 떨어진다.
+  // ★★초는 **클립 길이로 재면 안 된다.** 첫 판에서 0.5초짜리 휘두르기에 「2」가 떴다.
+  //   클립은 2초가 넘는데 main.js 가 취소 지점(canCancelAttack)에서 attacking 을 먼저
+  //   푼다 - 화면에 나가는 「남은 초」는 클립이 아니라 **실제로 못 쓰는 시간**이어야 한다.
+  //   그래서 비율 x 「지난 스윙들이 실제로 걸린 시간」(busyEst) 으로 낸다.
+  //   busyEst 는 아래 noteBusyEnd 가 스윙이 끝날 때마다 실측으로 배운다.
   let busyT0 = 0, busyEst = 0.62, wasBusy = false;
   function busyLeft(d) {
     const now = performance.now();
@@ -1533,10 +1966,12 @@ export function initUI() {
     if (a && typeof a.time === 'number' && typeof a.getClip === 'function') {
       const clip = a.getClip();
       if (clip && clip.duration > 0) {
-        return Math.max(0, Math.min(1, 1 - a.time / clip.duration));
+        const r = Math.max(0, Math.min(1, 1 - a.time / clip.duration));
+        return { r, sec: r * busyEst };
       }
     }
-    return Math.max(0, Math.min(1, 1 - (now - busyT0) / 1000 / busyEst));
+    const r = Math.max(0, Math.min(1, 1 - (now - busyT0) / 1000 / busyEst));
+    return { r, sec: r * busyEst };
   }
   // 스윙이 끝난 그 순간에 실제 길이를 배운다(다음 스윙의 어림값이 정확해진다)
   function noteBusyEnd() {
@@ -1821,15 +2256,23 @@ export function initUI() {
   // -------------------------------------------------------------------------
   // 체력 숫자. ★enemy.js 는 최대 체력을 안 내놓는다. 첫 폴링이 만체력이라
   //   지금까지 본 가장 큰 값을 최대로 잡으면 어떤 빌드에서도 맞는다(기본 100).
-  let hpMax = 100, hpSeen = -1, hpLevelSeen = 0;
+  let hpMax = 100, hpSeen = -1, hpLevelSeen = 0, expSeen = -1;
   function updateHp() {
     const en = window.__enemy;
     if (!en || typeof en.hp !== 'number') return;
     // 표시 전용 레벨이다. 게임 시스템에는 쓰지 않으며 처치 5회마다 한 단계만 올린다.
-    const level = 1 + Math.floor(Math.max(0, Number(en.kills) || 0) / 5);
+    const kills = Math.max(0, Number(en.kills) || 0);
+    const level = 1 + Math.floor(kills / 5);
     if (level !== hpLevelSeen) {
       hpLevelSeen = level;
       hpLevel.textContent = String(level);
+    }
+    // 성장 띠. **머리 위 뱃지와 같은 셈**을 그림으로 편 것뿐이다(새 정보가 아니다).
+    // 이게 없으면 뱃지가 5마리째에 갑자기 바뀌는 것처럼 보인다.
+    const g = (kills % 5) / 5;
+    if (g !== expSeen) {
+      expSeen = g;
+      expFill.style.transform = 'scaleX(' + g.toFixed(3) + ')';
     }
     if (en.hp > hpMax) hpMax = Math.ceil(en.hp);
     const v = Math.max(0, Math.round(en.hp));
@@ -2144,15 +2587,27 @@ export function initUI() {
                       top: pip.style.top },
                // 상단 목표 문구(boss.js 가 쓴 것을 그대로 읽는다)
                goal: (document.getElementById('bGoal') || {}).textContent || '',
-               // 스킬 칩: 밝은가(off 가 아니면 지금 쓸 수 있다) · 있는가
-               skills: { X: { has: !skHeavy.classList.contains('gone'),
-                              on: !skHeavy.classList.contains('off'),
-                              rdy: skHeavy.classList.contains('rdy'),
-                              cd: skHeavy.firstElementChild.style.background },
-                         C: { has: !skWide.classList.contains('gone'),
-                              on: !skWide.classList.contains('off'),
-                              rdy: skWide.classList.contains('rdy'),
-                              cd: skWide.firstElementChild.style.background } },
+               // 스킬 슬롯: 밝은가(off 가 아니면 지금 쓸 수 있다) · 있는가 · 남은 초
+               // ★14차: sec 은 슬롯 한가운데에 실제로 쓰인 글자다(빈 문자열 = 안 뜬다).
+               skills: (() => {
+                 const one = (n) => n ? {
+                   has: !n.classList.contains('gone'),
+                   on: !n.classList.contains('off'),
+                   rdy: n.classList.contains('rdy'),
+                   cd: n.firstElementChild ? n.firstElementChild.style.background : '',
+                   sec: (n.querySelector('.cds') || {}).textContent || '',
+                   rect: (() => { const r = n.getBoundingClientRect();
+                     return [Math.round(r.width), Math.round(r.height)]; })(),
+                 } : null;
+                 return { X: one(skHeavy), C: one(skWide),
+                          Space: one(skills.querySelector('[data-k="Dash"]')),
+                          lock: skills.querySelectorAll('.skLock').length,
+                          // 화면에 보이는 왼쪽부터의 순서(CSS order 가 제대로 먹었나)
+                          order: Array.from(skills.children)
+                            .map(e => ({ k: e.dataset.k || 'Lock',
+                                         x: Math.round(e.getBoundingClientRect().left) }))
+                            .sort((a, b) => a.x - b.x).map(e => e.k) };
+               })(),
                // 계기판: 한 판에 모여 있는가 · 어디까지 차지하나 · 수치가 떠 있나
                dock: (() => { const r = dock.getBoundingClientRect();
                  return { rect: [Math.round(r.left), Math.round(r.top),

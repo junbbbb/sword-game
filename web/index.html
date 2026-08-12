@@ -94,13 +94,19 @@
      ★13차 키트 값은 위 :root 에 ui.js 와 1:1로 둔다. */
   #load { position:fixed; inset:0; display:flex; align-items:center;
     justify-content:center; background:radial-gradient(circle at 50% 42%,#fff8e8,var(--rb-panel-c)); z-index:9; }
-  /* 판: 아이보리 면 + 월넛 테 + 허니 안쪽 선 */
-  #load .win { position:relative; padding:25px 38px 27px; border-radius:22px;
-    background:linear-gradient(180deg,var(--rb-panel-a),var(--rb-panel-b) 68%,var(--rb-panel-c));
+  /* 판: 메이플 창 크롬 - 네이비 타이틀 띠 + 놋쇠 실선 + 아이보리 몸통 + 미세 결.
+     ★14차. ui.js 의 창 규칙과 **같은 값**이어야 한다(띠 36px · 놋쇠 3px · 결 3px 주기).
+       로딩 화면은 여기가 정본이라, ui.js 쪽을 고칠 때 이 블록도 같이 고칠 것. */
+  #load .win { position:relative; padding:52px 38px 26px; border-radius:22px;
+    background:
+      linear-gradient(180deg,#4a4571 0%,#332e52 100%) no-repeat left top / 100% 36px,
+      repeating-linear-gradient(0deg,rgba(122,86,45,.030) 0 1px,rgba(255,255,255,0) 1px 3px),
+      linear-gradient(180deg,var(--rb-panel-a),var(--rb-panel-b) 68%,var(--rb-panel-c));
     border:3px solid var(--rb-line); box-shadow:var(--rb-pop); }
-  #load .fr { position:absolute; left:16px; right:16px; top:8px; height:6px;
-    pointer-events:none; border-radius:999px;
-    background:linear-gradient(90deg,transparent,var(--rb-gold),transparent); }
+  /* 놋쇠 실선. 띠와 몸통 사이 한 겹 */
+  #load .fr { position:absolute; left:0; right:0; top:33px; height:3px;
+    pointer-events:none; border-radius:0;
+    background:linear-gradient(90deg,rgba(201,149,78,0),#e8bf6d 18%,#f7dda2 50%,#e8bf6d 82%,rgba(201,149,78,0)); }
   /* 카드 왼쪽 변에 걸친 원형 배지 */
   #load .hd { display:block; text-align:center; }
   #load .hd .ic { position:absolute; left:-34px; top:50%; margin-top:-32px;
@@ -110,9 +116,12 @@
     color:var(--rb-txt); font-weight:800; font-size:25px; line-height:1;
     display:flex; align-items:center; justify-content:center;
     box-shadow:var(--rb-pop-sm); }
-  #load .hd b { display:block; font-weight:800; font-size:12px; letter-spacing:.2em;
-    padding-left:.2em; color:#9b6325; text-shadow:none; }
-  #load .bd { padding-top:16px; display:flex; flex-direction:column;
+  /* 창 이름. 띠 안에 눕는다 */
+  #load .hd b { position:absolute; left:0; right:0; top:0; z-index:2;
+    height:33px; line-height:34px; text-align:center;
+    font-weight:800; font-size:12px; letter-spacing:.16em;
+    padding-left:.16em; color:#efe6ff; text-shadow:0 1px 0 rgba(18,14,34,.6); }
+  #load .bd { padding-top:0; display:flex; flex-direction:column;
     align-items:center; gap:12px; }
   #load .ldTrack { position:relative; width:min(300px,54vw); height:14px;
     border-radius:999px; border:3px solid var(--rb-line); background:var(--rb-deep);
