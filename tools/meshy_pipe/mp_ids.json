@@ -1,0 +1,12 @@
+{
+  "_설명": "2026-08-13 접수. model=이미지→3D 작업 id(카드 썸네일 URL 에 박힌다). image=업로드한 콘셉트 png 의 id(뷰어 하단 썸네일에 박힌다 = 지금 뷰어가 무엇을 들고 있는지의 신원). 둘 다 UUIDv7 이라 오름차순=접수 순서이고, 각 소품의 image id 는 곧바로 뒤따르는 model id 와 짝이다(교차검증됨).",
+  "pillar_intact": { "model": "019ff78b-f2ca-7e22-baaa-7a349efab172", "image": "019ff78b-ec39-7e21-95a9-22168375fe74" },
+  "pillar_broken": { "model": "019ff78c-f45f-7e5e-b43b-9bbfb7c660bc", "image": "019ff78c-e43e-75b4-93e5-79b31c79bb34" },
+  "arch_gate":     { "model": "019ff78d-30fb-75bd-a7a0-78fed094d733", "image": "019ff78d-281e-7e67-906b-3e1079f72b38" },
+  "altar":         { "model": "019ff78d-568e-7c41-b15a-c9b2251dc5bd", "image": "019ff78d-4d72-7e6f-951e-f9a49b6cebbb" },
+  "brazier":       { "model": "019ff78d-7c14-75c7-9bb5-0888fcc2c4ea", "image": "019ff78d-7323-7c48-baf2-44954c1659f8" },
+  "rubble_large":  { "model": "019ff78d-bb2c-75d1-b198-176eface9dd9", "image": "019ff78d-b21b-7c59-b887-396850ab293e" },
+  "rubble_small":  { "model": "019ff78d-e095-75de-8ba7-9055b65c89cb", "image": "019ff78d-d7b7-75dd-a4ea-9863fb1f3627" },
+  "coping_chunk":  { "model": "019ff78e-0638-7e87-88f3-16f49b591f97", "image": "019ff78d-fd51-75ee-8692-8c352a0b2450" },
+  "quoin_corner":  { "model": "019ff78e-2b84-75f8-9a9a-9559880b11ab", "image": "019ff78e-22c0-75f8-a3ae-49b341670b70" }
+}
