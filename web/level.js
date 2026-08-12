@@ -270,6 +270,31 @@ const W_STEPS = 4.0;             // 깊이 계단 수. 3 은 띠가 굵고 6 이
 const W_FLOW = 0.085;            // 물살이 흐르는 속도(m/s 아니라 UV/s)
 let WATER_N = 0;
 
+// ---------------------------------------------------------------------------
+// 던전 횃불 불꽃 (13차-불꽃. 오너 "불꽃이 그림처럼 멈춰 있네")
+// ---------------------------------------------------------------------------
+// 던전에 불이 49자루 서 있는데 전부 정지 스프라이트였다. 방이 통째로 박제로 읽힌다.
+// 고치는 것은 셋이고, 셋 다 **한 재질 안**에서 한다(드로우콜 증가 0).
+//   ① 플립북    tex/dg_flame_fb.png 넉 칸을 UV 로 갈아 끼운다 = 실루엣이 다시 그려진다
+//   ② 미세 흔들림 빌보드 윗변만 좌우로 눕고(바람) 키가 숨 쉰다. 밑동은 안 움직인다
+//   ③ 밝기 맥동  이미시브를 ±13%. 웜 풀은 **같은 위상**으로 ±5%(그래야 한 불로 읽힌다)
+//
+// ★24fps 칸으로 양자화한다. 이 게임의 이펙트 문법이 그것이다(참격 시트·먹 파열 전부
+//   1/24 홀드다). 60fps 로 매끈하게 보간하면 3D 젤리가 되고, 칸으로 끊으면 작화가 된다.
+// ★작화는 2칸 打ち(=12fps). 애니 관례이면서, 4칸 플립북이 한 바퀴 0.333초 =
+//   관솔 흔들림의 실제 주기와 맞는다.
+// ★위상은 **자리에서 뽑는다**(Math.random 금지). 새로고침마다 달라지면 재현이 안 되고,
+//   같은 위상이면 마흔아홉 자루가 군무를 춘다 - 그게 오히려 더 가짜다.
+const FLAME_TEX = './tex/dg_flame_fb.png';
+const FLAME_N = 4.0;             // 플립북 칸 수(dungeon_tex.py FLIP_N 과 같아야 한다)
+const FLAME_HOLD = 2.0;          // 24fps 칸 몇 개를 한 작화로 붙드는가. 2 = 12fps
+const FLAME_SWAY = 0.055;        // 꼭대기 좌우 진폭(m). 불꽃 폭이 0.40~0.86m 라 이 정도면
+                                 //   "바람에 눕는다"로 읽히고 그 위는 자리가 흔들려 보인다
+const FLAME_RISE = 0.030;        // 키 숨쉬기(m). 좌우만 흔들면 깃발이 된다
+const FLAME_PULSE = 0.13;        // 불꽃 밝기 맥동 ±13%
+const POOL_PULSE = 0.05;         // 바닥 웜 풀 맥동 ±5%. ★더 주면 바닥이 깜빡여서 촌스럽다
+let FLAME_N_PATCHED = 0;
+
 let LV = null;                   // level1.json 원본
 let ROOT = null;                 // 씬에 붙은 맵 그룹
 let PROPS = null;                // web/props.js 모듈(소품 인스턴싱). 없으면 null
@@ -330,6 +355,9 @@ export async function loadLevel(scene, search) {
   DETAIL_N = (LV.floorLook === false) ? 0 : await applyFloorLook(ROOT, q);
   // 수면(WATER_STREAM)은 따로 짠다. 실패해도 v93 그림 그대로 뜬다(아래 주석).
   WATER_N = await applyWaterLook(ROOT, q);
+  // 던전 횃불(FLOOR_FLAME · FLOOR_POOL)에 애니메이션을 건다. 초원에는 그 메시가
+  // 아예 없으므로 한 줄도 안 돌고 0 을 돌려준다(초원 회귀 위험 0).
+  FLAME_N_PATCHED = await applyFlameLook(ROOT, q);
   scene.add(ROOT);
 
   // ★소품 5종(바위·절벽바위·덤불·나무·수풀)은 이 glb 에 없다.
@@ -815,6 +843,271 @@ function patchWaterMaterial(mesh, mat, tex) {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// 던전 횃불 불꽃 (플립북 + 흔들림 + 맥동)
+// ---------------------------------------------------------------------------
+// 초원 맵에는 FLOOR_FLAME 이 없다 = 아래가 통째로 안 돈다(초원 회귀 위험 0).
+async function applyFlameLook(root, q) {
+  let flame = null;
+  let pool = null;
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    if (o.name === 'FLOOR_FLAME') flame = o;
+    else if (o.name === 'FLOOR_POOL') pool = o;
+  });
+  if (!flame) return 0;
+
+  // 플립북 스트립. 못 읽어도 게임은 그대로 돈다 - 칸 수를 1 로 떨어뜨리면 UV 는
+  // 손대지 않은 것과 같아지고 흔들림·맥동만 남는다(정지 그림보다는 낫다).
+  const tex = await new Promise(ok => {
+    new THREE.TextureLoader().load(FLAME_TEX + q, t => ok(t), undefined, () => ok(null));
+  });
+  let frames = 1.0;
+  if (tex) {
+    // ★이건 **색**이다(곱수가 아니다). glb 안의 원본도 sRGB 로 들어와 있으므로
+    //   여기만 선형으로 읽으면 불꽃이 통째로 어두워진다.
+    tex.colorSpace = THREE.SRGBColorSpace;
+    // ★★flipY 를 끈다. TextureLoader 는 기본이 true 인데 GLTFLoader 가 넣어 준
+    //   원본은 false 다(glTF 규격은 UV 원점이 그림 좌상단). 이걸 안 맞추면 갈아
+    //   끼우는 순간 불꽃이 **위아래로 뒤집혀서** 흰 심지가 하늘에 뜬다.
+    tex.flipY = false;
+    // ★스트립이라 반드시 ClampToEdge 다. Repeat 이면 칸이 서로 샌다.
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.anisotropy = 4;
+    tex.needsUpdate = true;
+    frames = FLAME_N;
+  } else {
+    console.warn('[level] 불꽃 플립북을 못 읽었다. 흔들림·맥동만 건다');
+  }
+
+  const cards = splitCards(flame.geometry);
+  if (!cards) { console.warn('[level] 불꽃 메시가 인덱스 없이 들어왔다'); return 0; }
+
+  // 카드 -> 불꽃 묶기. 한 자루는 십자로 선 카드 **두 장**이라 자리가 같다.
+  // 두 장이 다른 위상을 받으면 한 자루가 서로 다른 칸을 그려서 X 자로 갈라진다.
+  const seats = [];
+  for (const c of cards) {
+    let s = null;
+    for (const t of seats) {
+      const dx = t.x - c.x, dz = t.z - c.z;
+      if (dx * dx + dz * dz < 0.0025) { s = t; break; }     // 5cm 안이면 같은 자루
+    }
+    if (!s) { s = { x: c.x, z: c.z, ph: seatPhase(c.x, c.z) }; seats.push(s); }
+    c.ph = s.ph;
+  }
+
+  const uT = { value: 0 };
+  let n = 0;
+  for (const mat of matList(flame)) if (patchFlameMaterial(flame, mat, tex, frames, uT)) n++;
+  setCardAttr(flame.geometry, cards);
+
+  // 바닥 웜 풀. **불꽃과 같은 위상**이어야 한 불로 읽힌다.
+  // ★자리가 정확히 같지는 않다 - 벽 횃불은 불꽃이 벽에서 0.24m, 웅덩이가 1.0m 다
+  //   (s40_dungeon1.py 참조). 그래서 좌표를 맞추지 않고 **가장 가까운 자루**를 찾는다.
+  if (pool) {
+    const pc = splitCards(pool.geometry);
+    if (pc) {
+      for (const c of pc) {
+        let best = 0, bd = Infinity;
+        for (const s of seats) {
+          const dx = s.x - c.x, dz = s.z - c.z;
+          const d = dx * dx + dz * dz;
+          if (d < bd) { bd = d; best = s.ph; }
+        }
+        c.ph = best;
+      }
+      for (const mat of matList(pool)) if (patchPoolMaterial(pool, mat, uT)) n++;
+      setCardAttr(pool.geometry, pc);
+    }
+  }
+  return n;
+}
+
+function matList(mesh) {
+  return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+}
+
+// 자리에서 뽑는 결정론 위상(0..1). ★Math.random 금지 — 새로고침마다 달라지면
+// 재현이 안 되고, 무엇보다 카드 두 장이 서로 다른 값을 받아 한 자루가 갈라진다.
+function seatPhase(x, z) {
+  const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+// 메시 하나에 합쳐진 카드(사각형 한 장)를 잇기로 가른다.
+// ★왜 이걸 런타임에 하는가: 불꽃 마흔아홉 자루가 드로우콜 하나로 구워져 있어서
+//   자루마다 다른 값을 주려면 정점 속성이 필요한데 glb 에는 없다. glb 를 다시 굽지
+//   않는 이유는 그 파일이 4.78MB 로 상한(5MB)에 붙어 있어서다. 정점이 392개뿐이라
+//   로드 때 한 번 도는 비용은 재는 게 무의미하다.
+function splitCards(geo) {
+  const pos = geo.attributes.position;
+  const idx = geo.index;
+  if (!pos || !idx) return null;
+  const n = pos.count;
+  const par = new Int32Array(n);
+  for (let i = 0; i < n; i++) par[i] = i;
+  const find = (a) => { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; };
+  const uni = (a, b) => { a = find(a); b = find(b); if (a !== b) par[b] = a; };
+  for (let t = 0; t + 2 < idx.count; t += 3) {
+    const a = idx.getX(t);
+    uni(a, idx.getX(t + 1));
+    uni(a, idx.getX(t + 2));
+  }
+  const bag = new Map();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    let g = bag.get(r);
+    if (!g) { g = []; bag.set(r, g); }
+    g.push(i);
+  }
+  const cards = [];
+  bag.forEach(g => {
+    let cx = 0, cz = 0, y0 = Infinity, y1 = -Infinity;
+    for (const i of g) {
+      cx += pos.getX(i);
+      cz += pos.getZ(i);
+      const y = pos.getY(i);
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+    cards.push({ v: g, x: cx / g.length, z: cz / g.length, y0, y1, ph: 0 });
+  });
+  return cards;
+}
+
+// aFlame = (위상, 밑동0..끝1, 카드의 가로 방향 x, 같은 z)
+function setCardAttr(geo, cards) {
+  const pos = geo.attributes.position;
+  const a = new Float32Array(pos.count * 4);
+  for (const c of cards) {
+    const h = Math.max(1e-4, c.y1 - c.y0);
+    // 카드가 선 평면의 가로축. 중심에서 가장 멀리 나간 정점이 곧 그 방향이다.
+    // ★이 방향으로만 밀어야 빌보드가 제 평면 안에서 눕는다(가로로 밀면 종잇장이 돈다).
+    let tx = 0, tz = 0, best = 0;
+    for (const i of c.v) {
+      const dx = pos.getX(i) - c.x, dz = pos.getZ(i) - c.z;
+      const d = dx * dx + dz * dz;
+      if (d > best) { best = d; tx = dx; tz = dz; }
+    }
+    const L = Math.sqrt(best) || 1;
+    tx /= L; tz /= L;
+    for (const i of c.v) {
+      a[i * 4] = c.ph;
+      a[i * 4 + 1] = (pos.getY(i) - c.y0) / h;
+      a[i * 4 + 2] = tx;
+      a[i * 4 + 3] = tz;
+    }
+  }
+  geo.setAttribute('aFlame', new THREE.BufferAttribute(a, 4));
+}
+
+// 24fps 칸 · 12fps 작화 · 위상. 불꽃과 웜 풀이 **같은 식**을 써야 한 불로 읽힌다.
+const FLAME_HEAD = [
+  'attribute vec4 aFlame;',      // x 위상 / y 밑동0..끝1 / zw 카드의 가로 방향
+  'uniform float uFT;',
+  'varying float vFPul;'];
+const FLAME_PULSE_LINE = (k) => [
+  '  float fq = floor( uFT * 24.0 );',            // ★24fps 칸(게임 전체 이펙트 문법)
+  '  float ft = fq / 24.0;',
+  '  float ph = aFlame.x * 6.2831853;',
+  // 두 주기를 겹친다. 하나면 규칙적인 사인파라 "숨쉰다"가 아니라 "깜빡인다"가 된다
+  '  vFPul = 1.0 + ' + k + ' * ( sin( ft * 5.1 + ph * 3.3 ) * 0.62'
+      + ' + sin( ft * 8.7 + ph ) * 0.38 );'];
+
+function patchFlameMaterial(mesh, mat, tex, frames, uT) {
+  if (!mat || mat.userData.flameLook) return false;
+  mat.userData.flameLook = true;
+  // glb 안의 한 장짜리 그림을 스트립으로 갈아 끼운다(재질·드로우콜은 그대로다).
+  if (tex) {
+    if (mat.map) mat.map = tex;
+    if (mat.emissiveMap) mat.emissiveMap = tex;
+  }
+  const hasMap = !!mat.map;
+  const hasEm = !!mat.emissiveMap;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uFT = uT;
+    shader.uniforms.uFN = { value: frames };
+    shader.uniforms.uFHold = { value: FLAME_HOLD };
+    shader.uniforms.uFSway = { value: FLAME_SWAY };
+    shader.uniforms.uFRise = { value: FLAME_RISE };
+    shader.uniforms.uFPulse = { value: FLAME_PULSE };
+    mat.userData.fShader = shader;
+
+    const uv = [
+      '#include <uv_vertex>',
+      '{',
+      '  // 24fps 칸으로 끊고, 그 위에서 두 칸씩 붙들어 12fps 작화로 넘긴다(2칸 打ち).',
+      '  // ★자루마다 시간을 통째로 밀어 둔다(칸 단위). 그림 번호만 다르게 하면 마흔여덟',
+      '  //   자루가 **같은 순간에 동시에** 다음 장으로 넘어가서 군무로 읽힌다 -',
+      '  //   밀어 두면 넘어가는 순간까지 갈린다(2칸 打ち라 홀·짝이 반씩 나뉜다).',
+      '  float ffq = floor( uFT * 24.0 ) + floor( aFlame.x * uFN * uFHold );',
+      '  float fi = mod( floor( ffq / uFHold ), uFN );'];
+    if (hasMap) uv.push('  vMapUv.x = ( vMapUv.x + fi ) / uFN;');
+    if (hasEm) uv.push('  vEmissiveMapUv.x = ( vEmissiveMapUv.x + fi ) / uFN;');
+    uv.push('}');
+
+    // ★주석에 역따옴표(`)를 쓰지 마라 - LOG.md 의 함정이다(배열 join 으로 짜는 이유).
+    const body = [
+      '#include <begin_vertex>',
+      '{'].concat(FLAME_PULSE_LINE('uFPulse')).concat([
+      '  // 바람. **윗변만** 눕는다(up 을 제곱해서 밑동은 심지에 못 박아 둔다).',
+      '  //   빠른 결을 겹쳐야 "펄럭"이 아니라 "일렁"으로 읽힌다',
+      '  float sw = sin( ft * 2.7 + ph ) * 0.66 + sin( ft * 4.3 + ph * 2.1 ) * 0.34;',
+      '  float up = aFlame.y;',
+      '  transformed.xz += aFlame.zw * ( sw * uFSway * up * up );',
+      '  // 키. 좌우로만 흔들면 깃발이 된다. 위로 한 번씩 솟아야 불이다',
+      '  transformed.y += ( sin( ft * 3.3 + ph * 1.7 ) * 0.5 + 0.5 ) * uFRise * up;',
+      '}']).join('\n');
+
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', ['#include <common>'].concat(FLAME_HEAD).concat([
+        'uniform float uFN;',
+        'uniform float uFHold;',
+        'uniform float uFSway;',
+        'uniform float uFRise;',
+        'uniform float uFPulse;']).join('\n'))
+      .replace('#include <uv_vertex>', uv.join('\n'))
+      .replace('#include <begin_vertex>', body);
+
+    // 밝기 맥동. 이 재질은 베이스컬러가 검정이라 화면에 나오는 건 이미시브뿐이다.
+    // ★세기를 3 넘게 올리면 ACES 가 흰색으로 말아 올려 주황이 씻긴다(LOG.md).
+    //   원래 2.4 이므로 +13% 는 2.71 - 그 선 아래다.
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vFPul;')
+      .replace('#include <emissivemap_fragment>',
+               '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vFPul;');
+  };
+  // ★three 는 재질 파라미터로 프로그램을 캐시하는데 그 키에 onBeforeCompile 이
+  //   안 들어간다. 손으로 갈라 준다. ★셰이더를 고치면 이 숫자를 같이 올려라.
+  mat.customProgramCacheKey = () => 'dgFlame1';
+  mat.needsUpdate = true;
+  mesh.onBeforeRender = () => { uT.value = performance.now() * 0.001; };
+  return true;
+}
+
+function patchPoolMaterial(mesh, mat, uT) {
+  if (!mat || mat.userData.flameLook) return false;
+  mat.userData.flameLook = true;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uFT = uT;
+    shader.uniforms.uFPulse = { value: POOL_PULSE };
+    mat.userData.fShader = shader;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', ['#include <common>'].concat(FLAME_HEAD)
+        .concat(['uniform float uFPulse;']).join('\n'))
+      .replace('#include <begin_vertex>', ['#include <begin_vertex>', '{']
+        .concat(FLAME_PULSE_LINE('uFPulse')).concat(['}']).join('\n'));
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vFPul;')
+      .replace('#include <emissivemap_fragment>',
+               '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vFPul;');
+  };
+  mat.customProgramCacheKey = () => 'dgPool1';
+  mat.needsUpdate = true;
+  mesh.onBeforeRender = () => { uT.value = performance.now() * 0.001; };
+  return true;
+}
+
 export function data() { return LV; }
 export function ready() { return !!LV; }
 export function root() { return ROOT; }
@@ -1147,6 +1440,44 @@ export const debug = {
         out.fetches = (sh.fragmentShader.match(/texture2D\s*\(/g) || []).length;
       }
     });
+    return out;
+  },
+  // 던전 불꽃이 실제로 살아 있는지. **지금 이 순간** 자루마다 몇 번 칸을 그리는지까지
+  // 돌려준다 - 연속 캡처와 대조하면 "옆 횃불과 위상이 다른가"를 눈이 아니라 수로 잰다.
+  flame() {
+    const out = { patched: FLAME_N_PATCHED, meshes: [], injected: 0, frames: 0,
+                  t: 0, seats: 0, cards: 0, phases: [], frameNow: [], pool: 0 };
+    if (!ROOT) return out;
+    const seen = new Map();
+    ROOT.traverse(o => {
+      if (!o.isMesh) return;
+      const a = o.geometry.getAttribute('aFlame');
+      if (!a) return;
+      out.meshes.push(o.name);
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        const sh = m && m.userData.fShader;
+        if (!sh) continue;
+        if (sh.vertexShader.indexOf('aFlame') >= 0
+            && sh.fragmentShader.indexOf('vFPul') >= 0) out.injected++;
+        out.t = +sh.uniforms.uFT.value.toFixed(2);
+        if (sh.uniforms.uFN) out.frames = sh.uniforms.uFN.value;
+      }
+      if (o.name === 'FLOOR_POOL') { out.pool = a.count; return; }
+      for (let i = 0; i < a.count; i++) {
+        const p = +a.getX(i).toFixed(4);
+        if (!seen.has(p)) seen.set(p, 0);
+        seen.set(p, seen.get(p) + 1);
+      }
+    });
+    out.cards = 0;
+    seen.forEach(v => { out.cards += v; });
+    out.seats = seen.size;
+    out.phases = Array.from(seen.keys()).sort((a, b) => a - b);
+    // 지금 그려지는 칸 번호. 셰이더와 **똑같은 식**이라야 대조가 성립한다
+    const nf = out.frames || 1;
+    out.frameNow = out.phases.map(p => Math.floor(
+      (Math.floor(out.t * 24) + Math.floor(p * nf * FLAME_HOLD)) / FLAME_HOLD) % nf);
     return out;
   },
   // 이 자리에 어떤 결이 깔렸나. 셰이더와 **같은 식**으로 스플랫맵을 되짚는다.

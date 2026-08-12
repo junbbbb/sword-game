@@ -39,6 +39,7 @@
 import os
 import sys
 import json
+import math
 import importlib.util
 
 import numpy as np
@@ -265,6 +266,98 @@ def bake_flame(w, h):
     return np.clip(np.nan_to_num(rgb), 0, 1), np.nan_to_num(a)
 
 
+# ═════════════════════════════════════════════════════════════
+# 불꽃 플립북 (13차-불꽃. 오너 "불꽃이 그림처럼 멈춰 있네")
+# ═════════════════════════════════════════════════════════════
+# ★한 장짜리 dg_flame.png 는 **정지 그림**이다. 던전에 불이 49자루나 서 있는데
+#   전부 멎어 있으면 방이 통째로 박제로 읽힌다. 실루엣이 실제로 달라지는 넉 장을
+#   가로로 이어 붙여 굽고, 게임이 24fps 칸으로 넘긴다(2칸 打ち = 12fps 작화).
+#
+# 왜 셰이더 왜곡이 아니라 플립북인가
+#   불꽃은 흔들리는 게 아니라 **혀가 갈라졌다 붙는다**. UV 를 밀거나 늘리는 왜곡은
+#   같은 실루엣이 미끄러질 뿐이라 "젤리"가 된다. 컨셉(concept_hall.png)의 관솔도
+#   혀가 둘로 갈라진 순간이 잡혀 있다 - 그건 프레임을 갈아야 나온다.
+#
+# 화풍은 원본 dg_flame 을 그대로 잇는다(같은 색 계단 · 같은 부드러움).
+#   컨셉 불꽃은 셀 평칠이 아니라 회화체 글로우다 - 여기서 갑자기 각지면 그 방만 뜬다.
+FLIP_N = 4                 # 칸 수. 12fps 로 넘기면 한 바퀴 0.333초 = 관솔의 흔들림 주기
+FLIP_MARGIN = 0.90         # 칸 안에서 그림이 차지하는 가로 폭(나머지는 투명 여백)
+#   ★여백이 필요한 이유: 스트립을 선형보간으로 읽으면 칸 경계에서 옆 칸이 샌다.
+#     밉맵까지 물리면 더 샌다. 양끝을 확실히 비워 두는 게 유일하게 안전한 길이다.
+
+
+def _flame_frame(w, h, p, seed):
+    """불꽃 한 칸. p 는 0..2pi 의 위상(칸 번호에서 온다).
+
+    ★칸 안에서 그림이 **위와 옆에 닿으면 안 된다.** 위에 닿으면 불꽃 끝이 잘린
+      네모로 읽히고(원본 dg_flame 의 흠이다), 옆에 닿으면 스트립에서 옆 칸이 샌다."""
+    yy = np.linspace(1, 0, h, dtype=np.float32)[:, None]      # 1 = 위(끝)
+    xx = np.linspace(-1, 1, w, dtype=np.float32)[None, :]
+    n = _vnoise(max(w, h), 7, seed)[:h, :w]
+
+    # ① 키. 칸마다 끝이 오르내린다. 늘 1 아래라 끝이 칸 위에서 잘리지 않는다
+    ytip = 0.90 + 0.06 * math.cos(p + 1.1)
+    yn = np.clip(yy / ytip, 0, 1)                             # 0 밑동 .. 1 끝
+
+    # ② 물방울 반폭. 아래 1/3 이 가장 넓고 위로 뾰족하다. 밑동은 심지라 가늘다
+    hw = 0.56 * np.clip(np.sin(np.pi * yn ** 0.60), 0, 1) ** 1.12 + 0.10 * (1.0 - yn)
+    # 위로 올라가는 배부름. "빨려 올라간다"는 인상이 이 한 줄에서 나온다
+    hw = hw * (1.0 + 0.20 * np.sin(yn * 4.6 - p))
+    hw = np.clip(hw, 0.0, 1.0) * FLIP_MARGIN
+
+    # ③ 기울기. 끝만 눕는다(밑동은 심지에 물려 있어 안 움직인다)
+    cx = 0.26 * yn ** 1.8 * math.sin(p)
+
+    # ★알파는 폭으로 **나누지 않는다.** d = |x-cx|/hw 로 재면 hw 가 0 으로 가는 끝에서
+    #   1px 짜리 바늘이 남아 불꽃이 안테나를 단 것처럼 보인다(첫 판이 그랬다).
+    #   가장자리 흐림 폭을 절대값으로 두면 끝이 제 자리에서 스스로 사라진다.
+    s = hw - np.abs(xx - cx) * (1.0 + 0.18 * (n - 0.5))
+    a = np.clip(s / (0.55 * hw + 0.09), 0, 1) ** 0.85
+    inw = np.clip(s / (hw + 0.05), 0, 1)                      # 0 가장자리 .. 1 한복판
+
+    # ④ 갈라진 혀. 칸마다 한쪽으로 작은 불꽃이 떨어져 나갔다 붙는다.
+    #    이게 있고 없고가 "불이 살아 있다"와 "주황 물방울"을 가른다.
+    t0 = 0.34 + 0.10 * math.cos(p * 1.3)                      # 갈라지는 높이
+    t1 = 0.84 + 0.05 * math.sin(p * 0.7)                      # 혀 끝(<1)
+    tn = np.clip((yy - t0) / max(1e-3, t1 - t0), 0, 1)
+    thw = 0.19 * np.clip(np.sin(np.pi * tn ** 0.55), 0, 1) ** 1.10 * FLIP_MARGIN
+    tcx = 0.44 * math.sin(p + 2.2) * tn ** 1.4
+    ts = thw - np.abs(xx - tcx) * (1.0 + 0.22 * (n - 0.5))
+    tk = 0.34 + 0.66 * (0.5 + 0.5 * math.sin(p + 0.6))        # 칸마다 세기가 다르다
+    ta = np.clip(ts / (0.55 * thw + 0.07), 0, 1) ** 0.90 * tk
+    a = np.clip(np.maximum(a, ta), 0, 1)
+
+    # ⑤ 칸 테두리. 위·옆을 확실히 비운다(스트립 이웃 칸 샘 방지)
+    a = a * np.clip((1.0 - yy) / 0.05, 0, 1)
+    edge = np.clip((1.0 - np.abs(xx)) / (1.0 - FLIP_MARGIN), 0, 1)
+    a = a * (edge * edge * (3 - 2 * edge))
+
+    # 색: 심지(가운데 아래)가 희고 -> 노랑 -> 주황 -> 끝이 붉다. 원본과 같은 계단이다.
+    #   심지 세기만 칸마다 조금 다르다(불이 숨 쉬는 것처럼 보이는 값)
+    core = np.clip(inw * (1.0 - yy * 0.8), 0, 1) ** 2.2
+    core = core * (0.88 + 0.12 * math.cos(p * 2.0))
+    hot = np.array((1.00, 0.97, 0.86), np.float32)
+    mid = np.array((1.00, 0.72, 0.26), np.float32)
+    tip = np.array((0.92, 0.34, 0.12), np.float32)
+    t = np.broadcast_to(np.clip(yy, 0, 1), (h, w))[:, :, None]
+    rgb = mid[None, None, :] * (1 - t) + tip[None, None, :] * t
+    rgb = rgb * (1 - core[:, :, None]) + hot[None, None, :] * core[:, :, None]
+    return np.clip(np.nan_to_num(rgb), 0, 1), np.nan_to_num(a)
+
+
+def bake_flame_flip(w, h, n=FLIP_N):
+    """불꽃 플립북 스트립(가로 n 칸). 칸 하나가 원본 dg_flame 과 같은 규격이다."""
+    rgbs, alphas = [], []
+    for f in range(n):
+        p = 2.0 * math.pi * f / n
+        # 잡결 시드도 칸마다 바꾼다. 같은 시드면 가장자리 결이 안 움직여서
+        # 실루엣만 흐물거리는 "젤리"가 된다(손그림 불꽃은 결까지 다시 그려진다).
+        r, a = _flame_frame(w, h, p, 4021 + f * 97)
+        rgbs.append(r)
+        alphas.append(a)
+    return np.concatenate(rgbs, axis=1), np.concatenate(alphas, axis=1)
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     print("[원자재] %s" % SRC)
@@ -318,11 +411,29 @@ def main():
     save_rgba("dg_shaft", rgb, a * 0.36)
     rgb, a = bake_flame(128, 192)
     save_rgba("dg_flame", rgb, a)
+    bake_flip_only()
 
     with open(META, "w") as f:
         json.dump(meta, f, ensure_ascii=False, indent=1)
     print("\n[메타] %s" % META)
 
 
+def bake_flip_only():
+    """불꽃 플립북만 굽는다.
+
+    ★따로 뗀 이유: main() 은 dungeon_tex.json 의 평균·게인을 다시 쓴다. 그 값은
+      **이미 구워 놓은 level2.glb 의 재질 곱수와 짝**이라, 불꽃 하나 고치자고 전체를
+      다시 돌리면 맵 색이 통째로 밀릴 위험이 있다. 플립북은 glb 밖(런타임 로드)이라
+      혼자 구울 수 있다."""
+    os.makedirs(OUT_DIR, exist_ok=True)
+    print("[불꽃 플립북] %d칸" % FLIP_N)
+    rgb, a = bake_flame_flip(128, 192)
+    save_rgba("dg_flame_fb", rgb, a)
+
+
 if __name__ == "__main__":
-    main()
+    # `python3 tools/dungeon_tex.py flame` = 불꽃 플립북만(원자재 · glb 무관)
+    if len(sys.argv) > 1 and sys.argv[1] == "flame":
+        bake_flip_only()
+    else:
+        main()
