@@ -7,6 +7,46 @@ import { EffectComposer } from './lib/postprocessing/EffectComposer.js';
 import { RenderPass } from './lib/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './lib/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './lib/postprocessing/OutputPass.js';
+
+// ── glb 캐시 버전표 ────────────────────────────────────────────────────────
+// ★2026-08-12 사고. 배포본 vercel.json 이 glb 에 `max-age=31536000, immutable` 을 준다.
+//   그런데 배포는 **같은 URL(/basic2.glb)에 내용만 갈아끼운다.** 한 번 다녀간
+//   브라우저는 옛 glb 를 1년 동안 재검증 없이 쓴다 - 크롬 hard reload 로도 안 뚫린다
+//   (immutable 은 강제 새로고침조차 무시하라는 뜻이다).
+//   실측: 같은 브라우저에서 fetch('./basic2.glb') 960,560바이트(8월 초 판) /
+//   fetch('./basic2.glb?dev') 4,866,016(새 판). 그래서 평시 접속 화면의 시작
+//   캐릭터가 알몸·맨손이었고 X·C 스킬 슬롯이 사라졌다(옛 glb 에 옷·칼·클립이 없다).
+//   ★`?dev` 로 열면 멀쩡했던 건 고쳐서가 아니다. 아래 로더가 페이지 쿼리를 glb URL 에
+//     그대로 붙이는 바람에 **캐시 엔트리가 갈렸을 뿐**이다(우연한 은폐).
+//
+//   고치는 법은 URL 에 내용 해시를 박는 것이다. 내용이 바뀌면 URL 이 바뀌므로
+//   옛 캐시를 볼 일이 없고, 그제서야 immutable 이 안전해진다(그리고 최적이 된다).
+// ★이 표는 **빈 채로 커밋한다.** tools/build_deploy.py 가 dist/ 복사본에서
+//   아래 한 줄만 md5 표로 바꾼다(개발용 web/ 은 무버전 그대로여야 편하다).
+//   빌드가 이 줄을 글자 그대로 찾으므로 생김새를 바꾸지 말 것.
+const GLB_VER = {};
+
+// glb 경로에 버전을 붙인다. 키는 web/ 기준 상대경로다('basic2.glb', 'props/tree.glb').
+// ★표에 없으면(=개발판) 예전 그대로 페이지 쿼리를 물려준다. 로컬 python http.server 는
+//   Cache-Control 을 안 주고 Last-Modified 만 줘서 브라우저가 휴리스틱 캐시를 한다
+//   (오래된 파일일수록 오래 신선하다고 친다). 다시 구운 glb 가 안 보이던 이유이고,
+//   ?dev 로 여는 관행이 그걸 뚫고 있었다. 그 편의는 그대로 남긴다.
+function glbUrl(p) {
+  const i = p.indexOf('?');
+  const clean = i < 0 ? p : p.slice(0, i);
+  const v = GLB_VER[clean.replace(/^\.?\//, '')];
+  if (v) return clean + '?v=' + v;              // 배포: 해시 하나로 통일(?dev 와 안 섞인다)
+  return i < 0 ? p + location.search : p;       // 개발: 옛 규칙 그대로
+}
+
+// ★props.js·enemy.js·boss.js 도 glb 를 직접 읽는다. 셋을 각각 고치는 대신
+//   three.js 로더의 공식 훅에 한 번 건다. manager 를 따로 안 준 로더는 전부
+//   DefaultLoadingManager 를 쓰므로(Loader 생성자) 모든 glb 요청이 여기를 지난다.
+//   .glb 만 본다 - tex/ png·json 은 손대지 않는다(그쪽은 immutable 이 아니라 무죄다).
+// ★반드시 아래 동적 import 보다 **먼저** 걸어야 한다. enemy.js·boss.js 는 모듈
+//   최상단에서 곧바로 goblin.glb·boss.glb 를 읽는다(import 하는 순간 요청이 나간다).
+THREE.DefaultLoadingManager.setURLModifier(u => /\.glb(\?|$)/.test(u) ? glbUrl(u) : u);
+
 // 요괴·전투는 별도 모듈(main.js 가 이미 2천 줄이다).
 // 페이지 쿼리(?v=..)를 그대로 물려준다. 안 그러면 main.js 만 새로 받고 enemy.js 는
 // 캐시된 옛것이 돌아서 고친 게 반영 안 된 것처럼 보인다(index.html 이 쓰는 수법 그대로).
@@ -2835,7 +2875,10 @@ let charIdx = 0;
 let curChar = null;
 
 function loadChar(name, onDone) {
-  loader.load('./' + name + '.glb' + location.search, gltf => {
+  // ★쿼리는 glbUrl 이 정한다(맨 위 「glb 캐시 버전표」). 예전에는 여기서 페이지
+  //   쿼리를 그대로 붙였는데, 그게 배포본에서 「?dev 로만 새 모델이 보이는」 착시를
+  //   만들었다. 이제 배포는 ?v=<해시>, 개발은 페이지 쿼리다(섞이지 않는다).
+  loader.load(glbUrl('./' + name + '.glb'), gltf => {
     const m = gltf.scene;
     m.updateMatrixWorld(true);
     // ★키 기준은 **몸통 메시만**. 칼 7자루가 박스에 들어가면 바인드 포즈에서

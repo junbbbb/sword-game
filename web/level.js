@@ -22,6 +22,23 @@
 import * as THREE from './lib/three.module.js';
 import { GLTFLoader } from './lib/GLTFLoader.js';
 
+// ── glb 캐시 버전표 ────────────────────────────────────────────────────────
+// main.js 맨 위에 같은 표와 같은 주석(사고 전말)이 있다. 여기 한 벌을 더 두는 이유는
+// level.js 가 main.js 를 import 할 수 없기 때문이다(main.js 가 level.js 를 부른다 -
+// 반대로 걸면 순환이다). 빌드가 두 벌을 같이 채우므로 손으로 맞출 일은 없다.
+// ★빈 채로 커밋한다. tools/build_deploy.py 가 dist/ 복사본에서 이 한 줄만 md5 표로
+//   바꾼다. 빌드가 글자 그대로 찾으므로 생김새를 바꾸지 말 것.
+const GLB_VER = {};
+
+// glb 경로에 버전을 붙인다. 표에 없으면(=개발판) 예전처럼 페이지 쿼리를 물려준다.
+function glbUrl(p, q) {
+  const i = p.indexOf('?');
+  const clean = i < 0 ? p : p.slice(0, i);
+  const v = GLB_VER[clean.replace(/^\.?\//, '')];
+  if (v) return clean + '?v=' + v;
+  return i < 0 ? p + (q === undefined ? location.search : q) : p;
+}
+
 // ── 반경 기준값 ──
 // 몸통 반경이다. 칼을 휘두르는 폭이 아니다. 캐릭터 어깨폭이 0.5m 정도라 0.35 면
 // 어깨가 벽에 살짝 닿는 자리에서 멈춘다. 통로가 3.2m(=1칸)라 0.35 로도 둘이 스쳐
@@ -348,7 +365,9 @@ export async function loadLevel(scene, search) {
   buildGrid();
 
   const glb = await new Promise((ok, bad) => {
-    new GLTFLoader().load('./' + base + '.glb' + q, ok, undefined, bad);
+    // ★쿼리는 glbUrl 이 정한다(맨 위 「glb 캐시 버전표」). json 은 immutable 이 아니라
+    //   (vercel 기본이 max-age=0, must-revalidate 다) 예전처럼 q 를 그대로 쓴다.
+    new GLTFLoader().load(glbUrl('./' + base + '.glb', q), ok, undefined, bad);
   });
   ROOT = glb.scene;
   ROOT.traverse(o => {
@@ -379,6 +398,9 @@ export async function loadLevel(scene, search) {
   //   수풀만 구역별 메시(BUSH_01..16)로 심는데, 은신 연출이 그 이름을 찾기 때문이다.
   //   ★ROOT 밑에 붙인다(stealth.js 가 LV.root() 를 훑어 수풀을 찾는다).
   //   ★같은 쿼리로 부른다. 다른 URL 로 부르면 모듈 인스턴스가 갈린다.
+  //   ★props.js 안의 glb 경로는 여기서 손대지 않는다. main.js 가 three.js 로더에
+  //     걸어 둔 URL 훅(setURLModifier)이 소품 glb 에도 ?v=<해시>를 붙여 준다.
+  //     props.js 는 지금처럼 q 만 물려주면 된다.
   // ★13차. 던전(level2)은 props[] 가 비어 있다 - 모든 지오메트리가 glb 안에 있다.
   //   빈 채로 props.js 를 부르면 "props[] 가 없다"고 경고만 찍고 돌아온다. 평상 콘솔이
   //   비어 있어야 진짜 경고가 눈에 들어오므로, 심을 게 없으면 아예 안 부른다.
