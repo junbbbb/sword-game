@@ -13,36 +13,31 @@
      경고를 남긴다. **파일 자체는 fonts/ 에 그대로 둔다**(다른 데서 참조할 수 있다). -->
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  /* 로딩 중에는 ui.js 가 아직 없으므로 같은 토큰을 여기에도 독립 정본으로 둔다. */
+  /* ★로딩 중에는 ui.js 가 아직 없으므로 같은 토큰을 여기에도 **독립 정본**으로 둔다.
+     ui.js 의 :root 를 고칠 때 이 블록도 **같이** 고칠 것 - 안 그러면 로딩 화면과
+     게임 화면의 판 색이 갈린다. 16차 값(롤+SAO+메이플 블렌드)으로 맞춰 놓았다. */
   :root {
-    --rb-panel-a:#fffaf0;
-    --rb-panel-b:#f6ecd8;
-    --rb-panel-c:#ead5af;
-    --rb-deep:#4b321d;
-    --rb-ink:#3b2514;
-    --rb-line:#5a3d24;
-    --rb-line-soft:rgba(181,126,59,.42);
-    --rb-txt:#3b2414;
-    --rb-dim:#6d4d32;
-    --rb-mute:#9a7652;
-    --rb-drop:0 1px 0 #fff8e8;
-    --rb-drop-lg:0 2px 0 #fff8e8;
-    --rb-mint:#f4bb38;
-    --rb-gold:#f4b62d;
-    --rb-orange:#ef7e24;
-    --rb-red:#e94a34;
-    --rb-heart:#f25b4b;
-    --rb-green:#45d86e;
-    --rb-pop:inset 0 0 0 2px #fff8e8,inset 0 0 0 4px #c9954e,0 4px 0 #3b2514,0 12px 22px rgba(59,37,20,.24);
-    --rb-pop-sm:inset 0 0 0 1px #fff8e8,inset 0 0 0 3px #cf9b50,0 3px 0 #3b2514,0 7px 14px rgba(59,37,20,.20);
-    --rb-token:#f4b62d;
-    --rb-ok:#45b966;
+    --ui-glass:rgba(13,20,36,.90);
+    --ui-glass-2:rgba(7,12,23,.94);
+    --ui-deep:#05080f;
+    --ui-edge:rgba(196,230,255,.34);
+    --ui-edge-on:rgba(120,224,255,.78);
+    --ui-hair:rgba(255,255,255,.09);
+    --ui-txt:#eaf4ff;
+    --ui-dim:#9fb4cc;
+    --ui-mute:#63788e;
+    --ui-cy:#56d8ff;
+    --ui-cy-dim:#2f86a6;
+    --ui-gold:#ffbb3d;
+    --ui-red:#ff5a4a;
+    --ui-green:#3ddc84;
+    --ui-drop:0 8px 22px rgba(0,0,0,.55);
   }
-  html,body { width:100%; height:100%; overflow:hidden; background:var(--rb-panel-c);
+  html,body { width:100%; height:100%; overflow:hidden; background:#05080f;
     font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,
       "Apple SD Gothic Neo","Segoe UI","Malgun Gothic","Noto Sans KR",sans-serif; }
   #cv { display:block; width:100%; height:100%; }
-  .hud { position:fixed; color:var(--rb-dim);
+  .hud { position:fixed; color:var(--ui-dim);
     user-select:none; pointer-events:none; }
 
   /* ── 조작 안내 ──────────────────────────────────────────────────────────
@@ -61,25 +56,25 @@
   /* ★키캡은 아이보리 면 + 월넛 테 + 둥근 모서리다.
        진짜 값은 ui.js 가 나중에 덮는다. 여기 한 벌은 ui.js 가 붙기 전 한 프레임을 위한 것이다 */
   #help .k { display:inline-block; min-width:24px; padding:1px 7px 2px;
-    border:2px solid #8c6237; border-radius:7px; background:var(--rb-panel-a);
-    box-shadow:0 2px 0 #c89756; color:var(--rb-txt); font-size:12px;
+    border:0; background:rgba(20,30,50,.92);
+    box-shadow:inset 0 0 0 1px rgba(160,210,255,.42); color:var(--ui-txt); font-size:12px;
     font-weight:700; text-align:center; white-space:nowrap; }
   /* 캡 곁의 비-키 글자. 캡 사이의 「~」, 캡 앞의 「이동+」가 여기 속한다 */
-  #help .kx { color:var(--rb-mute); font-size:12px; white-space:nowrap; }
-  #help .t { color:var(--rb-txt); }
-  #help .t b { color:var(--rb-txt); font-weight:800; }
-  #help .hSep { height:2px; border-radius:1px; margin:7px 4px 8px 0;
-    background:var(--rb-line-soft); }
-  #help .hNote { color:var(--rb-mute); font-size:12px; line-height:1.55; padding-left:2px; }
+  #help .kx { color:var(--ui-mute); font-size:12px; white-space:nowrap; }
+  #help .t { color:var(--ui-dim); }
+  #help .t b { color:var(--ui-txt); font-weight:800; }
+  #help .hSep { height:1px; margin:7px 4px 8px 0;
+    background:linear-gradient(90deg,rgba(120,205,255,.34),rgba(120,205,255,0)); }
+  #help .hNote { color:var(--ui-mute); font-size:12px; line-height:1.55; padding-left:2px; }
 
   #sword { right:16px; bottom:18px; font-size:15px; font-weight:800;
-    color:var(--rb-txt); transition:opacity .25s; }
+    color:var(--ui-txt); transition:opacity .25s; }
   #stat { right:16px; top:14px; font-size:12px; text-align:right;
-    color:var(--rb-mute); line-height:1.7; }
-  #stat span { color:var(--rb-dim); }
+    color:var(--ui-mute); line-height:1.7; }
+  #stat span { color:var(--ui-dim); }
   #combo { position:fixed; left:50%; top:20%; transform:translateX(-50%);
-    font-size:44px; font-weight:800; white-space:nowrap; color:var(--rb-panel-a);
-    text-shadow:0 3px 0 #c9913e,0 6px 7px rgba(59,37,20,.28);
+    font-size:44px; font-weight:800; white-space:nowrap; color:#eaf6ff;
+    text-shadow:0 0 18px rgba(86,216,255,.55),0 2px 6px rgba(0,0,0,.7);
     opacity:0; letter-spacing:1px; }
 
   /* ── 로딩 진행 셸 ───────────────────────────────────────────────────────
@@ -93,45 +88,54 @@
        :root 토큰과 **같이** 바꿀 것 - 안 그러면 로딩과 게임의 판 색이 갈린다.
      ★13차 키트 값은 위 :root 에 ui.js 와 1:1로 둔다. */
   #load { position:fixed; inset:0; display:flex; align-items:center;
-    justify-content:center; background:radial-gradient(circle at 50% 42%,#fff8e8,var(--rb-panel-c)); z-index:9; }
-  /* 판: 메이플 창 크롬 - 네이비 타이틀 띠 + 놋쇠 실선 + 아이보리 몸통 + 미세 결.
-     ★14차. ui.js 의 창 규칙과 **같은 값**이어야 한다(띠 36px · 놋쇠 3px · 결 3px 주기).
-       로딩 화면은 여기가 정본이라, ui.js 쪽을 고칠 때 이 블록도 같이 고칠 것. */
-  #load .win { position:relative; padding:52px 38px 26px; border-radius:22px;
+    justify-content:center;
+    background:radial-gradient(ellipse at 50% 42%,#101c33 0%,#05080f 76%); z-index:9; }
+  /* 판: ui.js 의 창 규칙과 **같은 값**이어야 한다 - 어두운 유리 + 1px 시안 헤어라인 +
+     컷코너 14px + 위 가운데 시안 막대·실선·삼각 노치.
+     ★로딩 화면은 여기가 정본이라, ui.js 쪽을 고칠 때 이 블록도 같이 고칠 것. */
+  #load .win { position:relative; padding:70px 44px 30px;
+    clip-path:polygon(14px 0,calc(100% - 14px) 0,100% 14px,100% calc(100% - 14px),
+                      calc(100% - 14px) 100%,14px 100%,0 calc(100% - 14px),0 14px);
     background:
-      linear-gradient(180deg,#4a4571 0%,#332e52 100%) no-repeat left top / 100% 36px,
-      repeating-linear-gradient(0deg,rgba(122,86,45,.030) 0 1px,rgba(255,255,255,0) 1px 3px),
-      linear-gradient(180deg,var(--rb-panel-a),var(--rb-panel-b) 68%,var(--rb-panel-c));
-    border:3px solid var(--rb-line); box-shadow:var(--rb-pop); }
-  /* 놋쇠 실선. 띠와 몸통 사이 한 겹 */
-  #load .fr { position:absolute; left:0; right:0; top:33px; height:3px;
+      repeating-linear-gradient(0deg,rgba(120,190,255,.030) 0 1px,rgba(0,0,0,0) 1px 4px),
+      linear-gradient(180deg,var(--ui-glass) 0%,var(--ui-glass-2) 100%);
+    border:0;
+    box-shadow:inset 0 0 0 1.5px var(--ui-edge-on),inset 0 0 40px rgba(60,150,220,.10);
+    filter:drop-shadow(0 0 14px rgba(86,216,255,.26)) drop-shadow(0 10px 26px rgba(0,0,0,.62)); }
+  /* 위 가운데 시안 막대 + 그 아래 얇은 실선 */
+  #load .fr { position:absolute; left:0; right:0; top:0; height:34px;
     pointer-events:none; border-radius:0;
-    background:linear-gradient(90deg,rgba(201,149,78,0),#e8bf6d 18%,#f7dda2 50%,#e8bf6d 82%,rgba(201,149,78,0)); }
-  /* 카드 왼쪽 변에 걸친 원형 배지 */
+    background:
+      linear-gradient(90deg,rgba(86,216,255,0),var(--ui-cy) 22%,var(--ui-cy) 78%,rgba(86,216,255,0))
+        no-repeat 50% 0 / 132px 3px,
+      linear-gradient(90deg,rgba(86,216,255,0),rgba(120,205,255,.42) 30%,
+        rgba(120,205,255,.42) 70%,rgba(86,216,255,0)) no-repeat 50% 33px / 100% 1px; }
+  /* 삼각 노치. ui.js 카드와 같은 자리·같은 크기 */
+  #load .win::after { content:''; position:absolute; left:50%; top:34px; margin-left:-7px;
+    width:0; height:0; pointer-events:none;
+    border-left:7px solid transparent; border-right:7px solid transparent;
+    border-top:7px solid var(--ui-cy); opacity:.9; }
+  /* 13차의 원 뱃지는 이 벌에 없다(유리창에는 스티커가 안 붙는다) */
   #load .hd { display:block; text-align:center; }
-  #load .hd .ic { position:absolute; left:-34px; top:50%; margin-top:-32px;
-    width:64px; height:64px; border-radius:50%; font-style:normal;
-    border:3px solid var(--rb-line);
-    background:radial-gradient(circle at 42% 34%,#fffdf5 0%,#f8e4bd 54%,#dda95e 100%);
-    color:var(--rb-txt); font-weight:800; font-size:25px; line-height:1;
-    display:flex; align-items:center; justify-content:center;
-    box-shadow:var(--rb-pop-sm); }
-  /* 창 이름. 띠 안에 눕는다 */
-  #load .hd b { position:absolute; left:0; right:0; top:0; z-index:2;
-    height:33px; line-height:34px; text-align:center;
-    font-weight:800; font-size:12px; letter-spacing:.16em;
-    padding-left:.16em; color:#efe6ff; text-shadow:0 1px 0 rgba(18,14,34,.6); }
+  #load .hd .ic { display:none; }
+  /* 창 이름. 위 실선 바로 밑에 앉는다 */
+  #load .hd b { position:absolute; left:0; right:0; top:44px; z-index:2;
+    line-height:1; text-align:center;
+    font-weight:800; font-size:12px; letter-spacing:.22em;
+    padding-left:.22em; color:var(--ui-cy); text-shadow:0 0 10px rgba(86,216,255,.55); }
   #load .bd { padding-top:0; display:flex; flex-direction:column;
-    align-items:center; gap:12px; }
-  #load .ldTrack { position:relative; width:min(300px,54vw); height:14px;
-    border-radius:999px; border:3px solid var(--rb-line); background:var(--rb-deep);
-    overflow:hidden; }
+    align-items:center; gap:13px; }
+  #load .ldTrack { position:relative; width:min(300px,54vw); height:13px;
+    clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),
+                      calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px);
+    border:0; background:rgba(2,5,11,.94);
+    box-shadow:inset 0 0 0 1px rgba(150,205,245,.40); overflow:hidden; }
   #load .ldFill { position:absolute; left:0; top:0; bottom:0; width:100%;
-    transform:scaleX(0); transform-origin:0 50%; border-radius:6px;
-    background:linear-gradient(180deg,#8bf19f,var(--rb-green) 55%,#28ae55);
+    transform:scaleX(0); transform-origin:0 50%; border-radius:0;
+    background:linear-gradient(180deg,#9beeff,var(--ui-cy) 45%,#1f9dc4);
     transition:transform .28s cubic-bezier(.22,.8,.3,1); }
   #load .ldPct { font-size:13px; font-weight:800; letter-spacing:.02em;
-    color:var(--rb-txt); font-variant-numeric:tabular-nums; text-shadow:none; }
+    color:var(--ui-txt); font-variant-numeric:tabular-nums; text-shadow:none; }
 </style>
 </head>
 <body>
