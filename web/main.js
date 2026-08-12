@@ -655,6 +655,7 @@ const FX_STYLE = (() => {
   const v = (new URLSearchParams(location.search).get('fx') || 'b').toLowerCase();
   return (v === 'a' || v === 'c' || v === 'd') ? v : 'b';
 })();
+const RIBBON_V2 = 1;  // 0 = B 리본과 봉인칼 호를 16차 2라운드 직전 그림으로 함께 롤백
 const FX_TABLE = {};
 {
   // ── A 혜성 정제 ── 현행(11차 혜성판)의 소폭 개선. 가장 저위험.
@@ -712,7 +713,13 @@ const FX_TABLE = {};
     //   죽인다(처치의 붉은 먹물 튐 spawnInk 는 ink=1 이라 배수를 안 탄다 - 그대로 산다).
     //   흰 거품은 이제 feel.js 의 포말 마루층이 리본 바깥면에 붙여 그린다.
     bodyR: 0.82, outR: 3.50, sprayK: 0.0, wrapK: 1.0,
-    cfg: [
+    cfg: RIBBON_V2 ? [
+      // 바깥 마루의 inset 0 은 feel.js 포말 정박 계약이다. 본 리본은 기존 기하를
+      // 그대로 두고, 안쪽 겹 리본 한 가닥만 더해 독립 먹 경계를 만든다.
+      { kind: 2, at: 0.95, w: 0.09, inset: 0.00, headOnly: 1, lifeK: 0.80 },
+      { kind: 0, at: 0.90, w: HB,   inset: 0.02, headOnly: 0, lifeK: 1.00 },
+      { kind: 1, at: 0.84, w: 0.16, inset: 0.64, headOnly: 0, lifeK: 0.86 },
+    ] : [
       // 포말 마루 = 칼끝에 붙는다. 리본 본체는 그 바로 안쪽에서 방을 넓게 쓴다.
       { kind: 2, at: 0.95, w: 0.09, inset: 0.00, headOnly: 1, lifeK: 0.80 },
       { kind: 0, at: 0.90, w: HB,   inset: 0.02, headOnly: 0, lifeK: 1.00 },
@@ -853,6 +860,7 @@ const trailMat = new THREE.ShaderMaterial({
               // ★12-FX-D. 네 벌의 채색 분기(0=A 혜성 · 1=B 리본 · 2=C v95 · 3=D 잔광).
               //   기하(폭·수명·가닥)는 updateTrail 이, 그림은 여기가 가른다.
               uMode: { value: FX.mode },
+              uRibbonV2: { value: RIBBON_V2 },
               // 1m 가 화면에서 몇 화소인가(플레이어 깊이 기준). updateTrail 이 매 칸 갱신
               uPxPerM: { value: 50 } },
   vertexShader: `
@@ -871,6 +879,7 @@ const trailMat = new THREE.ShaderMaterial({
     uniform sampler2D uTex;
     uniform float uUseTex;
     uniform float uMode;       // 0=A 혜성 · 1=B 리본 · 2=C v95 · 3=D 잔광
+    uniform float uRibbonV2;   // 1=B·봉인칼 V2 · 0=둘 다 직전 채색
     uniform float uPxPerM;
     #define C_DK2 uPal[0]
     #define C_DK1 uPal[1]
@@ -919,7 +928,11 @@ const trailMat = new THREE.ShaderMaterial({
     }
 
     void main(){
-      if (vA <= 0.004) discard;
+      if (uMode > 0.5 && uMode < 1.5 && uRibbonV2 > 0.5) {
+        if (!(vA > 0.004)) discard;
+      } else {
+        if (vA <= 0.004) discard;
+      }
       float u = vUV.x, v = vUV.y;
       // ★vSeed 는 이제 **가닥 번호**다. 0 = 본 획 / 1 = 겹 획 / 2 = 마루 심선.
       //   (v96 의 kind 0/1/2 = 몸통/포말/가는 심 은 가닥이 하나뿐이던 시절의 이름이고
@@ -928,6 +941,44 @@ const trailMat = new THREE.ShaderMaterial({
       float sd = vSeed * 2.7 + 1.0 + floor(uT * 24.0) * 0.31;
 
       if (uStyle > 0.5 && uStyle < 1.5) {
+        if (uMode > 0.5 && uMode < 1.5 && uRibbonV2 > 0.5) {
+          // 16차 리본 R3 봉인칼. 원소색 대신 uPal에서 뽑은 무채 먹 계단으로 칠한다.
+          // 본 획은 전폭, 안쪽 겹 획은 어둡게 쓰고 바깥 마루는 포말 자리를 위해 버린다.
+          float pDE = 1.0 - abs(v - 0.5) * 2.0;
+          float pCut = (kind < 0.5 ? 0.10 : 0.06) * noise(vec2(u * 9.0 + sd, 4.0));
+          float pDN = (pDE - pCut) / max(1.0 - pCut, 1e-3);
+          float pEA = smoothstep(0.0, 0.004, pDN);
+          if (!(pEA > 0.02)) discard;
+          float pHalfPx = max(1.5, vHalf * uPxPerM);
+          float pOw = clamp(3.0 / pHalfPx, 0.10, 0.30);
+
+          float pInkY = dot(C_DK2, vec3(0.299, 0.587, 0.114)) * 0.70;
+          float pDarkY = dot(C_DK1, vec3(0.299, 0.587, 0.114)) * 0.38;
+          float pMidY = dot(C_MID, vec3(0.299, 0.587, 0.114)) * 0.48;
+          float pLightY = dot(C_LT1, vec3(0.299, 0.587, 0.114)) * 0.62;
+          vec3 P_K = vec3(pInkY);
+          vec3 P_D = vec3(pDarkY);
+          vec3 P_M = vec3(pMidY);
+          vec3 P_L = vec3(pLightY);
+          vec3 P_H = C_WHT * 0.70;
+          vec3 pc = v < 0.18 ? P_K : (v < 0.42 ? P_D : (v < 0.66 ? P_M
+            : (v < 0.84 ? P_L : (v < 0.92 ? P_H : P_K))));
+
+          // 한 화소 안팎의 내부 먹선으로 평칠 단을 분리한다. 겹 획은 한 단 더 눌러
+          // 원소 리본이 아니라 봉인된 칼의 잔흔으로 남긴다.
+          float pSeamW = clamp(0.24 / pHalfPx, 0.008, 0.035);
+          float pSeamD = min(min(abs(v - 0.18), abs(v - 0.42)),
+                             min(abs(v - 0.66), abs(v - 0.84)));
+          if (kind < 1.5 && pSeamD < pSeamW) pc = P_K;
+          if (kind > 0.5 && kind < 1.5) pc = mix(pc, P_K, 0.35);
+          // 포말이 서는 tipR 바깥 0.08m를 비운다. kind 2의 기하 정박 계약은
+          // 유지하되 봉인칼 V2에서만 래스터를 버린다(B 리본은 아래 분기에서 그대로 사용).
+          if (kind > 1.5) discard;
+          if (pDN < pOw) pc = P_K;
+          gl_FragColor = vec4(pc, vA * pEA);
+          return;
+        }
+
         // --- 평범한 검기: 원소 없이 얇고 깔끔한 흰빛 호 ---
         // ★v92. 여기도 끝을 흐리지 않고 **선으로 끊는다**. 바깥 한 겹은 먹(uPal[0]).
         // ★v94. 1번 녹슨 칼(plain)이 style=1 이다. 심사: "1번 칼은 이펙트가 사실상
@@ -1025,46 +1076,80 @@ const trailMat = new THREE.ShaderMaterial({
           } else {
             tlum = noise(vec2(u * 7.0 - sc * 3.4 + sd, bt * 3.0));
           }
-          // 찢긴 구멍은 파란 몸통에만. 바깥 흰 심·포말은 안 뚫는다(획이 토막난다).
-          if (uUseTex > 0.5 && talp < 0.30 && bt < 0.58) discard;
-          // ★질감이 밴드 자리를 얼마나 미는가. 0.30 으로는 흐르는 것이 눈에 안 보였다
-          //   (실측 크롭 z3: A 와 색만 다른 띠로 읽혔다). 0.55 면 1/24 마다 밴드
-          //   경계가 눈에 띄게 물결친다 = 이 벌의 정체성이다.
-          float bs = clamp(bt + (tlum - 0.5) * 0.55, 0.0, 1.0);
+          if (uRibbonV2 < 0.5) {
+            // 롤백 경로: 16차 2라운드 직전 B 채색을 그대로 보존한다.
+            if (uUseTex > 0.5 && talp < 0.30 && bt < 0.58) discard;
+            float bs = clamp(bt + (tlum - 0.5) * 0.55, 0.0, 1.0);
+            vec3 c;
+            if (kind > 1.5) {
+              c = bs < 0.50 ? C_LT3 : C_WHT;
+            } else {
+              c = bs < 0.42 ? C_DK1 : bs < 0.64 ? C_MID : bs < 0.78 ? C_LT1
+                : bs < 0.90 ? C_LT2 : C_LT3;
+              float ws = min(0.90, 1.0 - clamp(3.4 / halfPx, 0.06, 0.18));
+              if (bs > ws) c = C_WHT;
+              c *= 0.74 + 0.44 * tlum;
+              float fo = noise(vec2(u * 13.0 + sd * 3.0, bt * 4.0 + sd));
+              if (bt > 0.62) {
+                if (fo > 0.62) c = C_WHT;
+                else if (fo > 0.54) c = C_DK2 * 0.55;
+              }
+            }
+            if (dN < ow) c = C_DK2 * 0.42;
+            else if (dN < rw) c = C_LT3;
+            if (uStyle > 1.5) {
+              float hl = noise(vec2(u * 26.0 + sd * 5.0, v * 14.0));
+              if (hl < 0.06 + 0.30 * u) discard;
+            }
+            float ls = min(1.0, floor(u * 4.0) / 3.0);
+            c = mix(c, C_DK1, 0.30 * ls);
+            gl_FragColor = vec4(c, vA * ea);
+            return;
+          }
+
+          // 16차 리본 V2. feel.js 포말이 바깥 흰 밴드를 맡으므로 본체는 낮은
+          // 명도 사다리와 먹 이음선으로 받친다. 텍스처는 경계만 흔들고 밝기는 못 올린다.
+          if (uUseTex > 0.5 && talp < 0.30 && kind < 1.5 && bt < 0.58) discard;
+          float bw = clamp(bt + (tlum - 0.5) * 0.14, 0.0, 1.0);
+          vec3 B_K = C_DK2 * 0.24;
+          vec3 B_N = C_DK1 * 0.30;
+          vec3 B_M = C_MID * 0.42;
+          vec3 B_C = C_LT1 * 0.82;
+          float outerOw = ow * 0.72;
           vec3 c;
           if (kind > 1.5) {
-            // 마루(포말 심선)는 얇으니 두 단만
-            c = bs < 0.50 ? C_LT3 : C_WHT;
+            // 바깥 마루 안내선은 흰색을 쓰지 않는다. 포말 아래의 어두운 받침이다.
+            c = bw < 0.55 ? B_N : B_C;
+          } else if (kind > 0.5) {
+            // 안쪽 겹 리본은 장식용 두 번째 시안판이 아니라 독립 먹 경계다.
+            c = (bw < 0.20 || bw > 0.82) ? B_K : B_N;
           } else {
-            // ★1차 시도에서 밝은 단(C_LT1~C_LT3)이 폭의 절반을 먹어 **연회색 판**이
-            //   됐다(실측: 획 휘도 175 vs 배경 156 · 채도 0.36). 원작의 물은 배경보다
-            //   밝은 것이 아니라 **짙고 채도가 높다**(감청 -> 시안 -> 흰 심 한 겹).
-            //   그래서 짙은 쪽으로 무게를 옮기고 질감으로 한 번 더 눌렀다.
-            c = bs < 0.42 ? C_DK1 : bs < 0.64 ? C_MID : bs < 0.78 ? C_LT1
-              : bs < 0.90 ? C_LT2 : C_LT3;
-            // 흰 심은 바깥 **한 겹**. 화소 하한을 둬서 가는 마디에서도 안 사라진다.
-            float ws = min(0.90, 1.0 - clamp(3.4 / halfPx, 0.06, 0.18));
-            if (bs > ws) c = C_WHT;
-            // 붓결: 질감 밝기로 한 번 더 누른다(v95 의 pow 1.18 과 같은 목적).
-            c *= 0.74 + 0.44 * tlum;
-            // ── 포말 흰 점 ── 바깥 가장자리 띠에만, 크고 드물게. 덩어리마다 남색 윤곽.
-            // ★잔 점을 많이 찍으면 꼬리에서 말뚝 울타리가 된다(v92 실측 함정).
-            //   그래서 주파수를 낮게(u*13) 두고 문턱으로 크게 끊는다.
-            float fo = noise(vec2(u * 13.0 + sd * 3.0, bt * 4.0 + sd));
-            if (bt > 0.62) {
-              if (fo > 0.62) c = C_WHT;
-              else if (fo > 0.54) c = C_DK2 * 0.55;
-            }
+            // 안쪽이 가려져도 K/N이 남도록 바깥 절반에도 먹과 감청을 한 번 더 놓는다.
+            c = bw < 0.12 ? B_K : bw < 0.30 ? B_N : bw < 0.44 ? B_M
+              : bw < 0.61 ? B_C : bw < 0.69 ? B_K : bw < 0.84 ? B_C : B_N;
+
+            // 흰 심은 머리 세 구간에서 폭 12% -> 8% -> 4% -> 0 으로 사라진다.
+            float ub = floor(clamp(u, 0.0, 0.999) * 8.0);
+            float whiteW = ub < 1.0 ? 0.12 : (ub < 2.0 ? 0.08 : (ub < 3.0 ? 0.04 : 0.0));
+
+            // 약 1px 내부 먹선. 이미 먹인 경계에는 중복선을 긋지 않는다.
+            float seamW = clamp(0.26 / halfPx, 0.008, 0.040);
+            float seamD = min(abs(bw - 0.30), min(abs(bw - 0.44), abs(bw - 0.84)));
+            if (seamD < seamW) c = B_K;
+
+            // 흰 심을 외곽선 바로 안쪽의 dN 구간으로 옮긴다. 폭이 얇아져도 외곽 먹이
+            // 먼저 차지한 자리와 겹치지 않아 12% -> 8% -> 4%가 실제로 남는다.
+            if (whiteW > 0.0 && bt > 0.5 && dN >= outerOw
+                && dN < outerOw + 2.0 * whiteW) c = C_WHT;
           }
-          if (dN < ow) c = C_DK2 * 0.42;          // 먹 테두리(화소 고정)
-          else if (dN < rw) c = C_LT3;            // 갓선
-          if (uStyle > 1.5) {                     // 불은 속이 뚫린다
+
+          // 안쪽은 3.6px, 포말 쪽은 2.6px 먹으로 닫는다. 밝은 갓선은 포말과 겹치므로 없다.
+          if (bt < 0.5 && dN < ow) c = B_K;
+          else if (bt >= 0.5 && dN < outerOw) c = B_K;
+          if (uStyle > 1.5) {
             float hl = noise(vec2(u * 26.0 + sd * 5.0, v * 14.0));
             if (hl < 0.06 + 0.30 * u) discard;
           }
-          // 꼬리는 감청으로 가라앉되 리본이라 혜성보다 덜 뺀다(몸통이 길게 산다).
-          float ls = min(1.0, floor(u * 4.0) / 3.0);
-          c = mix(c, C_DK1, 0.30 * ls);
           gl_FragColor = vec4(c, vA * ea);
           return;
         }
