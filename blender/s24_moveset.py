@@ -4,6 +4,18 @@
     blender -b -P blender/s24_moveset.py
     -> web/hero2.glb  (hero 몸 + slayer 액션 Idle/Walk/Run/Attack/Heavy/Wide/Jump)
 
+★★2026-08-13 이후 이 파일은 **모션을 만드는 곳**이기도 하다 (15-모션수제)
+  베기 3종(Attack/Heavy/Wide)은 더 이상 남의 모션을 옮겨오지 않는다.
+  손잡이 `HAND=Attack,Heavy,Wide` 를 주면 아래 [7c 수제 키프레임] 절의
+  HAND_SPEC 표(= 손으로 짠 키프레임)로 굽는다. 오너가 프리셋 트림을 두 번
+  기각했기 때문이다("칼 베는거 안고쳐짐 그냥 너가 직접 베는 모션 만들어").
+  세 갈래 중 어느 길로 굽는지는 파일 맨 아래 한 곳에서 갈린다:
+      HAND 에 있으면  -> bake_hand()   수제 키프레임          (지금 공정)
+      ANIM 에 있으면  -> bake_alt()    Meshy 프리셋 트림      (13·14차. 폐기)
+      둘 다 아니면    -> bake()        slayer 리타게팅        (Idle/Walk/Run/Jump)
+  ★Jump 는 여전히 리타게팅이다. 다만 팔만 위상표로 덮어쓴다([오른팔 내리기]·
+    [한 손 파지] 절). 다리·몸통의 도약·착지가 좋아서 남겨 둔 것이다.
+
 이 스크립트의 존재 이유
   Meshy 로 뽑는 고품질 캐릭터는 모션이 걷기/달리기 정도밖에 없다. 반대로 우리가
   손으로 만든 전투 모션(combo_poses.py)은 토이솔저 리그에만 있다. 둘을 붙이는
@@ -118,6 +130,9 @@
   DST_SWORD 타깃 자루 메시           기본 자동탐색(SW_ 로 시작하는 첫 메시)
   SWORD_FIT 1(기본) 타깃 검을 소스와 같은 각도로 주먹에 다시 꽂는다 / 0 원본 유지
   GRIP_IK   1(기본) 왼팔 IK 사용 / 0 순수 리타게팅만(비교용)
+  HAND      수제 키프레임으로 구울 클립(쉼표). 지금 공정은 Attack,Heavy,Wide.
+            빈 값이면 옛 길(ANIM 프리셋 / slayer 리타게팅)로 돌아간다
+  DBG_REACH 1 이면 프레임마다 왼팔이 자루까지 몇 배 뻗는지 좌표까지 찍는다(디버그)
   GRIP_K    왼손목-자루 오프셋 환산 보정(기본 1.0. 손 크기가 키 대비 많이 다를 때만)
   GRIP_ON/GRIP_OFF  파지 게이트 문턱(키 정규화. 기본 0.10 / 0.18)
   RELEASE   한 손으로 쥘 클립(쉼표)   기본 Jump  (빈 값이면 전부 양손)
@@ -988,13 +1003,16 @@ def grip_target():
 #   올라가는 동안 **f7 에서 멈춰 있고** 내려오는 동안 **f13 에서 멈춘다.** 착지하면
 #   f16~f23 만 재생한다. 그래서 화면에서 제일 오래 보이는 것이 f7·f13 자세다.
 #   표의 t=0.27(f7) t=0.55(f13) 이 그 두 장이다.
+# ★2026-08-13 오너 지시 3차로 벌림을 절반 가까이 줄였다. "그냥 양팔이 살짝
+#   벌려지는 정도 아님?" — 옛 값 40~54도는 만세에 가까웠다. 새 값은 오른팔(SWD_KEYS
+#   의 A 20~28도)과 **좌우 대칭**이 되게 20~30도로 맞췄다. 그게 곧 "양팔이 살짝".
 BAL_KEYS = [                    # (위상 t, 벌림 A도, 앞으로 F도, 뻗음 k=팔길이 비)
-    (0.00, 14, -12, 0.82),      # f1  웅크림. 아직 자루를 쥐고 있다(가중치 0)
-    (0.18, 40, 18, 0.88),       # f5  도약. 손을 놓으며 팔이 벌어진다
-    (0.27, 46, 24, 0.90),       # f7  ★상승 내내 이 자세로 멈춘다
-    (0.55, 54, 4, 0.92),        # f13 ★하강 내내 이 자세로 멈춘다(팔을 뒤로 벌려 준비)
-    (0.70, 34, 10, 0.86),       # f16 착지 흡수. 팔을 내린다
-    (1.00, 18, 2, 0.82),        # f23 회복. Idle 로 0.18초 크로스페이드되며 다시 쥔다
+    (0.00, 12, -8, 0.84),       # f1  웅크림. 아직 자루를 쥐고 있다(가중치 0)
+    (0.18, 20, 10, 0.86),       # f5  도약. 손을 놓으며 팔이 살짝 벌어진다
+    (0.27, 26, 14, 0.88),       # f7  ★상승 내내 이 자세로 멈춘다
+    (0.55, 30, 2, 0.90),        # f13 ★하강 내내 이 자세로 멈춘다
+    (0.70, 22, 8, 0.86),        # f16 착지 흡수. 팔을 내린다
+    (1.00, 14, 2, 0.82),        # f23 회복. Idle 로 0.18초 크로스페이드되며 다시 쥔다
 ]
 BAL_ON, BAL_FULL = 0.02, 0.18   # 파지->균형 전환 구간(위상). 도약 순간에 놓는다
 # 팔꿈치가 향할 방향(가슴 좌표계 X=왼쪽/Y=위/Z=앞). 아래·약간 뒤·약간 안쪽.
@@ -1084,14 +1102,27 @@ def balance_target(pose, t):
 #   화면에 제일 오래 보이는 두 장이라 거기를 먼저 정하고 나머지를 이었다.
 # ★착지(f16~) 는 소스가 이미 팔을 내린다(팔 고도 +2 -> -38도). 그래서 가중치를
 #   0 으로 되돌려 **소스의 착지 팔스윙을 살린다**. 힘으로 붙들면 착지가 뻣뻣해진다.
+# ★★2026-08-13 오너 지시 3차로 **Wd(칼끝 벌림)를 통째로 다시 잡았다.**
+#   "점프할때 왜 칼 뒤로감? 뭐 보통 한손으로 칼들고 점프하면 그냥 양팔이
+#    살짜가벌려지는정도아님?"
+#   진단: Wd 는 **'뒤'에서 재는 각**이다(위 swd_dirs 의 b 식. Wd=0 이면 정확히 뒤).
+#   옛 값 22~40도는 곧 "칼끝을 거의 정확히 뒤로" 라는 뜻이었고, 실측도 그랬다
+#   (칼끝 골반기준 뒤 -1.44~-1.50m). 팔을 내리려고 칼끝 고도만 신경 쓰다가
+#   방위를 안 본 것이다. 90도 부근이 '몸 옆(오른쪽)', 그보다 크면 옆·앞이다.
+#   그래서 Wd 를 88~106 으로 옮겼다 = **칼이 몸 옆으로 나간다.**
+#   ★칼끝을 옆으로 두면 바닥 관통 걱정도 같이 준다(고도를 -18도만 줘도 되니까).
+#   ★A(팔 벌림)는 오너 말대로 "살짝"인 20~28도다(어깨 외전 15~30도 구간).
+#     E 와 A 를 이 조합으로 둔 데는 기하 근거가 있다: 이 리그의 팔-칼 사잇각은
+#     ~45도로 파지가 고정한 상수라, 둘을 45도 안팎으로 떨어뜨려야 손목 잔각
+#     (SWD_WRIST 22도 상한)이 안 터진다. 옛 조합은 90도 가까이 벌어져 있었다.
 SWD_KEYS = [       # (위상 t, 칼끝 고도 E도(음수=아래), 칼끝 벌림 Wd도(뒤에서 오른쪽),
                    #          팔 벌림 A도, 팔 앞으로 F도(음수=뒤))
-    (0.00, -10, 40, 16, 24),    # f1  웅크림. 가중치 0이라 소스 그대로다
-    (0.20, -16, 30, 20, -4),    # f5  도약. 검이 내려가며 뒤로 끌린다
-    (0.27, -22, 26, 22, -12),   # f7  ★상승 내내 이 자세로 멈춘다
-    (0.55, -26, 22, 20, -18),   # f13 ★하강 내내 이 자세로 멈춘다(더 뒤·아래로)
-    (0.70, -20, 26, 20, -8),    # f16 착지. 칼끝을 들며 팔이 앞으로 돌아오기 시작
-    (1.00, -12, 34, 18, 0),     # f23 회복(가중치 0. 소스 착지 스윙으로 돌아간다)
+    (0.00, -14, 62, 14, 10),    # f1  웅크림. 가중치 0이라 소스 그대로다
+    (0.20, -22, 84, 20, 6),     # f5  도약. 칼이 몸 옆으로 나오기 시작
+    (0.27, -27, 90, 26, 4),     # f7  ★상승 내내 이 자세로 멈춘다
+    (0.55, -29, 94, 30, -2),    # f13 ★하강 내내 이 자세로 멈춘다(조금 더 벌어짐)
+    (0.70, -20, 86, 22, 4),     # f16 착지 흡수. 팔이 돌아오기 시작
+    (1.00, -14, 76, 16, 2),     # f23 회복(가중치 0. 소스 착지 스윙으로 돌아간다)
 ]
 # 가중치(위상, w). 도약 0.2초 안에 다 내리고, 착지 뒤에 소스로 돌려준다.
 SWD_W = [(0.00, 0.0), (0.03, 0.0), (0.20, 1.0), (0.70, 1.0), (0.88, 0.55), (1.00, 0.0)]
@@ -1402,6 +1433,7 @@ def bake(name):
                   % (t, f0 + int(round(t * (nf - 1))), E, Wd, A, F, _key_at(SWD_W, t)[0]))
 
     lows, maxerr, befs, afts, swds, wrs = [], 0.0, [], [], [], []
+    jtips, jhnds, jhips = [], [], []
     for i, f in enumerate(range(f0, f1 + 1)):
         sc.frame_set(f)
         bpy.context.view_layer.update()
@@ -1432,6 +1464,12 @@ def bake(name):
                 b = (A2W @ pose[bn]).translation
                 maxerr = max(maxerr, (a - b).length)
         lows.append(low_of(DST_BODY))
+        if TIP_DIR is not None and D_SW:
+            HMj = A2W @ pose[HAND_R]
+            jtips.append(HMj @ (TIP_DIR * D_SW[2] * ANIM_TIP_K
+                                / HMj.to_3x3().to_scale()[0]))
+            jhnds.append(wpos(pose, HAND_R))
+            jhips.append(wpos(pose, PELVIS))
     shift = BIND_LOW - pct(lows, 0.10)
     print("   해석식 자기검증: Blender 평가와 뼈 위치 최대 오차 %.7f (키의 %.5f%%)"
           % (maxerr, maxerr / DH * 100))
@@ -1468,6 +1506,17 @@ def bake(name):
                  f0 + max(act_f, key=lambda r: r[1])[0],
                  sum(d for _, d, _ in act_f) / len(act_f),
                  max(wr for _, _, wr in act_f)))
+
+    if swd and jtips:
+        gkj = 1.75 / DH
+        print("   ★칼끝(게임 1.75m 환산): 프레임 / 바닥여유 / 골반기준 오른쪽·위·앞 /"
+              " 오른손 높이")
+        for i, t in enumerate(jtips):
+            d = t - jhips[i]
+            print("     f%-3d  바닥 %+.3f   오른 %+.2f 위 %+.2f 앞 %+.2f   손 %.2f"
+                  % (i, (t.z + shift - BIND_LOW) * gkj,
+                     -d.dot(W_LFT) * gkj, d.dot(W_UP) * gkj, d.dot(W_FWD) * gkj,
+                     (jhnds[i].z + shift - BIND_LOW) * gkj))
 
     # --- 2차: 보정을 넣고 키를 찍는다 ---
     act = new_action(name)
@@ -1651,9 +1700,508 @@ def bake_alt(name, segs):
     return act
 
 
+# =============================================== 7c) 수제 키프레임 (15-모션수제)
+# ★오너 지시(2026-08-12 밤): "칼 베는거 안고쳐짐 그냥 너가 직접 베는 모션 만들어.
+#   위에서아래로. 옆으로."
+#   Meshy 프리셋 트림(13-모션이식 -> 14-베기수정)으로 두 번 고쳤는데 두 번 다
+#   기각됐다. 소스가 **한 손 과장 연기**라 어디를 잘라도 몸짓이 남는다 —
+#   자르는 일로는 끝이 없다는 뜻이라, Z/X/C 를 손으로 짠 키프레임으로 다시 만든다.
+#   (ANIM_DIR/ANIM_SPEC 프리셋 경로는 코드로 남겨 두었다. HAND 를 안 주면 그 길이
+#    그대로 살아 있어서 14차 판이 언제든 재현된다.)
+#
+# ── 무엇을 손으로 적나 (뼈 각도를 직접 적지 않는다) ──
+# 뼈 로컬 각도를 적으면 리그마다 축이 달라 읽을 수도 고칠 수도 없다(이 레포에서
+# 두 리그의 손뼈 로컬축이 46~74도 어긋나 있다). 그래서 **화면에서 보이는 것**을 적는다:
+#     bel/baz   칼끝이 어디를 겨누나   가슴 좌표계 고도(+위)/방위(0=앞, +=왼쪽)
+#     arl       팔을 **칼 축 둘레 어디에** 둘 것인가(roll 도. 0=칼 아래쪽)
+#               ★팔이 칼과 이루는 각은 파지가 정한 상수(약 80도)라 팔에
+#                 줄 수 있는 자유는 이 하나뿐이다. 자세한 근거는 아래 겨누기 절.
+#     bend      팔꿈치를 얼마나 더 굽히나(바탕 자세 대비 증분. +=더 굽힘)
+#     ty/tp/tr  가슴 돌림(+왼쪽)/숙임(+앞)/기울임(+오른쪽)
+#     hy        골반 돌림(+왼쪽. 발은 제자리라 허리가 꼬인다)
+#     cr        웅크림(도). 엉덩이-무릎-발목 3분절이 같이 접혀 골반이 내려간다
+#     lg        스탠스(도). + 는 **왼발이 앞·오른발이 뒤**(오른손잡이 칼 발놀림).
+#               허벅지만 앞뒤로 갈라 돌린다 = 발이 앞뒤로 벌어지고 골반이 내려앉는다.
+#               ★이게 없으면 아무리 칼을 잘 휘둘러도 "제자리에 뻣뻣하게 서서 팔만
+#                 흔드는" 그림이 된다(1차 실루엣 시트에서 그대로 보였다).
+#     gw        왼손이 자루를 쥔 정도(1=두 손. 0 이면 왼팔이 바탕 자세로 남는다)
+# 이 값들은 **회전 하나**로 오른팔에 먹인다(= [오른팔 내리기] 절이 점프에서 쓰던
+# 검증된 방식 그대로):
+#     1) 칼끝을 목표 방향으로 보내는 최소회전
+#     2) **칼축 둘레**로 더 돌려(칼끝은 안 움직인다) 팔을 arl 자리에 놓는다
+#   ★팔 목표를 '절대 방향'으로 주면 안 되는 이유는 아래 겨누기 절에 실측으로 적었다.
+#     (그래서 HAND_WRIST 손목 잔각은 지금 늘 0 이다 — 진단용으로만 남겨 둔다)
+#
+# ── ★바탕 자세 = Idle 첫 프레임 ──
+# f0 을 Idle 과 **같은 자세**로 두면 크로스페이드가 건너뛸 거리가 0 이라
+# "캐스트 첫 프레임 물보라"(14차의 남은 것 3번)가 구조적으로 사라진다.
+# 프리셋을 트림하는 방식으로는 절대 못 하던 것이다 — 소스의 첫 자세는 남의 자세니까.
+# 그래서 f0 키는 **자동으로** 바탕값이 박히고(아래 base), 마지막 키에 "base" 라고
+# 적으면 그 채널이 다시 바탕값으로 돌아온다.
+#
+# ── ★채널마다 따로 키를 찍는다 ──
+# 한 프레임에 모든 채널을 적을 필요가 없다. 적은 채널만 그 프레임에 키가 생기고
+# 나머지는 자기 이웃 키끼리 이어진다(진짜 키프레임 작업과 같다). 보간은
+# Catmull-Rom 이라 키를 촘촘히 두면 그 구간이 빨라지고, 살짝 넘어갔다 돌아오는
+# **오버슛**도 공짜로 생긴다(팔로스루의 문법).
+#
+# ── ★애니메이션 문법(오너가 두 번 기각한 것을 피하는 규칙) ──
+#   · 예비(안티시페이션)는 **짧게**. 2~4장. 길면 "야구 투구 폼"으로 읽힌다.
+#   · 예비에서 손을 **가슴 뒤로 감지 않는다**. 투구 판정자(probe_moves_read)는
+#     "손이 어깨 위 +0.05H **그리고** 가슴 뒤 +0.20H" 인 장을 센다. 위로는 들되
+#     뒤로는 안 간다 = 세로 베기의 본질만 남긴다.
+#   · 임팩트는 **한 구간에 몰아서**. 칼끝이 그 구간에서만 HOT_ON 을 넘어야
+#     스윙 번호가 하나로 뜬다.
+#   · 스윙 사이에는 칼끝을 HOT_OFF 아래로 **두 장 이상** 떨어뜨린다(정지 타격감도
+#     같이 번다). 안 그러면 히스테리시스 때문에 세 타가 한 번호로 묶인다.
+#   · 몸통이 팔을 리드하고(ty/hy 가 먼저 돌고) 손목이 마지막에 스냅한다.
+HAND = [c.strip() for c in os.environ.get("HAND", "").split(",") if c.strip()]
+HAND_WRIST = float(os.environ.get("HAND_WRIST", "26"))   # 지금은 안 쓴다(잔각 0)
+# 웅크림 회전 부호. 무릎이 앞으로 나가는 쪽이 +1 이다(1차 실행에서 무릎 전방
+# 변위를 찍어 확정했다. 반대로 두면 무릎이 뒤로 꺾인다).
+CR_SGN = -1.0
+DBG_REACH = os.environ.get("DBG_REACH", "0") == "1"
+
+W_UP = Vector((0, 0, 1))
+W_FWD = facing(DREST).to_3d()
+W_FWD.z = 0
+W_FWD.normalize()
+W_LFT = W_UP.cross(W_FWD).normalized()
+# 가슴 회전이 실릴 뼈(골반·다리는 뺀다). 팔은 몸통을 따라 통째로 돈다.
+UPPER = [b for b in ORDER if b not in (
+    PELVIS, "Bip001 L Thigh", "Bip001 R Thigh", "Bip001 L Calf", "Bip001 R Calf",
+    "Bip001 L Foot", "Bip001 R Foot", "Bip001 L Toe0", "Bip001 R Toe0",
+    "Bip001 L Toe0Nub", "Bip001 R Toe0Nub")]
+THIGHS = [b for b in ("Bip001 L Thigh", "Bip001 R Thigh") if b in PARENT]
+CALFS = [b for b in ("Bip001 L Calf", "Bip001 R Calf") if b in PARENT]
+THIGH_LEN = (DREST["Bip001 L Calf"][1] - DREST["Bip001 L Thigh"][1]).length
+LEG_LEN = (THIGH_LEN
+           + (DREST["Bip001 L Foot"][1] - DREST["Bip001 L Calf"][1]).length)
+
+# ── 수제 키프레임 대본 ──
+# (프레임, {채널: 값}).  f0 은 자동으로 바탕값이라 여기 안 적는다.
+# "base" = 그 채널의 바탕값(Idle 첫 프레임)으로 돌아간다.
+# ★★대본을 짤 때 지켜야 하는 산수 (1차 실행에서 그대로 물렸다)
+#   1) **칼끝 속도는 게임이 HOT_ON 15.8 로 자른다.** 한 프레임에 칼끝이
+#      15.8/(30*재생속도) m 넘게 움직이면 그 장은 hot 이다 = 예비동작·회수에서도
+#      **스윙 번호가 발급되고 피해가 들어간다**(1차 실행에서 X 가 스윙 3개였다).
+#        Attack ts1.35 -> 0.390 m/장   Heavy ts1.15 -> 0.458   Wide ts1.20 -> 0.439
+#      예비·회수는 그 아래로, 임팩트만 그 위로.
+#   2) 스윙 사이는 **HOT_OFF(게임 9.36) 아래로 두 장 이상** = 0.26/0.23 m/장 아래.
+#      안 그러면 히스테리시스가 안 꺼져 세 타가 한 번호로 묶인다.
+#   3) ★★**손을 올리지 말고 칼을 세워라.** 칼끝 높이 = 손 높이 + 1.66*sin(bel).
+#      팔을 어깨 위로 올리면 칼끝은 조금 더 오르는 대신 **손이 지나온 거리만큼
+#      예비동작이 빨라져** 1)에 걸린다. 게다가 왼손이 자루에서 떨어진다(reach).
+#      가슴 높이 손 + 세운 칼(bel +70~75)이 "머리 위로 치켜든 그림"을 다 낸다.
+#   4) 바닥 여유 = 손 높이 - 1.66*sin(|bel|). 손이 1.1m 면 |bel| 45도가 0 이다.
+#      팔로스루를 -45도보다 더 내리면 칼이 바닥에 박힌다.
+HAND_SPEC = {
+    # ── Z 기본 3연타 (46장 = 1.500초 클립 = 게임 1.111초 @ts1.35) ──
+    # 대각 내려베기 -> 되받아 횡베기 -> 세로 마무리.
+    # ★스윙마다 끝에서 **멈춘다**(칼끝 2~3장 거의 정지). 그게 곧 타격감이고,
+    #   동시에 hot 을 꺼서 스윙 번호를 셋으로 가른다. 옛 수제판이 기각당한
+    #   "포즈 잡고 2초 정지"(17장 완전 정지)와는 자릿수가 다르다 — 0.07~0.10초다.
+    # ★★스윙 사이 간격은 **0.22초(enemy.js SWING_GAP)보다 커야** 세 타로 센다.
+    #   게임 시간 0.22초 = 클립 0.30초 = 9장. 그 9장 동안 칼끝은 9.36 m/s 아래여야
+    #   하는데, 그건 "정지"가 아니라 **한 장에 0.26m 까지** 움직여도 된다는 뜻이다
+    #   (9장이면 2.3m = 칼 방향 80도). 되돌리기+다음 예비를 다 넣고도 남는다.
+    #   그래서 옛 수제판처럼 얼어붙지 않는다.
+    "Attack": (46, [
+        # 1타 — 오른쪽 위에서 왼쪽 아래로 대각 (예비 4장)
+        (2,  dict(bel=+44, baz=-8,  bend=+6,  ty=-5, hy=-2, cr=2, lg=-5)),
+        (4,  dict(bel=+52, baz=-24, bend=+14, ty=-10, hy=-5, cr=4, lg=-10)),
+        (5,  dict(bel=+48, baz=-20, bend=+13, ty=-8,  hy=-4, tp=+2)),
+        (7,  dict(bel=+24, baz=-8,  bend=+12, ty=-2,  hy=-1, tp=+6, cr=5, lg=+10)),
+        (9,  dict(bel=-12, baz=+20, arl=+80,  bend=+8,  ty=+10, hy=+5, tp=+9, cr=6)),
+        (10, dict(bel=-24, baz=+30, arl=+104, bend=+8,  ty=+13, hy=+7, tp=+9, cr=6, lg=+26)),
+        (11, dict(bel=-27, baz=+34, arl=+112, bend=+9,  ty=+14, hy=+8, tp=+8)),
+        (13, dict(bel=-26, baz=+32, arl=+104, bend=+11, ty=+13, hy=+7, tp=+6, cr=4, lg=+21)),
+        # 2타 — 되받아 오른쪽으로 쓸어 베기(거의 수평). 되돌리는 6장이 곧 예비다
+        (16, dict(bel=-16, baz=+44, arl=+80,  bend=+14, ty=+15, hy=+8, tp=+5)),
+        (19, dict(bel=-4,  baz=+52, arl=+50,  bend=+16, ty=+16, hy=+9, tp=+4, cr=3, lg=+6)),
+        (21, dict(bel=0,   baz=+48, bend=+15, ty=+14, hy=+8, tp=+4)),
+        (22, dict(bel=0,   baz=+44, bend=+14, ty=+12, hy=+7, lg=-3)),
+        (24, dict(bel=+2,  baz=+10, arl=+34,  bend=+11, ty=+2,  hy=+1, tp=+5)),
+        (26, dict(bel=+4,  baz=-30, bend=+9,  ty=-12, hy=-6, tp=+4)),
+        (27, dict(bel=+4,  baz=-38, bend=+10, ty=-15, hy=-8, tp=+3)),
+        (28, dict(bel=+4,  baz=-42, bend=+11, ty=-16, hy=-8, cr=4, lg=-18)),
+        (31, dict(bel=+8,  baz=-40, bend=+13, ty=-15, hy=-8, cr=3)),
+        # 3타 — 칼을 세워 세로 마무리(손은 가슴께에 둔다. 위 산수 3번)
+        # ★들어올리는 6장이 곧 예비다. 이 구간이 hot 을 넘으면 "올라가는 칼"이
+        #   따로 한 타로 발급된다(1차 실행에서 스윙이 여섯 개였던 이유의 하나).
+        (33, dict(bel=+22, baz=-36, bend=+16, ty=-13, hy=-7, cr=4, lg=-10)),
+        (36, dict(bel=+48, baz=-26, bend=+26, ty=-8,  hy=-4, cr=6, tp=-3)),
+        (38, dict(bel=+62, baz=-18, bend=+28, ty=-4,  hy=-2, cr=6, tp=-4, lg=-6)),
+        (39, dict(bel=+56, baz=-15, bend=+27, ty=-2,  cr=6, tp=-1)),
+        (41, dict(bel=+16, baz=-4,  arl=+60,  bend=+20, ty=+1,  cr=9, tp=+8, lg=+16)),
+        (42, dict(bel=-8,  baz=-1,  arl=+92,  bend=+14, ty=+3,  hy=+2, cr=12, tp=+13)),
+        (43, dict(bel=-28, baz=+2,  arl=+116, bend=+8,  ty=+4,  hy=+3, cr=14, tp=+16, lg=+32)),
+        (44, dict(bel=-42, baz=+3,  arl=+132, bend=+3,  ty=+5,  hy=+3, cr=16, tp=+18, lg=+35)),
+        # ★마지막 장은 Idle 로 안 되돌린다(Heavy 와 같은 이유. 남은 각은
+        #   게임의 0.18초 크로스페이드가 9 m/s 로 먹는다 = 버스트 문턱 아래).
+        (45, dict(bel=-34, baz=+2, arl=+120, bend=+8, ty=+4, hy=+2, cr=12, tp=+13, lg=+32)),
+    ]),
+    # ── X 수면참 = **위에서 아래로** (22장 = 0.700초 클립 = 게임 0.609초 @ts1.15) ──
+    # 칼끝 방위(baz)를 -8~+4 안에 붙들어 둔다 = 좌우로 안 흐른다 = 세로로 읽힌다.
+    "Heavy": (22, [
+        (2,  dict(bel=+54, baz=-4,  arl=+42, bend=+10, ty=-4, tp=-4, cr=3, lg=-6)),
+        (4,  dict(bel=+73, baz=-8,  arl=+42,  bend=+28, ty=-3, tp=-8, cr=6, lg=-10)),
+        (5,  dict(bel=+71, baz=-8,  bend=+28, ty=-1, tp=-6, cr=6, lg=-3)),
+        (7,  dict(bel=+30, baz=-4,  arl=+72,  bend=+22, ty=+1, tp=+4, cr=9, lg=+16)),
+        (9,  dict(bel=-18, baz=+2,  arl=+108, bend=+8,  ty=+3, tp=+14, cr=14, lg=+29)),
+        # ★f10 은 "칼끝이 멈칫하는 것"을 막는 장이다. 칼 회전과 손 하강이 서로를
+        #   지워 f9 에서 칼끝 속도가 2.6 까지 떨어졌었다(계단처럼 보인다).
+        (10, dict(bel=-32, baz=+3,  bend=+5,  ty=+3, tp=+16, cr=15)),
+        (11, dict(bel=-42, baz=+4,  arl=+130, bend=+2,  ty=+3, tp=+18, cr=17, lg=+35)),
+        (12, dict(bel=-44, baz=+4,  arl=+134, bend=+2,  ty=+3, tp=+19, cr=18, lg=+37)),
+        (14, dict(bel=-34, baz=+3,  arl=+112, bend=+6,  ty=+2, tp=+16, cr=14, lg=+34)),
+        (17, dict(bel=-14, baz=+1,  arl=+62,  bend=+10, ty=+1, tp=+10, cr=8, lg=+22)),
+        (19, dict(bel=+2,  baz=0,   arl=+40,  bend=+4,  ty=0,  tp=+4, cr=3, lg=+11)),
+        # ★마지막 장을 Idle 과 **똑같이** 만들지 않는다. 남은 각은 게임의 0.18초
+        #   크로스페이드가 7 m/s 로 먹는다(버스트 문턱 한참 아래). 억지로 맞추면
+        #   회수 동작이 **또 하나의 스윙**으로 발급된다(1차 실행에서 실제로 밟았다).
+        (21, dict(bel=+16, baz="base", arl="base", bend=0, ty=0, tp=0, cr=0, lg=+0)),
+    ]),
+    # ── C 횡일섬 = **옆으로** (20장 = 0.633초 클립 = 게임 0.528초 @ts1.20) ──
+    # 칼끝 고도(bel)를 +8~+24 로 붙들어 둔다: 방위만 크게 돌아 가로로 읽히면서도
+    # 칼이 **바닥과 나란히 눕지 않는다**(옛 수제판이 지적받은 그 그림).
+    # 덤으로 칼끝이 늘 손보다 위라 바닥을 안 뚫는다(14차의 -0.477m 해소).
+    # ★★몸통 회전(ty·hy)도 칼끝을 옮긴다. 칼끝은 가슴축에서 1.7m 라 ty 1도가
+    #   칼끝 3cm 다 — 예비에서 ty 를 26도 돌리면 그것만으로 0.77m 다. 1차 실행에서
+    #   "칼 방위(baz)만 늦췄는데 왜 아직 hot 이냐" 의 진범이 이것이었다.
+    #   그래서 아래 값은 baz + ty + hy 를 **합쳐서** 산수 1)에 넣고 짰다.
+    "Wide": (22, [
+        (3,  dict(bel=+26, baz=-14, bend=+6,  ty=-8,  hy=-4, cr=3, lg=-13)),
+        (6,  dict(bel=+18, baz=-28, arl=+30, bend=+14, ty=-20, hy=-10, cr=6, lg=-21)),
+        (7,  dict(bel=+16, baz=-22, arl=+32, bend=+14, ty=-16, hy=-8, cr=6, lg=-13)),
+        (9,  dict(bel=+10, baz=+10, arl=+36, bend=+10, ty=+2,  hy=+1, cr=7, tp=+5, lg=+10)),
+        (11, dict(bel=+7,  baz=+44, arl=+36, bend=+8,  ty=+20, hy=+11, cr=6, tp=+5, lg=+26)),
+        (13, dict(bel=+6,  baz=+60, arl=+34, bend=+12, ty=+28, hy=+15, cr=5, tp=+3, lg=+32)),
+        (15, dict(bel=+9,  baz=+54, arl=+30, bend=+16, ty=+25, hy=+13, cr=3, lg=+29)),
+        (18, dict(bel=+15, baz=+42, arl=+28, bend=+14, ty=+16, hy=+9, cr=2, lg=+18)),
+        (21, dict(bel=+22, baz=+38, arl="base", bend=+2, ty=+6, hy=+3, tp=0, cr=0, lg=+0)),
+    ]),
+}
+HAND_CH = ("bel", "baz", "arl", "bend", "ty", "tp", "tr", "hy", "cr", "lg", "gw")
+
+
+def _sph(el, az):
+    """가슴 좌표계 단위벡터. X=왼쪽 Y=위 Z=앞. az 0=앞 +=왼쪽, el +=위."""
+    el, az = math.radians(el), math.radians(az)
+    return Vector((math.sin(az) * math.cos(el), math.sin(el),
+                   math.cos(az) * math.cos(el)))
+
+
+def _unsph(v):
+    """단위벡터 -> (고도, 방위) 도. _sph 의 역."""
+    v = v.normalized()
+    return (math.degrees(math.asin(max(-1.0, min(1.0, v.y)))),
+            math.degrees(math.atan2(v.x, v.z)))
+
+
+def _bframe(bt, C):
+    """칼 축 bt 에 수직인 기준 두 축. e1 = '칼 아래쪽', e2 = bt x e1.
+    팔 roll(arl) 은 e1 에서 e2 쪽으로 재는 각이다(0도 = 팔이 칼 아래쪽)."""
+    dn = -(C @ Vector((0, 1, 0)))                # 가슴 기준 아래
+    e1 = dn - bt * dn.dot(bt)
+    if e1.length < 1e-5:                         # 칼이 수직이면 뒤쪽을 기준으로
+        bk = -(C @ Vector((0, 0, 1)))
+        e1 = bk - bt * bk.dot(bt)
+    e1.normalize()
+    return e1, bt.cross(e1).normalized()
+
+
+def _crv(pts, x):
+    """Catmull-Rom. pts = [(f, v)...] (f 오름차순). 키 사이는 부드럽고 살짝 넘어간다."""
+    if len(pts) == 1:
+        return pts[0][1]
+    if x <= pts[0][0]:
+        return pts[0][1]
+    if x >= pts[-1][0]:
+        return pts[-1][1]
+    i = 0
+    while i < len(pts) - 2 and x > pts[i + 1][0]:
+        i += 1
+    x0, y0 = pts[i]
+    x1, y1 = pts[i + 1]
+    xm, ym = pts[i - 1] if i > 0 else (x0, y0)
+    xp, yp = pts[i + 2] if i + 2 < len(pts) else (x1, y1)
+    h = x1 - x0
+    m0 = (y1 - ym) / max(1e-6, x1 - xm) * h
+    m1 = (yp - y0) / max(1e-6, xp - x0) * h
+    t = (x - x0) / max(1e-6, h)
+    t2, t3 = t * t, t * t * t
+    return ((2 * t3 - 3 * t2 + 1) * y0 + (t3 - 2 * t2 + t) * m0
+            + (-2 * t3 + 3 * t2) * y1 + (t3 - t2) * m1)
+
+
+def bake_hand(name):
+    nf, keys = HAND_SPEC[name]
+
+    # --- 바탕 자세: Idle 첫 프레임(리타게팅 결과 그대로) ---
+    f0, f1 = use_src("Idle")
+    praw = []
+    for f in range(f0, f1 + 1):
+        sc.frame_set(f)
+        bpy.context.view_layer.update()
+        praw.append((S2W @ src.pose.bones[PELVIS].matrix).translation.copy())
+    n_i = len(praw)
+    pmean = Vector((sum(p.x for p in praw) / n_i, sum(p.y for p in praw) / n_i,
+                    sum(p.z for p in praw) / n_i))
+    sc.frame_set(f0)
+    bpy.context.view_layer.update()
+    GT0 = grip_target() if DO_GRIP else None
+    BASE_R = {bn: m.copy() for bn, m in delta_rots().items()}
+    BASE_P = DREST[ROOT_BONE][1] + (praw[0] - pmean) * K_TRANS
+    pose0, _ = build(BASE_R, BASE_P)
+    C0 = torso_frame(pose0)
+    HM0 = A2W @ pose0[HAND_R]
+    Hr0 = HM0.to_3x3()
+    Hr0.normalize()
+    d0w = (Hr0 @ TIP_DIR).normalized()
+    a0w = (wpos(pose0, HAND_R) - wpos(pose0, R_ARM[0])).normalized()
+    BASE = dict(zip(("bel", "baz"), _unsph(C0.inverted() @ d0w)))
+    _e1, _e2 = _bframe(d0w, C0)
+    BASE["arl"] = math.degrees(math.atan2(a0w.dot(_e2), a0w.dot(_e1)))
+    for c in ("bend", "ty", "tp", "tr", "hy", "cr", "lg"):
+        BASE[c] = 0.0
+    BASE["gw"] = 1.0
+    print("\n[%s] ★수제 키프레임 %d장 (%.3f초 @30fps) / 키 %d개"
+          % (name, nf, (nf - 1) / 30.0, len(keys)))
+    print("   바탕(Idle f0): 칼끝 고도 %+.1f 방위 %+.1f / 팔 roll %+.1f (팔-칼 사잇각 %.1f도)"
+          % (BASE["bel"], BASE["baz"], BASE["arl"], math.degrees(a0w.angle(d0w))))
+
+    # --- 채널별 커브 ---
+    CH = {}
+    for c in HAND_CH:
+        pts = [(0.0, BASE[c])]
+        for fk, kv in keys:
+            if c in kv:
+                v = kv[c]
+                pts.append((float(fk), BASE[c] if v == "base" else float(v)))
+        pts.sort(key=lambda p: p[0])
+        CH[c] = pts
+
+    def val(c, i):
+        return _crv(CH[c], float(i))
+
+    def frame_pose(i):
+        """i 번째 프레임의 (pose, basis, Rw, pw, 진단)."""
+        Rw = {bn: BASE_R[bn].copy() for bn in ORDER}
+        pw = BASE_P.copy()
+        cr = math.radians(val("cr", i))
+        if abs(cr) > 1e-6:                       # 웅크림: 엉덩이-무릎-발목 3분절
+            mh = Quaternion(W_LFT, CR_SGN * cr).to_matrix()
+            mk = Quaternion(W_LFT, -CR_SGN * cr).to_matrix()
+            for bn in THIGHS:
+                Rw[bn] = mh @ Rw[bn]
+            for bn in CALFS:
+                Rw[bn] = mk @ Rw[bn]
+            pw = pw - W_UP * (LEG_LEN * (1.0 - math.cos(cr)))
+        lg = math.radians(val("lg", i))
+        if abs(lg) > 1e-6:                       # 스탠스: 허벅지만 앞뒤로 갈라 돌린다
+            mf = Quaternion(W_LFT, CR_SGN * lg).to_matrix()
+            mb = Quaternion(W_LFT, -CR_SGN * lg).to_matrix()
+            Rw["Bip001 L Thigh"] = mf @ Rw["Bip001 L Thigh"]
+            Rw["Bip001 R Thigh"] = mb @ Rw["Bip001 R Thigh"]
+            # 정강이·발은 안 건드린다(월드 회전 유지) = 발바닥이 계속 바닥과 나란하고
+            # 무릎만 앞뒤로 벌어진다. 그만큼 골반이 내려앉는다.
+            pw = pw - W_UP * (THIGH_LEN * (1.0 - math.cos(lg)))
+        hy = math.radians(val("hy", i))
+        if abs(hy) > 1e-6:                       # 골반 돌림(발은 제자리)
+            mp = Quaternion(W_UP, hy).to_matrix()
+            Rw[PELVIS] = mp @ Rw[PELVIS]
+            for bn in UPPER:
+                Rw[bn] = mp @ Rw[bn]
+        qt = (Quaternion(W_UP, math.radians(val("ty", i)))
+              @ Quaternion(W_LFT, math.radians(val("tp", i)))
+              @ Quaternion(W_FWD, math.radians(val("tr", i))))
+        if qt.angle > 1e-6:
+            mt = qt.to_matrix()
+            for bn in UPPER:
+                Rw[bn] = mt @ Rw[bn]
+        pose, basis = build(Rw, pw)
+        # 팔꿈치 굽힘(팔뚝·손만 돈다)
+        bd = math.radians(val("bend", i))
+        if abs(bd) > 1e-6:
+            S = wpos(pose, R_ARM[0])
+            E = wpos(pose, R_ARM[1])
+            W = wpos(pose, HAND_R)
+            n = (E - S).cross(W - E)
+            if n.length < 1e-6:
+                n = (C0 @ Vector((-1, 0, 0)))
+            mb = Quaternion(n.normalized(), bd).to_matrix()
+            Rw[R_ARM[1]] = mb @ Rw[R_ARM[1]]
+            Rw[HAND_R] = mb @ Rw[HAND_R]
+            pose, basis = build(Rw, pw)
+        # ── 칼끝 겨누기 + 팔 굴리기 ──
+        # ★★팔이 칼과 이루는 각 α 는 **파지가 정한 상수**다(레스트에서 약 80도).
+        #   그래서 팔 방향을 절대 각도로 적으면 안 된다 — 1차 실행에서 팔 목표를
+        #   절대값으로 줬더니 잔각이 상한 26도에 늘 붙어 팔이 목표에서 47도까지
+        #   어긋났고, 그 바람에 오른손이 몸 바깥으로 나가 **왼손이 자루를 놓쳤다**
+        #   (뻗음 1.30 = 팔 길이의 130%). 팔에 줄 수 있는 자유는 하나뿐이다:
+        #   **칼 축 둘레로 어디에 놓을 것인가(roll)**. 그것만 준다.
+        C = torso_frame(pose)
+        bt = (C @ _sph(val("bel", i), val("baz", i))).normalized()
+        S = wpos(pose, R_ARM[0])
+        W = wpos(pose, HAND_R)
+        Hr = (A2W @ pose[HAND_R]).to_3x3()
+        Hr.normalize()
+        d = (Hr @ TIP_DIR).normalized()
+        a = (W - S).normalized()
+        q = d.rotation_difference(bt)
+        al = a.angle(d)                          # 팔-칼 사잇각(이 회전으로 안 변한다)
+        e1, e2 = _bframe(bt, C)
+        ph = math.radians(val("arl", i))
+        at = (bt * math.cos(al)
+              + (e1 * math.cos(ph) + e2 * math.sin(ph)) * math.sin(al))
+        p = q @ a
+        p = p - bt * p.dot(bt)
+        r = at - bt * at.dot(bt)
+        if p.length > 1e-5 and r.length > 1e-5:
+            p.normalize()
+            r.normalize()
+            q = Quaternion(bt, math.atan2(p.cross(r).dot(bt), p.dot(r))) @ q
+        wr = 0.0                                 # 잔각이 0 이라 손목을 안 쓴다
+        mq = q.to_matrix()
+        for bn in R_ARM:
+            Rw[bn] = mq @ Rw[bn]
+        pose, basis = build(Rw, pw)
+        # 왼손 파지(두 손). gw=0 이면 왼팔은 바탕 자세 그대로 남는다
+        dev, reach = 0.0, 0.0
+        if DO_GRIP and GT0 is not None:
+            gw = max(0.0, min(1.0, val("gw", i)))
+            gt = (GT0[0], GT0[1], GT0[2], gw)
+            T, bef, _, w, Ch, wh = apply_grip(pose, Rw, gt, None)
+            reach = (T - wpos(pose, L_ARM[0])).length / ARM_L
+            if DBG_REACH:
+                CC = torso_frame(pose)
+                LS = wpos(pose, L_ARM[0])
+                rr = CC.inverted() @ (T - LS)
+                hh = CC.inverted() @ (wpos(pose, HAND_R) - LS)
+                print("      [reach f%d] 자루목표 왼어깨기준 (좌%+.3f 위%+.3f 앞%+.3f)H"
+                      " %.2f / 오른손 (좌%+.3f 위%+.3f 앞%+.3f)H %.2f / 오른팔뻗음 %.2f"
+                      % (i, rr.x / DH, rr.y / DH, rr.z / DH, rr.length / ARM_L,
+                         hh.x / DH, hh.y / DH, hh.z / DH, hh.length / ARM_L,
+                         (wpos(pose, HAND_R) - wpos(pose, R_ARM[0])).length / ARM_L))
+            pose, basis = build(Rw, pw)
+            dev = (wpos(pose, HAND_L) - T).length / DH
+            if apply_hand_grip(pose, Rw, Ch, wh):
+                pose, basis = build(Rw, pw)
+        return pose, basis, Rw, pw, math.degrees(wr), dev, reach
+
+    # --- 1차: 접지 보정량·칼끝 진단 ---
+    gk = 1.75 / DH
+    ts = {"Attack": 1.35, "Heavy": 1.15, "Wide": 1.20}.get(name, 1.0)
+    lows, tips, hips, hnds, knees, maxerr, wrs, devs, rchs, pit = (
+        [], [], [], [], [], 0.0, [], [], [], 0)
+    for i in range(nf):
+        pose, basis, Rw, pw, wr, dev, reach = frame_pose(i)
+        for bn in ORDER:
+            arm.pose.bones[bn].matrix_basis = basis[bn]
+        bpy.context.view_layer.update()
+        if i % 8 == 0:                           # 해석식 자기검증(★함정 8)
+            for bn in ORDER:
+                aa = (A2W @ arm.pose.bones[bn].matrix).translation
+                bb = (A2W @ pose[bn]).translation
+                maxerr = max(maxerr, (aa - bb).length)
+        lows.append(low_of(DST_BODY))
+        HM = A2W @ pose[HAND_R]
+        tips.append(HM @ (TIP_DIR * D_SW[2] * ANIM_TIP_K / HM.to_3x3().to_scale()[0]))
+        hips.append(wpos(pose, PELVIS))
+        hnds.append(wpos(pose, HAND_R))
+        knees.append((wpos(pose, "Bip001 L Calf") - wpos(pose, "Bip001 L Thigh"))
+                     .dot(W_FWD) / DH)
+        wrs.append(wr)
+        devs.append(dev)
+        rchs.append(reach)
+        rh = wpos(pose, HAND_R)
+        # 투구 판정: 손이 어깨 위 +0.05H 이고 가슴 뒤 +0.20H (probe_moves_read 와 같은 자)
+        if ((rh - wpos(pose, CLAV_R)).dot(W_UP) / DH > 0.05
+                and -(rh - wpos(pose, "Bip001 Chest2")).dot(W_FWD) / DH > 0.20):
+            pit += 1
+    shift = BIND_LOW - pct(lows, 0.10)
+    print("   해석식 자기검증: Blender 평가와 뼈 위치 최대 오차 %.7f (키의 %.5f%%)"
+          % (maxerr, maxerr / DH * 100))
+    if maxerr > DH * 1e-4:
+        raise SystemExit("해석식 FK 가 Blender 평가와 다르다. 신뢰 불가")
+    print("   접지 보정: 메시 최저 %.4f~%.4f (10분위 %.4f) -> 바인드 %.4f (%+.4f)"
+          % (min(lows), max(lows), pct(lows, 0.10), BIND_LOW, shift))
+    print("   왼손 이탈(자루까지, 키 정규화) %.4f~%.4f (최대 %.2f주먹 @f%d)"
+          " / 손목 잔각 최대 %.1f도 (상한 %.0f)"
+          % (min(devs), max(devs), max(devs) / FIST, devs.index(max(devs)),
+             max(wrs), HAND_WRIST))
+    print("   왼팔 뻗음(자루 목표까지 / 팔 길이) %.2f~%.2f  ★1.00 넘으면 그만큼 못 잡는다"
+          % (min(rchs), max(rchs)))
+    print("   무릎 전방 변위(키 정규화) %.4f~%.4f  ★웅크림이 클수록 커져야 한다"
+          % (min(knees), max(knees)))
+    print("   ★투구 프레임(손 어깨위+가슴뒤): %d장 / %d" % (pit, nf))
+    vs = [0.0] + [(tips[i] - tips[i - 1]).length * 30.0 * gk * ts
+                  for i in range(1, nf)]
+    cl = [(t.z + shift - BIND_LOW) * gk for t in tips]
+    # ★진단 좌표계는 probe_moves_read.py 와 **같은 고정 월드 축**이다(가슴 좌표계가
+    #   아니다). 게임 카메라가 캐릭터 뒤에 있으니 화면 가로=L · 화면 세로=U ·
+    #   화면 깊이=F 이고, 판정 부채꼴이 보는 것도 F 다. 몸이 돌면 가슴 축도 도는데
+    #   그걸로 재면 "돌았으니 안 움직였다"는 거짓 판정이 나온다.
+    rel = [Vector(((t - h).dot(W_LFT), (t - h).dot(W_UP), (t - h).dot(W_FWD)))
+           for t, h in zip(tips, hips)]
+    hot = [i for i, v in enumerate(vs) if v > 15.8]
+    runs, cur = [], []
+    for i in hot:
+        if cur and i != cur[-1] + 1:
+            runs.append(cur)
+            cur = []
+        cur.append(i)
+    if cur:
+        runs.append(cur)
+    print("   칼끝(게임 1.75m 환산, **재생속도 %.2f 곱한 값** = 게임이 보는 속도):"
+          " 최고 %.1f m/s / 바닥여유 %+.3f~%+.3f m" % (ts, max(vs), min(cl), max(cl)))
+    for k, run in enumerate(runs):
+        i0 = max(0, run[0] - 1)
+        pa, pb = rel[i0], rel[run[-1]]
+        dL, dU, dF = pb.x - pa.x, pb.y - pa.y, pb.z - pa.z
+        print("     스윙%d f%d~%d (클립 %.3f~%.3f / 게임 %.3f~%.3f초)  "
+              "ΔL %+.2f ΔU %+.2f ΔF %+.2f  세로성 %.2f 가로성 %.2f"
+              % (k + 1, run[0], run[-1], run[0] / 30.0, run[-1] / 30.0,
+                 run[0] / 30.0 / ts, run[-1] / 30.0 / ts, dL * gk, dU * gk, dF * gk,
+                 abs(dU) / max(abs(dL), 1e-6), abs(dL) / max(abs(dU), 1e-6)))
+    if not runs:
+        print("     ★타격 구간 없음! 이 클립은 안 벤다")
+    hz = [(h.z + shift - BIND_LOW) * gk for h in hnds]
+    print("   프레임별  v=칼끝속도 z=칼끝 바닥여유 h=오른손 높이"
+          " F=칼끝 앞뒤(>0 이어야 벤다) 손=왼손이탈(주먹):")
+    for i in range(nf):
+        pf = rel[i].z * gk
+        print("     f%-3d %5.3fs  v%6.1f  z%+6.3f  h%5.2f  F%+6.2f  손%4.1f  %s%s"
+              % (i, i / 30.0, vs[i], cl[i], hz[i], pf, devs[i] / FIST,
+                 "#" * int(vs[i] / max(1e-9, max(vs)) * 28),
+                 "  <-hot" if vs[i] > 15.8 else ""))
+
+    # --- 2차: 키 찍기 ---
+    act = new_action(name)
+    for i in range(nf):
+        pose, basis, Rw, pw, _, _, _ = frame_pose(i)
+        pw = pw + Vector((0, 0, shift))
+        pose, basis = build(Rw, pw)
+        for bn in ORDER:
+            arm.pose.bones[bn].matrix_basis = basis[bn]
+        bpy.context.view_layer.update()
+        for b in arm.pose.bones:
+            b.keyframe_insert("location", frame=i + 1)
+            b.keyframe_insert("rotation_quaternion", frame=i + 1)
+            b.keyframe_insert("scale", frame=i + 1)
+    print("   -> 액션 %s  f1~%d (%.3f초 @30fps)" % (name, nf, (nf - 1) / 30.0))
+    return act
+
+
 BAKED = {}
 for c in CLIPS:
-    BAKED[c] = bake_alt(c, ANIM[c]) if c in ANIM else bake(c)
+    if c in HAND and c in HAND_SPEC:
+        BAKED[c] = bake_hand(c)
+    elif c in ANIM:
+        BAKED[c] = bake_alt(c, ANIM[c])
+    else:
+        BAKED[c] = bake(c)
 
 # ================================================================ 8) 정리
 print("\n[정리]")

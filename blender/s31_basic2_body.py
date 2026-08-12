@@ -9,7 +9,9 @@
 2026-08-12 에는 여섯 줄 전부가 committed basic2.glb 와 md5 까지 같았다.
 같은 날 13-걷기팔에서도 **손대기 전 md5 7ae7066d… 재현 확인 후** 고쳤다.
 2026-08-12 14-베기수정에서도 손대기 전에 committed md5 d7bb257c… 를 여섯 줄로
-재현해 확인했다 — 그 다음에야 2번 줄의 ANIM_SPEC 을 고쳤다. 새 md5 cc7a26dd…)
+재현해 확인했다 — 그 다음에야 2번 줄의 ANIM_SPEC 을 고쳤다. 새 md5 cc7a26dd…
+2026-08-13 15-모션수제에서도 손대기 전에 committed md5 cc7a26dd… 를 여섯 줄로
+재현해 확인했다 — 그 다음에야 2번 줄을 HAND 로 갈았다.)
 ★★6번(s34)을 빼먹으면 1번 칼이 옛 카타나로 남아 md5 가 안 맞는다. 여기 다섯 줄만
   적혀 있어서 실제로 한 번 헛돌았다. 6번은 blender/s34_sword1_swap.py 헤더에 있다.
 
@@ -23,28 +25,23 @@
     #      (같은 날 오너 지시 2차. 빼면 검을 앞으로 겨눈 채 뛴다)
     #    ★기본값 HAND_GRIP=1 로 **왼손목 방향을 자루에서 역산**한다(오너 지시 3차.
     #      빼면 왼손목이 Attack 169도·Heavy 161도까지 꺾인다. WRIST_LIM=60 이 상한)
-    #    ★2026-08-12 13-모션이식(오너 "베는모션을 meshy ai로 해와 차라리"):
-    #      **베기 3종(Attack/Heavy/Wide)만 Meshy 애니메이트 프리셋에서 온다.**
-    #      ANIM_DIR/ANIM_SPEC 을 빼면 옛 slayer 베기가 그대로 돌아온다(md5 재현 확인).
-    #      대본 읽는 법 = 파일:소스프레임범위@배속~앞이음매장수, "+" 로 이어붙임.
-    #    ★2026-08-12 14-베기수정(오너 "x는 세로 c는 가로, 너무 길게 만들지 말고,
-    #      휘두르는 모션이 야구 체인지업 같다") 으로 **대본을 전부 다시 짰다.**
-    #      근거·함정은 s24_moveset.py 헤더의 [대본을 다시 짤 때 반드시 아는 세 가지].
-    #        Attack 3연타 = left_slash 한 테이크의 스윙 셋(내려베기/횡쓸기/되받아베기).
-    #                       ★예비동작 f2~f13(팔을 어깨 위 뒤로 감는 구간 = 투구 폼)을
-    #                         통째로 잘라 f14 에서 시작한다. 스윙 사이의 @0.16·@0.55
-    #                         구간이 칼끝을 HOT_OFF 아래로 떨어뜨리는 가드다
-    #                         (안 끊으면 스윙 번호가 하나라 2·3타가 안 박힌다).
-    #        Heavy  수면참 = sword_slash 올림(f6~11) + 내려베기(f11~17.5 @1.35) +
-    #                       **앞으로 넘어오는 구간**(f17.5~20.2 @0.55) + 정지.
-    #                       ★뒤 구간이 없으면 피해가 0 이다(칼이 몸 뒤에 있어 정면
-    #                         부채꼴 게이트에 통째로 잘린다). axe_chop 은 폐기했다.
-    #        Wide   횡일섬 = sword_slash 낮게 당기기(f14.5~16) + 앞을 쓸어 도는 구간.
+    #    ★★2026-08-13 15-모션수제(오너 "칼 베는거 안고쳐짐 그냥 너가 직접 베는
+    #      모션 만들어. 위에서아래로. 옆으로."): **베기 3종은 이제 Meshy 프리셋이
+    #      아니라 손으로 짠 키프레임이다.** 손잡이 하나 `HAND=Attack,Heavy,Wide`.
+    #      대본(각 기술의 키프레임 표)은 s24_moveset.py 의 HAND_SPEC 에 있다.
+    #      ★점프도 같은 지시로 팔 위상표(SWD_KEYS·BAL_KEYS)를 다시 잡았다 —
+    #        칼끝이 뒤가 아니라 **몸 옆**으로 나가고 양팔은 20~30도만 벌어진다.
+    #    ── 폐기된 길(코드는 남아 있다. 되살리려면 HAND 를 빼고 아래 두 줄을 넣는다) ──
+    #      13-모션이식·14-베기수정의 Meshy 프리셋 트림 방식. ANIM_DIR/ANIM_SPEC 경로는
+    #      s24 에 그대로 있어서 14차 판(md5 cc7a26dd…)이 언제든 재현된다:
+    #        ANIM_DIR=incoming/meshy_anim ANIM_BLEND=8 \
+    #        ANIM_SPEC="Attack=left_slash:14-16@0.5+left_slash:16-22@1.0+left_slash:22-23@0.16+left_slash:23-30@1.30+left_slash:30-37@0.55+left_slash:37-46@1.25+left_slash:46-47@0.25;Heavy=sword_slash:6-11@0.75+sword_slash:11-17.5@1.35+sword_slash:17.5-20.2@0.55+sword_slash:20.2-20.35@0.04;Wide=sword_slash:14.5-16@0.20+sword_slash:16-21@0.75+sword_slash:21-21.4@0.08"
+    #      오너가 두 번 다 "안 고쳐짐" 으로 기각했다. 소스가 한 손 과장 연기라
+    #      **자르는 일로는 끝이 없다**는 것이 두 번의 결론이다.
     SRC_GLB=web/slayer.glb DST_GLB=web/basic2_body.glb OUT_GLB=web/basic2_moves.glb \
       DST_SWORD=SW_baekah.001 SWORD_FIT=0 GRIP_K=1.0 KEEP_ORIG=1 \
-      ANIM_DIR=incoming/meshy_anim ANIM_BLEND=8 \
-      ANIM_SPEC="Attack=left_slash:14-16@0.5+left_slash:16-22@1.0+left_slash:22-23@0.16+left_slash:23-30@1.30+left_slash:30-37@0.55+left_slash:37-46@1.25+left_slash:46-47@0.25;Heavy=sword_slash:6-11@0.75+sword_slash:11-17.5@1.35+sword_slash:17.5-20.2@0.55+sword_slash:20.2-20.35@0.04;Wide=sword_slash:14.5-16@0.20+sword_slash:16-21@0.75+sword_slash:21-21.4@0.08" \
-      OUTDIR=renders/history/v99_wave14/moves_fix/moveset blender -b -P blender/s24_moveset.py
+      HAND=Attack,Heavy,Wide \
+      OUTDIR=renders/history/v99_wave15/handmoves/moveset blender -b -P blender/s24_moveset.py
     # 3) 걷기·달리기만 basic2 네이티브로 교체(+오른팔 감쇠·팔 들기·스윙 자연화·손목 보정)
     #    ★SW_NAME/TIP_K/ARM_LIFT/TIP_ELEV 는 2026-08-12 에 붙었다. 빼면 칼끝이
     #      지면 아래로 내려간다(6번이 1번 칼을 1.78배로 키우는데 3번은 그걸 못 본다).
