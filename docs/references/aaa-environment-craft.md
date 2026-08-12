@@ -249,6 +249,15 @@ fine visually if you place another piece next to it with the same amount of deta
 블록아웃 하나에서 변종을 뽑는 값싼 수치도 있다: "Each blockout model can easily turn into
 **3-5 others** with some crushing, stretching and bending"
 ([80.lv](https://80.lv/articles/technical-tips-for-environment-artists-part-1-001agt-004adk)).
+다만 **형태 변종의 상한**은 더 낮게 잡는 사람이 있다: "a good rule to follow is **maximum of three**
+when it comes to the shape"(Jacob Claussen, Ubisoft Stockholm).
+그리고 **회전 변형은 전부에 주지 않는다**: "I don't adjust all the subtools though, **just a few**.
+If I adjusted all of them it would look pretty **unorganized**"(Andrew Harrington).
+★반복을 깨겠다고 전부 흔들면 무질서가 된다. 흔드는 것도 일부에만이다.
+
+버텍스 컬러의 경제학을 한 문장으로 보여 주는 사례: "**These 5 textures cover 95% of what you could
+see** ... **all color variation, dirt and wood scuffs I'm adding with vertex color** ... only
+**4 materials** for the houses"(Sergey Tenditniy).
 
 **★우리 판정: 버텍스 컬러는 그대로 됨(이미 파이프라인의 심장이다). 데칼도 됨. 트림 회전도 됨.**
 ★three.js 한정 공짜 카드: `InstancedMesh` 는 인스턴스별 변환과 **인스턴스별 색**(`setColorAt` /
@@ -291,6 +300,42 @@ lower quality settings (which usually cut shadows) would miss out on vital infor
 > ([Riot: A Trip Down the LoL Graphics Pipeline](https://www.riotgames.com/en/news/trip-down-lol-graphics-pipeline))
 
 우리도 광원이 안 움직이고 카메라도 고정 쿼터뷰다. **그림자를 텍스처에 구울 자격이 있다.**
+
+#### ★롤 지형은 그냥 unlit 이다 (에셋 실물에서 확인)
+
+말이 아니라 파일에서 나온 증거다.
+
+* **Riot 버텍스 포맷에 tangent 이 없다.** LeagueToolkit 의 vertex element enum 은
+  `Position, BlendWeight, Normal, FogCoordinate, PrimaryColor, SecondaryColor, BlendIndex, Texcoord0–7`
+  이고, 유지보수자 주석이 "Tangent // Riot's enum doesn't have this so not sure how they map it" 다.
+  **tangent 이 없으면 tangent-space 노멀 매핑 자체가 불가능하다.**
+* 지형 셰이더가 전부 unlit 이다 — `EnvTileableDiffuse`, `SrxBlendEarthGround/Island/Rocks`,
+  `SrxBlendHextechGround`, `SrxBlendInfernalGround`, `SrxBlendCloudGround`, `SrxBlendOcean`,
+  `SrxBlendMaster` 모두 `WithUnlit()`, **단일 diffuse 샘플러**, 노멀·러프니스·메탈릭 없음.
+* 챔피언 텍스처 세트도 `_tx_cm`(컬러) + `_tx_gm`(글로스) + 큐브맵으로 **노멀맵이 없다.**
+
+**즉 롤에서 알베도가 조명 모델 전부다.** 우리가 노멀맵도 실광원도 없는 것은 결핍이 아니라
+오너가 지목한 그 게임과 **같은 조건**이다. 다른 것은 그 한 장에 무엇을 그려 넣었느냐뿐이다.
+
+#### ★그리고 텍셀 예산을 지형에 몰아준다
+
+같은 조사에서 실측한 원본 에셋 해상도:
+
+| | 해상도 | 알베도 명도 p95 | 채도 70% 초과 픽셀 |
+|---|---|---|---|
+| 챔피언 (Garen · Darius) | **512 × 512** | 58 ~ 61% | 45.5% · 11.7% |
+| 챔피언 (Ahri) | 1024 × 1024 | 77.6% | 20.2% |
+| 지형 `grnd_terrain_a` | **2048 × 2048** | **34.1%** | **0.98%** |
+| 지형 `grnd_terrain_t` | 2048 × 2048 | 32.5% | 5.37% |
+
+**지형이 챔피언보다 텍셀 면적을 16배 받는다.** 그리고 그 예산을 전부 "그려 넣은 빛"에 쓴다.
+대신 **밝기와 채도는 챔피언에게 통째로 양보한다** — 지면 알베도의 명도 상한이 34% 인데
+챔피언은 58~78% 다. 출시된 지면에 명도 90% 를 넘는 픽셀은 **0.00%** 다.
+
+★**이 표는 비율로만 옮겨야 한다.** 우리 알베도는 glTF 곱수가 1 을 못 넘는 제약 때문에 일부러
+부풀려 굽는다(`dg_floor.jpg` 명도 중앙값 0.93). 그래서 34% 라는 절대값이 아니라
+**"지면은 캐릭터에게 밝기와 채도를 양보한다"는 관계**가 옮길 것이다.
+화면에서 재는 5-A 절의 캐릭터/바닥 2.5배가 그 관계의 우리 판본이다.
 
 ★**그리고 그 구운 빛은 생각보다 훨씬 저해상도다.** 같은 블리자드 글에 실린 라이트맵 도해
 (`incoming/refpack_aaa/overwatch/ow_env_9.png` — 왼쪽 최종 화면 · 가운데 라이트맵 UV 차트 ·
@@ -353,6 +398,45 @@ lower quality settings (which usually cut shadows) would miss out on vital infor
   ie. side scroller/topdown** where your lighting will always be seen from one direction you could get
   away with a lot more, being able to **paint your lighting all in straight on your diffuse**"(Owl).
   **우리는 yaw 0 고정 쿼터뷰다. 면제 대상이다.**
+* 상단광인 또 다른 이유(같은 80.lv 글): "such models can work in most lighting situations when they
+  are put in the engine and also because **this feels the most natural to the human eye due to the
+  position of the sun**". 그리고 이 단계에서 "**I would avoid using soft brushes**".
+* 하이라이트의 역할이 명시적으로 **베벨**이다: "**Highlights are really helpful in pulling off the
+  stylized look and defining some bevels ... The trick is to think about the light source and
+  avoid completely straight lines.**"
+* 금·균열을 "깎인 것"으로 보이게 하는 한 줄(Stéphane Charré):
+  "**increasing the dark inside and highlighting the borders where the light reaches the most**
+  will let you imitate the shadows." → **틈은 어둡게, 그 틈의 가장자리는 밝게.** 두 개가 한 쌍이다.
+
+#### ★빛은 명도와 색상으로 그린다. 채도로는 안 그린다 (롤 실측)
+
+이건 조사 중에 **한 번 틀렸다가 바로잡힌** 항목이라 그대로 적어 둔다.
+지면 텍스처 전체를 명도 구간으로 나눠 채도를 재면 "어두울수록 채도가 높다"가 나오는데,
+그건 어두운 구간이 대부분 풀(채도 높은 녹색)이고 밝은 구간이 흙(채도 낮은 갈색)이라서 생기는
+**재질 차이를 조명 차이로 오독한 것**이었다. 같은 재질 안에서 다시 재면 결과가 뒤집힌다.
+
+| 흙길만 | 명도 | 채도 | 색상 |
+|---|---|---|---|
+| 가장 어두운 10% | 28.9% | 48.3% | 57.2° |
+| 30~50% | 35.9% | 53.4% | 46.5° |
+| 가장 밝은 10% | 40.3% | 54.2% | 44.7° |
+
+| 풀만 | 명도 | 채도 | 색상 |
+|---|---|---|---|
+| 가장 어두운 10% | 6.8% | 57.3% | **147.3°** (청록) |
+| 50~70% | 15.4% | 48.6% | 111.0° |
+| 가장 밝은 10% | 25.7% | 52.6% | **93.3°** (황록) |
+
+* **채도는 명도를 따라 거의 안 움직인다**(흙 48 → 54%, 풀은 단조롭지도 않다).
+  채도는 빛을 표현하는 데 안 쓰고 **다른 데 아껴 두는 자원**이다.
+* **색상은 크게 돈다.** 풀 안에서 **54°**(청록 그늘 → 황록 하이라이트), 흙 안에서 12.5°.
+  ★그늘 쪽이 차고(청록) 밝은 쪽이 따뜻하다(황록) — 웜 라이트/쿨 섀도 관례와 방향이 같다.
+* 예외: 개별 바위 측정은 **윗면 채도 4% vs 옆면 21%** 였다.
+  **평평한 지면은 채도 고정, 수직 암면은 채도를 쓴다.** 두 규칙이 공존한다.
+
+★그래서 우리 규칙은 **"명도 + 색상 회전으로 빛을 그리고, 한 재질 안에서 채도는 평평하게 둔다"** 다.
+이건 아르네의 "채도는 중간톤에서 최고"와 충돌하지 않는다 — 아르네는 캐릭터·오브젝트 렌더링 얘기고,
+롤 실측은 **타일링 지면**이다. 우리 바닥에는 롤 쪽을, 캐릭터·잔해에는 아르네 쪽을 쓴다.
 
 #### 스튜디오의 진짜 순서는 "값 먼저, 색 나중"
 
@@ -408,6 +492,29 @@ out the important major shapes.**"
 그리고 결정 규칙은 화면 커버리지다: "Estimate how many screen pixels the object's largest face
 will occupy at the closest typical camera distance", 목표는 "**at least 1:1 texel-to-pixel ratio**
 at that distance." 트라인은 앞서 본 대로 **200 px/m** 한 값으로 통일해서 쓴다.
+
+스타일라이즈드 지면의 실제 사례값 하나 더: **8m × 8m 평면에 2048² = 256 px/m**
+(Andrew Harrington, Airship Syndicate — *Ruined King* 개발사).
+같은 사람의 명도 하한 경고가 우리 알베도 부풀리기와 맞닿는다:
+"In Linear Rendering, mid point grey is not 127,127,127 but more like **187,187,187**. Far too often
+I see textures that are way too dark ... **An inherently dark texture does not receive light well.**"
+
+★**롤 지면의 고주파 실측 — 잡음 예산의 하드 넘버.**
+원본 아틀라스 200×200 패치의 고주파 RMS(255 기준):
+
+| 구역 | RMS |
+|---|---|
+| 걷는 흙길 | 1.73 |
+| 길 위 판석 | 2.16 |
+| 풀/길 경계 | 0.49 |
+| 열린 풀 | 1.27 |
+| 강 포장 | 1.57 |
+| **비플레이 구역** | **0.30** |
+
+**전 구역이 2.2/255 미만 = 명도 스케일의 1% 미만이다.** 지면에 미세 그레인이 사실상 없다.
+그리고 **플레이 안 하는 죽은 공간은 0.30 으로 거의 완전히 평평하게** 칠해져 있다.
+우리 화면의 미세 대역 σ 가 0.111(= 11%)인 것과 견주면 자릿수가 다르다
+(측정 방식이 달라 직접 비교는 못 하지만, 방향은 명백하다).
 
 ★**카메라 종류별 서열이 명시돼 있고, 탑다운이 제일 낮다.**
 1인칭이 최고, 3인칭이 조금 낮고(대신 에셋 밀도로 보상), **탑다운은 "lowest density"** —
@@ -652,6 +759,29 @@ impost(받침돌, 벽이 여기서 끝난다) → springing line → springer �
   그리고 "Does this stand out? Does it pop from the page?" (World of Level Design).
   **우리 벽 블록 하나를 검게 칠해 30장 늘어놓고 보면 답이 즉시 나온다.**
 
+### 3-1a. ★격자로 안 읽히는 제일 큰 이유: 바닥을 다 안 덮는다
+
+롤 지면 에셋을 뜯어본 조사가 낸 한 줄이 이 문서에서 제일 값싸고 제일 세다.
+
+> "**Coverage is deliberately incomplete.** On the lane, stones are **scattered into bare dirt**
+> rather than paving it wall-to-wall. Large stretches of the path are just dirt."
+
+**연속 테셀레이션이 없으면 패턴으로 읽힐 것 자체가 없다.**
+오너가 준 레퍼런스 두 장 중 광장(`lol_ground_owner_ref2.png`)이 유난히 촘촘한 것은 롤에서
+예외적인 구역이라서고, 레인(`lol_ground_owner_ref.png`)을 보면 판석이 흙 사이에
+**띄엄띄엄 흩어져** 있다.
+
+우리는 정반대다. 방 바닥 전체가 판석으로 **빈틈없이** 덮여 있다. 그러니 판석 모양을 아무리
+잘 그려도 눈이 주기를 세게 된다. **판석을 덜 까는 것이 판석을 잘 그리는 것보다 먼저다.**
+
+우리 던전에 옮기면:
+
+* 방 한가운데와 동선은 **흙·모래 바닥**으로 두고, 판석은 **벽 가까이 · 제단 둘레 · 통로 입구**처럼
+  뜻이 있는 자리에 깐다.
+* 판석 구역의 **덮임률을 55 ~ 75%** 로 둔다(나머지는 흙이 드러난다).
+* 제단 방만 예외로 촘촘하게 깔아 "여기가 다른 곳"이라고 말하게 한다.
+  ★색도 밝기도 안 쓰고 공간을 구분하는 방법이라 **채도 예산을 안 먹는다.**
+
 ### 3-1b. 판석 포장 — 격자로 안 읽히게 하는 실제 배합비
 
 상업용 석재는 **크기 배합 퍼센트가 공표돼 있다**
@@ -795,7 +925,8 @@ or lighter**", 먼지는 윗면(Z 노멀 0.3~1.0)과 틈에, 얼룩은 아래로
 |---|---|---|
 | **A. 공표된 규격·스튜디오 문서** | 그대로 믿어도 된다 | 밸브 Dota 레이어 불투명도, 트라인 200 px/m, 상업 석재 배합비 15/50/35, 줄눈 10~12mm, batter 1:6~1:10, 코벨 1/3, 붙임기둥 2.25W, 4모서리·3m 줄눈 금지 |
 | **B. 현업 아티스트 다수가 반복하는 관례** | 방향은 믿고 수치는 우리가 정함 | 빛은 위에서, 에지 하이라이트는 굵기·농도를 흩어라, 큰 형태 먼저, 잡음은 마지막, 70/30 |
-| **C. 우리 실측에서 뽑은 우리 계약** | 근거는 1절 표, 출처는 없다 | 채도 0.28~0.34, 캐릭터/바닥 2.5배, meso σ 0.020~0.026, 최소 형상 23px, 판석 45~60장 |
+| **C. 우리 실측에서 뽑은 우리 계약** | 근거는 1절 표, 출처는 없다 | 채도 0.28~0.34, 캐릭터/바닥 2.5배, meso σ 0.020~0.026, 최소 형상 23px, 판석 75장, 덮임률 55~75% |
+| **D. 롤 에셋 실측** | 출시된 게임의 실물에서 잰 것 | 지형 2048² vs 챔피언 512², 지면 명도 p95 34%, 채도는 명도를 안 따라간다, 색상 54° 회전, 고주파 RMS < 2.2/255, 판석 덮임 불완전 |
 
 ★조사 중 확인된 것: **아래 항목은 어디에도 공표된 수치가 없다.** 누가 "업계 표준"이라고 말하면 의심할 것.
 줄눈이 맵에서 가장 어두운 값이라는 규칙 · 핸드페인트 명도 20~80% 밴드 · 에지 하이라이트의 픽셀 폭 ·
@@ -819,6 +950,12 @@ or lighter**", 먼지는 윗면(Z 노멀 0.3~1.0)과 틈에, 얼룩은 아래로
 눈으로 판정하면 또 어긋난다.
 
 ### B. 바닥 판석을 다시 그린다
+
+**0. ★먼저 판석을 덜 깐다.** 나머지 열네 항목보다 이게 먼저다.
+방 바닥을 판석으로 빈틈없이 덮는 것을 그만둔다. 흙 바닥을 기본으로 두고 판석은
+벽 가까이 · 제단 둘레 · 통로 입구에 **덮임률 55~75%** 로 흩는다(제단 방만 촘촘하게).
+연속 테셀레이션이 사라지면 눈이 셀 주기 자체가 없어진다. 텍스처를 한 픽셀도 안 고치고
+"타일 덩어리" 인상의 상당 부분이 사라진다.
 
 1. **판석 배합을 표로 못 박는다.** 기준 모듈 **0.25m**(우리 칸 2.0m 의 1/8), 크기는 그 정수배만.
 
@@ -993,6 +1130,7 @@ or lighter**", 먼지는 윗면(Z 노멀 0.3~1.0)과 틈에, 얼룩은 아래로
 - [ ] ★벽 블록 하나를 검게 칠해 30장 늘어놓았을 때 형태가 튀는가
 
 **바닥**
+- [ ] ★판석이 바닥을 다 덮지 않는가 (덮임률 55~75%, 흙이 드러나는가)
 - [ ] 5m 타일 한 장에 판석이 70장 이상인가 (크기 0.25/0.50/0.75m 을 15/50/35 로)
 - [ ] 크기가 3~4종이고 가운데 크기가 절반쯤을 먹는가 (균등 분포가 아닌가)
 - [ ] 모든 판석 크기가 한 기준 모듈(0.25m)의 정수배인가
@@ -1017,6 +1155,8 @@ or lighter**", 먼지는 윗면(Z 노멀 0.3~1.0)과 틈에, 얼룩은 아래로
 - [ ] 걷는 바닥의 채도 중앙값이 0.34 이하인가
 - [ ] 넓고 부드러운 명암 얼룩이 바닥을 가로지르는가 (어디나 똑같이 아른거리지 않는가)
 - [ ] 기둥이 바닥과 다른 밝기인가
+- [ ] 한 재질 안에서 채도가 명도를 따라 흔들리지 않는가 (빛은 명도+색상회전으로만)
+- [ ] 그늘 쪽이 차고 밝은 쪽이 따뜻한가 (색상이 40~55° 도는가)
 
 **질감**
 - [ ] 텍스처에 23px(=화면 0.11m) 미만 형상이 없는가
@@ -1037,6 +1177,9 @@ or lighter**", 먼지는 윗면(Z 노멀 0.3~1.0)과 틈에, 얼룩은 아래로
 > top-to-bottom light-to-dark gradient over the whole surface plus a small gradient inside each stone
 > face, ambient occlusion painted into the joints and clamped off pure black, thin warm edge highlights
 > of varying width on the upper edges of only about a third of the stones, heaviest near the corners.
+> The paving deliberately does not cover the floor wall to wall — stones are scattered into bare
+> packed dirt, covering only about two thirds of the ground, denser near the walls and around the
+> altar, with long stretches of plain dirt between.
 > Irregular polygonal flagstone paving, four to seven sided stones, aspect ratio never above 2.6 to 1,
 > three size grades mixed roughly fifteen / fifty / thirty-five percent so one middle size dominates,
 > running bond offsets, no four corners meeting at a point, no joint running straight for more than a
@@ -1051,7 +1194,9 @@ or lighter**", 먼지는 윗면(Z 노멀 0.3~1.0)과 틈에, 얼룩은 아래로
 > sharp ninety degree angles, arches built from voussoirs on projecting imposts, pilasters at uneven
 > syncopated spacing with a wider centre bay, rubble and dirt piled where wall meets floor.
 > Low-poly forms with big painted bevels giving a free rim-light read. Muted desaturated cool grey-green
-> stone at about thirty percent saturation held in a narrow value band, all the saturation spent on
+> stone at about thirty percent saturation held in a narrow value band, saturation staying flat as
+> value rises within one material so the light is carried by value and hue rotation alone — cool
+> teal-leaning shadows turning warm and yellow-green in the light, all the extra saturation spent on
 > torchlight, moss and magic emission only. Deep chromatic blue-violet darkness (#15274E toward #01020E),
 > never neutral grey, never pure black — even the darkest stone catches some reflected light.
 > Warm amber torch pools falling off inverse-square, cool teal light marking the exit.
@@ -1085,6 +1230,23 @@ neutral grey shadows, pure black shadows, evenly lit every block`
 - [Riot: VALORANT Shaders and Gameplay Clarity](https://www.riotgames.com/en/news/valorant-shaders-and-gameplay-clarity) — 오프라인 라이팅, 플레이 공간에 동적 그림자 없음, 환경은 최대한 싸게 (공식)
 - [Riot: Environment Art (Art Education)](https://www.riotgames.com/en/artedu/environment-art) (공식)
 - [Inverse: Moby Francke 인터뷰](https://www.inverse.com/gaming/valorant-art-style-interview-moby-francke) — "illustrative visual design", clean lines / tidy gradients / pleasing angles
+
+**롤 에셋 실측 (조사 중 파일에서 직접 잰 것 · 인용문이 아니다)**
+- Riot 버텍스 포맷에 tangent 부재(LeagueToolkit enum) · 지형 셰이더 전부 `WithUnlit()` 단일 diffuse ·
+  챔피언 텍스처는 `_tx_cm` + `_tx_gm` + 큐브맵으로 노멀맵 없음
+- 지형 2048² vs 챔피언 512² · 지면 알베도 명도 p95 34% vs 챔피언 58~78% · 지면 명도 90% 초과 픽셀 0.00%
+- 같은 재질 안 채도는 명도를 안 따라간다(흙 48→54%) · 색상은 돈다(풀 54° · 흙 12.5°) ·
+  바위 윗면 채도 4% vs 옆면 21%
+- 지면 고주파 RMS 전 구역 2.2/255 미만, 비플레이 구역 0.30
+- ★판석 덮임이 의도적으로 불완전하다(레인은 흙에 판석을 흩뿌린다)
+- ★재현 자료는 `/private/tmp/.../scratchpad/` 에 지면 텍스처 25장·splat mask·1:1 포장 크롭으로 남아 있다
+  (세션 임시 디렉토리라 영구 보관은 아니다)
+
+★**인용하면 안 되는 문장 하나.** 검색엔진이 계속 띄우는
+"We really carefully clamped the color saturation range and values of the ground plane in order to
+make teamfights more readable"(RiotForScience 귀속)은 **출처 검증에 실패했다** —
+원 스레드 도메인(forums.eune.leagueoflegends.com)이 죽었고 Surrender@20 레드포스트 아카이브에도 없다.
+실측과 정확히 맞아떨어져서 진짜일 가능성은 높지만 **라이엇 공식 인용으로 쓰면 안 된다.**
 
 **핸드페인트 · 텍스처에 빛 굽기**
 - [Valve: Dota 2 Workshop — Color Texture Light Baking](https://help.steampowered.com/en/faqs/view/60E5-5E13-712C-5315) — ★**불투명도가 공표된 유일한 스튜디오 문서**. AO 곱하기 80%, 그림자 클램프 90/90/90 스크린 85%, 포인트라이트 소프트라이트 100%, 컬러 오버레이 80% (공식)
