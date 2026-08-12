@@ -1724,6 +1724,12 @@ def bake_alt(name, segs):
 #               허벅지만 앞뒤로 갈라 돌린다 = 발이 앞뒤로 벌어지고 골반이 내려앉는다.
 #               ★이게 없으면 아무리 칼을 잘 휘둘러도 "제자리에 뻣뻣하게 서서 팔만
 #                 흔드는" 그림이 된다(1차 실루엣 시트에서 그대로 보였다).
+#     wf/ws     ★16차 신설. **골반(무게중심) 자체를 옮긴다.** 게임 cm 단위.
+#               wf + 는 앞, ws + 는 왼쪽. 발은 제자리에 두려고 허벅지를 반대로
+#               돌린다(안 그러면 발이 골반을 따라 통째로 미끄러진다).
+#               ★15차까지 골반 수평 이동이 **세 클립 전부 0.000m** 이었다. lg/cr 은
+#                 다리를 접고 벌릴 뿐 무게를 옮기지 못한다 — 그래서 "팔만 흔든다"가
+#                 수치로 증명됐다(임팩트 때 손 속도/칼끝 속도 0.19~0.26).
 #     gw        왼손이 자루를 쥔 정도(1=두 손. 0 이면 왼팔이 바탕 자세로 남는다)
 # 이 값들은 **회전 하나**로 오른팔에 먹인다(= [오른팔 내리기] 절이 점프에서 쓰던
 # 검증된 방식 그대로):
@@ -1781,108 +1787,221 @@ LEG_LEN = (THIGH_LEN
 # ── 수제 키프레임 대본 ──
 # (프레임, {채널: 값}).  f0 은 자동으로 바탕값이라 여기 안 적는다.
 # "base" = 그 채널의 바탕값(Idle 첫 프레임)으로 돌아간다.
-# ★★대본을 짤 때 지켜야 하는 산수 (1차 실행에서 그대로 물렸다)
-#   1) **칼끝 속도는 게임이 HOT_ON 15.8 로 자른다.** 한 프레임에 칼끝이
-#      15.8/(30*재생속도) m 넘게 움직이면 그 장은 hot 이다 = 예비동작·회수에서도
-#      **스윙 번호가 발급되고 피해가 들어간다**(1차 실행에서 X 가 스윙 3개였다).
-#        Attack ts1.35 -> 0.390 m/장   Heavy ts1.15 -> 0.458   Wide ts1.20 -> 0.439
-#      예비·회수는 그 아래로, 임팩트만 그 위로.
-#   2) 스윙 사이는 **HOT_OFF(게임 9.36) 아래로 두 장 이상** = 0.26/0.23 m/장 아래.
-#      안 그러면 히스테리시스가 안 꺼져 세 타가 한 번호로 묶인다.
-#   3) ★★**손을 올리지 말고 칼을 세워라.** 칼끝 높이 = 손 높이 + 1.66*sin(bel).
-#      팔을 어깨 위로 올리면 칼끝은 조금 더 오르는 대신 **손이 지나온 거리만큼
-#      예비동작이 빨라져** 1)에 걸린다. 게다가 왼손이 자루에서 떨어진다(reach).
-#      가슴 높이 손 + 세운 칼(bel +70~75)이 "머리 위로 치켜든 그림"을 다 낸다.
-#   4) 바닥 여유 = 손 높이 - 1.66*sin(|bel|). 손이 1.1m 면 |bel| 45도가 0 이다.
-#      팔로스루를 -45도보다 더 내리면 칼이 바닥에 박힌다.
+# 지켜야 하는 산수와 16차 재작의 이유는 아래 표 머리에 다 적었다.
 HAND_SPEC = {
+    # ══════════════════════════════════════════════════════════════════════
+    # ★★★16차 전면 재작 (2026-08-13. 오너 "베는건 여전히 이상해. 간단하잖아
+    #   세로로베고 가로로베고 각자 하나씩")
+    #   15차 대본은 **정지 실루엣과 월드 궤적으로만** 짜여 있었고 그 자로는 전부
+    #   통과했는데 오너는 또 기각했다. 16차에 처음으로 **화면(게임 카메라)**과
+    #   **시간축**을 재서 세 가지가 나왔다:
+    #     ① X 는 임팩트~팔로스루 여덟 장(f10~f17) 동안 **칼이 화면에서 접혀 있었다**
+    #        (화면 칼 길이 83px -> 5px). 칼 방향이 카메라 시선축과 나란해지는 자리다.
+    #     ② 예비가 **등속 드리프트**라 그 자체가 느린 스윙 하나로 읽혔다
+    #        (Z f02~f07 · C f02~f08 이 화면속도 일정).
+    #     ③ **골반 수평 이동이 세 클립 전부 0.000m** — 손 속도/칼끝 속도 0.19~0.26,
+    #        즉 칼끝 속도의 3/4 이 손목·팔뚝 회전이었다("팔만 흔드는 마네킹").
+    #   그래서 대본을 아래 다섯 규칙으로 다시 짰다.
+    #
+    #   [R1] ★★카메라 금지구역 — 칼이 "앞아래 45~60도"를 겨누면 화면에서 접힌다.
+    #        게임 카메라는 pitch 49.3도라 시선축이 (위 -0.758, 앞 +0.653) 이다.
+    #        칼 방향이 그 근처면 83px -> 5px. **그 자리엔 머물지 말고 한 장에 지나가라.**
+    #        더 근본적으로: 이 카메라에서 월드 1m 위 = 화면 43px 위 · 1m 앞 = 화면 47px
+    #        **위**다. 즉 "아래로 + 앞으로"는 화면에서 서로 상쇄된다 —
+    #        **순수 시상면 내려베기는 이 카메라에서 원리적으로 안 읽힌다.**
+    #        그래서 X 는 옆으로 45도쯤 눕힌 **가파른 내려찍기**로 짰다(업계의 카메라 치트).
+    #        C 와는 화면 기울기로 확실히 갈린다(X 는 세로 우세, C 는 가로 전용).
+    #   [R2] 예비는 3장 안에 감고 **정점에서 한 장 멈춘 뒤 한 장 되눌린다**(압축).
+    #        등속으로 흐르면 그게 곧 또 하나의 스윙이다.
+    #   [R3] 임팩트는 **한 장에 최대 간격**. 그 앞뒤로 가속·감속이 있어야 한다.
+    #   [R4] 팔로스루는 오버슛 한 장 + 정착 한 장. 죽은 장은 두 장을 넘기지 않는다.
+    #   [R5] 회수는 칼각 12도/장 아래로(HOT_ON 15.8 을 안 넘긴다). 대신 **손과 무게**가
+    #        움직여 실루엣이 계속 바뀐다 — 그래야 "멈춰 섰다"로 안 보인다.
+    #   [R6] ★신설 채널 wf/ws 로 **골반을 실제로 옮긴다**(게임 cm). 임팩트에서
+    #        앞으로 12~18cm. 이게 없으면 아무리 잘 짜도 팔만 흔드는 그림이다.
+    # ══════════════════════════════════════════════════════════════════════
+    #
+    # ── 아래 산수는 15차에서 그대로 물린 것들이다. 지킬 것 ──
+    #   1) **칼끝 속도는 게임이 HOT_ON 15.8 로 자른다.** 한 프레임에 칼끝이
+    #      15.8/(30*재생속도) m 넘게 움직이면 그 장은 hot 이다 = 예비·회수에서도
+    #      스윙 번호가 발급되고 피해가 들어간다.
+    #        Attack ts1.35 -> 0.390 m/장   Heavy ts1.15 -> 0.458   Wide ts1.20 -> 0.439
+    #      칼 1.66m 기준 각도로는 약 13도/장(ts1.15~1.35)이 문턱이다.
+    #   2) 스윙 사이는 **HOT_OFF(게임 9.36) 아래로 두 장 이상**. 그리고 스윙 사이
+    #      간격이 게임 0.22초(enemy.js SWING_GAP)보다 커야 다른 타로 센다
+    #      = 클립 프레임으로 Attack 9장, Heavy/Wide 8장 이상.
+    #   3) **손을 올리지 말고 칼을 세워라.** 칼끝 높이 = 손 높이 + 1.66*sin(bel).
+    #      팔을 어깨 위로 올리면 왼손이 자루에서 떨어진다(reach > 1.0).
+    #   4) 바닥 여유 = 손 높이 - 1.66*sin(|bel|). 손이 1.5m 라도 |bel| 60도가 한계다.
+    #      ★이 한계와 [R1] 금지구역(45~60도)이 겹친다 — 그래서 세로베기의 마무리는
+    #        방위(baz)를 줘서 빠져나와야 한다. 순수 세로로는 갈 곳이 없다.
+    #   5) 몸통 회전(ty·hy)도 칼끝을 옮긴다. 칼끝은 가슴축에서 1.7m 라 ty 1도가 3cm.
+    #      baz + ty + hy 를 **합쳐서** 1)의 산수에 넣어라.
+
     # ── Z 기본 3연타 (46장 = 1.500초 클립 = 게임 1.111초 @ts1.35) ──
-    # 대각 내려베기 -> 되받아 횡베기 -> 세로 마무리.
-    # ★스윙마다 끝에서 **멈춘다**(칼끝 2~3장 거의 정지). 그게 곧 타격감이고,
-    #   동시에 hot 을 꺼서 스윙 번호를 셋으로 가른다. 옛 수제판이 기각당한
-    #   "포즈 잡고 2초 정지"(17장 완전 정지)와는 자릿수가 다르다 — 0.07~0.10초다.
-    # ★★스윙 사이 간격은 **0.22초(enemy.js SWING_GAP)보다 커야** 세 타로 센다.
-    #   게임 시간 0.22초 = 클립 0.30초 = 9장. 그 9장 동안 칼끝은 9.36 m/s 아래여야
-    #   하는데, 그건 "정지"가 아니라 **한 장에 0.26m 까지** 움직여도 된다는 뜻이다
-    #   (9장이면 2.3m = 칼 방향 80도). 되돌리기+다음 예비를 다 넣고도 남는다.
-    #   그래서 옛 수제판처럼 얼어붙지 않는다.
+    # 대각 내려베기 -> 되받아 횡베기 -> 가파른 세로 마무리.
+    # ★타격 셋을 f9~f12 · f22~f25 · f36~f39 에 두었다(사이 10·11장 = 게임
+    #   0.247·0.272초 > SWING_GAP 0.22). 15차의 죽은 장(f13~15·f18~20·f30~31)이
+    #   있던 자리는 **되받아 감기**로 채웠다 — 1타의 오버슛이 그대로 2타의 예비가 되고,
+    #   2타의 오버슛이 3타의 예비가 된다(그 사이 칼끝은 5~9 m/s = HOT_OFF 아래).
     "Attack": (46, [
-        # 1타 — 오른쪽 위에서 왼쪽 아래로 대각 (예비 4장)
-        (2,  dict(bel=+44, baz=-8,  bend=+6,  ty=-5, hy=-2, cr=2, lg=-5)),
-        (4,  dict(bel=+52, baz=-24, bend=+14, ty=-10, hy=-5, cr=4, lg=-10)),
-        (5,  dict(bel=+48, baz=-20, bend=+13, ty=-8,  hy=-4, tp=+2)),
-        (7,  dict(bel=+24, baz=-8,  bend=+12, ty=-2,  hy=-1, tp=+6, cr=5, lg=+10)),
-        (9,  dict(bel=-12, baz=+20, arl=+80,  bend=+8,  ty=+10, hy=+5, tp=+9, cr=6)),
-        (10, dict(bel=-24, baz=+30, arl=+104, bend=+8,  ty=+13, hy=+7, tp=+9, cr=6, lg=+26)),
-        (11, dict(bel=-27, baz=+34, arl=+112, bend=+9,  ty=+14, hy=+8, tp=+8)),
-        (13, dict(bel=-26, baz=+32, arl=+104, bend=+11, ty=+13, hy=+7, tp=+6, cr=4, lg=+21)),
-        # 2타 — 되받아 오른쪽으로 쓸어 베기(거의 수평). 되돌리는 6장이 곧 예비다
-        (16, dict(bel=-16, baz=+44, arl=+80,  bend=+14, ty=+15, hy=+8, tp=+5)),
-        (19, dict(bel=-4,  baz=+52, arl=+50,  bend=+16, ty=+16, hy=+9, tp=+4, cr=3, lg=+6)),
-        (21, dict(bel=0,   baz=+48, bend=+15, ty=+14, hy=+8, tp=+4)),
-        (22, dict(bel=0,   baz=+44, bend=+14, ty=+12, hy=+7, lg=-3)),
-        (24, dict(bel=+2,  baz=+10, arl=+34,  bend=+11, ty=+2,  hy=+1, tp=+5)),
-        (26, dict(bel=+4,  baz=-30, bend=+9,  ty=-12, hy=-6, tp=+4)),
-        (27, dict(bel=+4,  baz=-38, bend=+10, ty=-15, hy=-8, tp=+3)),
-        (28, dict(bel=+4,  baz=-42, bend=+11, ty=-16, hy=-8, cr=4, lg=-18)),
-        (31, dict(bel=+8,  baz=-40, bend=+13, ty=-15, hy=-8, cr=3)),
-        # 3타 — 칼을 세워 세로 마무리(손은 가슴께에 둔다. 위 산수 3번)
-        # ★들어올리는 6장이 곧 예비다. 이 구간이 hot 을 넘으면 "올라가는 칼"이
-        #   따로 한 타로 발급된다(1차 실행에서 스윙이 여섯 개였던 이유의 하나).
-        (33, dict(bel=+22, baz=-36, bend=+16, ty=-13, hy=-7, cr=4, lg=-10)),
-        (36, dict(bel=+48, baz=-26, bend=+26, ty=-8,  hy=-4, cr=6, tp=-3)),
-        (38, dict(bel=+62, baz=-18, bend=+28, ty=-4,  hy=-2, cr=6, tp=-4, lg=-6)),
-        (39, dict(bel=+56, baz=-15, bend=+27, ty=-2,  cr=6, tp=-1)),
-        (41, dict(bel=+16, baz=-4,  arl=+60,  bend=+20, ty=+1,  cr=9, tp=+8, lg=+16)),
-        (42, dict(bel=-8,  baz=-1,  arl=+92,  bend=+14, ty=+3,  hy=+2, cr=12, tp=+13)),
-        (43, dict(bel=-28, baz=+2,  arl=+116, bend=+8,  ty=+4,  hy=+3, cr=14, tp=+16, lg=+32)),
-        (44, dict(bel=-42, baz=+3,  arl=+132, bend=+3,  ty=+5,  hy=+3, cr=16, tp=+18, lg=+35)),
-        # ★마지막 장은 Idle 로 안 되돌린다(Heavy 와 같은 이유. 남은 각은
-        #   게임의 0.18초 크로스페이드가 9 m/s 로 먹는다 = 버스트 문턱 아래).
-        (45, dict(bel=-34, baz=+2, arl=+120, bend=+8, ty=+4, hy=+2, cr=12, tp=+13, lg=+32)),
+        (1, dict(bel=+39, baz=-4,  bend=+4,  ty=-2,  tp=-1, hy=-1, cr=2, lg=-3,  wf=-2, ws=-1)),
+        (2, dict(bel=+44, baz=-8,  bend=+9,  ty=-4,  tp=-3, hy=-2, cr=4, lg=-6,  wf=-4, ws=-2)),
+        (3, dict(bel=+50, baz=-13, bend=+14, ty=-7,  tp=-5, hy=-3, cr=6, lg=-9,  wf=-6, ws=-3)),
+        (4, dict(bel=+55, baz=-17, bend=+18, ty=-9,  tp=-6, hy=-4, cr=7, lg=-11, wf=-7, ws=-4)),
+        (5, dict(bel=+59, baz=-19, bend=+21, ty=-10, tp=-7, hy=-5, cr=8, lg=-12, wf=-8, ws=-4)),
+        (6, dict(bel=+60, baz=-19, bend=+22, ty=-10, tp=-7, hy=-5, cr=8, lg=-12, wf=-8, ws=-4)),
+        (7, dict(bel=+59, baz=-18, bend=+21, ty=-9,  tp=-6, hy=-4, cr=9, lg=-11, wf=-7, ws=-3)),
+        (8, dict(bel=+51, baz=-13, bend=+18, ty=-4,  tp=-1, hy=-2, cr=11, lg=-3, wf=-3, ws=-1)),
+        (9, dict(bel=+32, baz=-2,  arl=+26, bend=+15, ty=+3, tp=+5, hy=+2, cr=13, lg=+8, wf=+4, ws=+2)),
+        (10, dict(bel=+4,  baz=+14, arl=+56, bend=+11, ty=+9, tp=+10, hy=+4, cr=16, lg=+19, wf=+9, ws=+4)),
+        (11, dict(bel=-22, baz=+32, arl=+86, bend=+7, ty=+14, tp=+15, hy=+7, cr=18, lg=+28, wf=+13, ws=+6)),
+        (12, dict(bel=-38, baz=+46, arl=+108, bend=+5, ty=+18, tp=+18, hy=+9, cr=20, lg=+33, wf=+16, ws=+8)),
+        (13, dict(bel=-35, baz=+43, arl=+104, bend=+7, ty=+17, tp=+17, hy=+8, cr=19, lg=+31, wf=+15, ws=+8)),
+        (15, dict(bel=-14, baz=+52, arl=+82, bend=+12, ty=+21, tp=+11, hy=+10, cr=16, lg=+25, wf=+12, ws=+9)),
+        (17, dict(bel=+14, baz=+54, arl=+54, bend=+26, ty=+23, tp=+4, hy=+11, cr=13, lg=+19, wf=+9, ws=+9)),
+        (19, dict(bel=+38, baz=+52, arl=+26, bend=+32, ty=+22, tp=-2, hy=+10, cr=11, lg=+15, wf=+7, ws=+8)),
+        (20, dict(bel=+46, baz=+50, arl=+20, bend=+34, ty=+21, tp=-4, hy=+10, cr=10, lg=+13, wf=+6, ws=+7)),
+        (21, dict(bel=+42, baz=+45, arl=+22, bend=+32, ty=+16, tp=-1, hy=+7, cr=11, lg=+8, wf=+7, ws=+5)),
+        (22, dict(bel=+26, baz=+26, arl=+22, bend=+26, ty=+7, tp=+3, hy=+3, cr=12, lg=0, wf=+7, ws=+3)),
+        (23, dict(bel=+12, baz=-8,  arl=+14, bend=+12, ty=-7, tp=+5, hy=-3, cr=12, lg=-8, wf=+7, ws=-1)),
+        (24, dict(bel=+7,  baz=-32, arl=+6, bend=+11, ty=-18, tp=+4, hy=-9, cr=11, lg=-15, wf=+6, ws=-5)),
+        (25, dict(bel=+5,  baz=-48, arl=+2, bend=+11, ty=-24, tp=+4, hy=-12, cr=10, lg=-20, wf=+5, ws=-8)),
+        (26, dict(bel=+5,  baz=-44, arl=+2, bend=+12, ty=-23, tp=+3, hy=-11, cr=9, lg=-20, wf=+4, ws=-7)),
+        (27, dict(bel=+6,  baz=-41, arl=+4, bend=+13, ty=-21, tp=+3, hy=-10, cr=8, lg=-18, wf=+3, ws=-6)),
+        (29, dict(bel=+20, baz=-30, bend=+24, ty=-17, tp=+1, hy=-8, cr=8, lg=-15, wf=+1, ws=-5)),
+        (31, dict(bel=+36, baz=-26, bend=+30, ty=-14, tp=-3, hy=-6, cr=8, lg=-13, wf=-1, ws=-4)),
+        (33, dict(bel=+50, baz=-20, bend=+34, ty=-10, tp=-6, hy=-4, cr=8, lg=-11, wf=-4, ws=-3)),
+        (34, dict(bel=+58, baz=-16, bend=+36, ty=-8, tp=-8, hy=-3, cr=9, lg=-10, wf=-5, ws=-3)),
+        (35, dict(bel=+54, baz=-14, bend=+34, ty=-6, tp=-6, hy=-2, cr=10, lg=-8, wf=-4, ws=-2)),
+        (36, dict(bel=+48, baz=-12, arl=+20, bend=+32, ty=-3, tp=-2, hy=-1, cr=12, lg=-2, wf=-1, ws=-2)),
+        (37, dict(bel=+20, baz=-2,  arl=+48, bend=+15, ty=+3, tp=+7, hy=+2, cr=15, lg=+12, wf=+6, ws=+1)),
+        (38, dict(bel=-13, baz=+23, arl=+86, bend=+9, ty=+11, tp=+14, hy=+6, cr=18, lg=+26, wf=+13, ws=+5)),
+        (39, dict(bel=-42, baz=+42, arl=+114, bend=+5, ty=+16, tp=+20, hy=+8, cr=22, lg=+34, wf=+17, ws=+7)),
+        (40, dict(bel=-39, baz=+40, arl=+110, bend=+7, ty=+15, tp=+19, hy=+8, cr=21, lg=+32, wf=+16, ws=+7)),
+        (41, dict(bel=-23, baz=+35, arl=+88, bend=+11, ty=+12, tp=+14, hy=+6, cr=16, lg=+25, wf=+12, ws=+6)),
+        (42, dict(bel=-11, baz=+29, arl=+68, bend=+13, ty=+9, tp=+10, hy=+5, cr=12, lg=+19, wf=+9, ws=+5)),
+        (43, dict(bel=-1,  baz=+24, arl=+50, bend=+12, ty=+7, tp=+7, hy=+4, cr=9, lg=+14, wf=+7, ws=+4)),
+        (44, dict(bel=+6,  baz=+19, arl=+34, bend=+10, ty=+5, tp=+5, hy=+2, cr=6, lg=+10, wf=+5, ws=+3)),
+        (45, dict(bel=+12, baz=+15, arl=+22, bend=+8, ty=+3, tp=+4, hy=+1, cr=4, lg=+7, wf=+4, ws=+2)),
     ]),
-    # ── X 수면참 = **위에서 아래로** (22장 = 0.700초 클립 = 게임 0.609초 @ts1.15) ──
-    # 칼끝 방위(baz)를 -8~+4 안에 붙들어 둔다 = 좌우로 안 흐른다 = 세로로 읽힌다.
+
+    # ── X 수면참 = 가파른 내려찍기 (22장 = 0.700초 클립 = 게임 0.609초 @ts1.15) ──
+    # ★15차는 방위(baz)를 -8~+4 에 묶어 "월드 세로성 7.55"를 냈는데, 바로 그것 때문에
+    #   칼이 카메라 시선축에 갇혀 여덟 장 동안 화면에서 사라졌다([R1]).
+    #   16차는 위(bel +76)에서 **앞아래·왼쪽(baz +38)** 으로 떨어뜨린다. 화면에서는
+    #   가파른 대각 = "위에서 아래로"로 읽히고, 칼은 한 장도 접히지 않는다.
+    # ★C 와의 구분: X 는 bel 이 +76 -> -42 로 118도 내려오고 baz 는 55도만 돈다.
+    #   C 는 bel 을 +9~+32 에 묶고 baz 가 126도 돈다. 화면 기울기가 완전히 갈린다.
     "Heavy": (22, [
-        (2,  dict(bel=+54, baz=-4,  arl=+42, bend=+10, ty=-4, tp=-4, cr=3, lg=-6)),
-        (4,  dict(bel=+73, baz=-8,  arl=+42,  bend=+28, ty=-3, tp=-8, cr=6, lg=-10)),
-        (5,  dict(bel=+71, baz=-8,  bend=+28, ty=-1, tp=-6, cr=6, lg=-3)),
-        (7,  dict(bel=+30, baz=-4,  arl=+72,  bend=+22, ty=+1, tp=+4, cr=9, lg=+16)),
-        (9,  dict(bel=-18, baz=+2,  arl=+108, bend=+8,  ty=+3, tp=+14, cr=14, lg=+29)),
-        # ★f10 은 "칼끝이 멈칫하는 것"을 막는 장이다. 칼 회전과 손 하강이 서로를
-        #   지워 f9 에서 칼끝 속도가 2.6 까지 떨어졌었다(계단처럼 보인다).
-        (10, dict(bel=-32, baz=+3,  bend=+5,  ty=+3, tp=+16, cr=15)),
-        (11, dict(bel=-42, baz=+4,  arl=+130, bend=+2,  ty=+3, tp=+18, cr=17, lg=+35)),
-        (12, dict(bel=-44, baz=+4,  arl=+134, bend=+2,  ty=+3, tp=+19, cr=18, lg=+37)),
-        (14, dict(bel=-34, baz=+3,  arl=+112, bend=+6,  ty=+2, tp=+16, cr=14, lg=+34)),
-        (17, dict(bel=-14, baz=+1,  arl=+62,  bend=+10, ty=+1, tp=+10, cr=8, lg=+22)),
-        (19, dict(bel=+2,  baz=0,   arl=+40,  bend=+4,  ty=0,  tp=+4, cr=3, lg=+11)),
-        # ★마지막 장을 Idle 과 **똑같이** 만들지 않는다. 남은 각은 게임의 0.18초
-        #   크로스페이드가 7 m/s 로 먹는다(버스트 문턱 한참 아래). 억지로 맞추면
-        #   회수 동작이 **또 하나의 스윙**으로 발급된다(1차 실행에서 실제로 밟았다).
-        (21, dict(bel=+16, baz="base", arl="base", bend=0, ty=0, tp=0, cr=0, lg=+0)),
+        (1, dict(bel=+41, baz=-2,  bend=+4,  ty=-2, tp=-2,  hy=-1, cr=2,  lg=-3,  wf=-2, ws=-1)),
+        (2, dict(bel=+48, baz=-5,  bend=+9,  ty=-3, tp=-4,  hy=-2, cr=4,  lg=-6,  wf=-4, ws=-2)),
+        (3, dict(bel=+56, baz=-9,  bend=+15, ty=-5, tp=-7,  hy=-3, cr=6,  lg=-9,  wf=-6, ws=-3)),
+        (4, dict(bel=+58, baz=-11, bend=+25, ty=-6, tp=-8,  hy=-4, cr=8,  lg=-11, wf=-7, ws=-3)),
+        (5, dict(bel=+66, baz=-14, bend=+29, ty=-8, tp=-10, hy=-5, cr=9,  lg=-14, wf=-9, ws=-4)),
+        (6, dict(bel=+67, baz=-14, bend=+29, ty=-8, tp=-10, hy=-5, cr=9,  lg=-14, wf=-9, ws=-4)),
+        (7, dict(bel=+61, baz=-11, bend=+26, ty=-5, tp=-7,  hy=-3, cr=11, lg=-10, wf=-6, ws=-2)),
+        (8, dict(bel=+54, baz=-8,  bend=+25, ty=-2, tp=-2,  hy=-1, cr=12, lg=-2,  wf=-2, ws=-1)),
+        (9, dict(bel=+28, baz=-1,  arl=+30, bend=+16, ty=+2, tp=+6,  hy=+1, cr=14, lg=+10, wf=+5, ws=+2)),
+        (10, dict(bel=-8,  baz=+15, arl=+66, bend=+10, ty=+8, tp=+13, hy=+4, cr=17, lg=+21, wf=+11, ws=+5)),
+        (11, dict(bel=-30, baz=+30, arl=+90, bend=+6, ty=+11, tp=+17, hy=+6, cr=19, lg=+29, wf=+14, ws=+7)),
+        (12, dict(bel=-41, baz=+40, arl=+104, bend=+4, ty=+14, tp=+20, hy=+7, cr=22, lg=+34, wf=+17, ws=+8)),
+        (13, dict(bel=-38, baz=+38, arl=+100, bend=+6, ty=+13, tp=+19, hy=+7, cr=21, lg=+33, wf=+16, ws=+8)),
+        (14, dict(bel=-24, baz=+34, arl=+84, bend=+10, ty=+11, tp=+15, hy=+6, cr=16, lg=+25, wf=+12, ws=+7)),
+        (15, dict(bel=-12, baz=+29, arl=+66, bend=+12, ty=+9, tp=+11, hy=+5, cr=12, lg=+19, wf=+9, ws=+6)),
+        (16, dict(bel=-3,  baz=+25, arl=+50, bend=+12, ty=+7, tp=+8, hy=+4, cr=9, lg=+15, wf=+7, ws=+5)),
+        (17, dict(bel=+3,  baz=+21, arl=+37, bend=+11, ty=+6, tp=+6, hy=+3, cr=7, lg=+12, wf=+6, ws=+4)),
+        (18, dict(bel=+7,  baz=+18, arl=+27, bend=+9, ty=+5, tp=+5, hy=+2, cr=5, lg=+9, wf=+5, ws=+3)),
+        (19, dict(bel=+10, baz=+15, arl=+19, bend=+7, ty=+4, tp=+4, hy=+2, cr=4, lg=+7, wf=+4, ws=+2)),
+        (20, dict(bel=+12, baz=+13, arl=+13, bend=+5, ty=+3, tp=+3, hy=+1, cr=3, lg=+5, wf=+3, ws=+1)),
+        (21, dict(bel=+14, baz=+11, arl=+9,  bend=+4, ty=+2, tp=+2, hy=+1, cr=2, lg=+3, wf=+2, ws=+1)),
     ]),
-    # ── C 횡일섬 = **옆으로** (20장 = 0.633초 클립 = 게임 0.528초 @ts1.20) ──
-    # 칼끝 고도(bel)를 +8~+24 로 붙들어 둔다: 방위만 크게 돌아 가로로 읽히면서도
-    # 칼이 **바닥과 나란히 눕지 않는다**(옛 수제판이 지적받은 그 그림).
-    # 덤으로 칼끝이 늘 손보다 위라 바닥을 안 뚫는다(14차의 -0.477m 해소).
-    # ★★몸통 회전(ty·hy)도 칼끝을 옮긴다. 칼끝은 가슴축에서 1.7m 라 ty 1도가
-    #   칼끝 3cm 다 — 예비에서 ty 를 26도 돌리면 그것만으로 0.77m 다. 1차 실행에서
-    #   "칼 방위(baz)만 늦췄는데 왜 아직 hot 이냐" 의 진범이 이것이었다.
-    #   그래서 아래 값은 baz + ty + hy 를 **합쳐서** 산수 1)에 넣고 짰다.
+
+    # ── C 횡일섬 = 가로 베기 (22장 = 0.700초 클립 = 게임 0.583초 @ts1.20) ──
+    # ★15차의 두 가지를 고쳤다: ①예비 일곱 장이 등속이라 그 자체가 스윙으로 읽혔다
+    #   -> 다섯 장에 가속하며 감고 한 장 멈춘 뒤 한 장 되누른다. ②쓸고 나서 여섯 장
+    #   붙박이 -> 오버슛 한 장 + 정착 한 장 + 감속하는 회수(손·무게가 계속 움직인다).
+    # ★bel 을 +9~+32 에 묶어 칼이 바닥과 나란히 눕지 않게 하고(15차 계약 유지),
+    #   대신 baz 를 -56 -> +70 으로 126도 돌린다 = 화면 가로 이동 최대.
     "Wide": (22, [
-        (3,  dict(bel=+26, baz=-14, bend=+6,  ty=-8,  hy=-4, cr=3, lg=-13)),
-        (6,  dict(bel=+18, baz=-28, arl=+30, bend=+14, ty=-20, hy=-10, cr=6, lg=-21)),
-        (7,  dict(bel=+16, baz=-22, arl=+32, bend=+14, ty=-16, hy=-8, cr=6, lg=-13)),
-        (9,  dict(bel=+10, baz=+10, arl=+36, bend=+10, ty=+2,  hy=+1, cr=7, tp=+5, lg=+10)),
-        (11, dict(bel=+7,  baz=+44, arl=+36, bend=+8,  ty=+20, hy=+11, cr=6, tp=+5, lg=+26)),
-        (13, dict(bel=+6,  baz=+60, arl=+34, bend=+12, ty=+28, hy=+15, cr=5, tp=+3, lg=+32)),
-        (15, dict(bel=+9,  baz=+54, arl=+30, bend=+16, ty=+25, hy=+13, cr=3, lg=+29)),
-        (18, dict(bel=+15, baz=+42, arl=+28, bend=+14, ty=+16, hy=+9, cr=2, lg=+18)),
-        (21, dict(bel=+22, baz=+38, arl="base", bend=+2, ty=+6, hy=+3, tp=0, cr=0, lg=+0)),
+        (1, dict(bel=+32, baz=-5,  bend=+3,  ty=-2,  hy=-1,  cr=1,  lg=-2,  ws=-1,  wf=-1)),
+        (2, dict(bel=+27, baz=-13, arl=+8, bend=+7,  ty=-7,  hy=-4, cr=4,  lg=-6,  ws=-3,  wf=-2)),
+        (3, dict(bel=+23, baz=-22, arl=+16, bend=+15, ty=-12, hy=-7, cr=6,  lg=-11, ws=-5,  wf=-3)),
+        (4, dict(bel=+20, baz=-30, arl=+21, bend=+17, ty=-16, hy=-9, cr=8, lg=-15, ws=-7,  wf=-4)),
+        (5, dict(bel=+18, baz=-36, arl=+24, bend=+19, ty=-19, hy=-11, cr=9, lg=-17, ws=-8, wf=-5)),
+        (6, dict(bel=+17, baz=-38, arl=+25, bend=+20, ty=-20, hy=-11, cr=10, lg=-18, ws=-9, wf=-5)),
+        (7, dict(bel=+18, baz=-36, arl=+24, bend=+19, ty=-18, hy=-10, cr=11, lg=-16, ws=-8, wf=-4)),
+        (8, dict(bel=+17, baz=-28, arl=+23, bend=+18, ty=-11, hy=-6,  cr=12, lg=-9,  ws=-5, wf=-1)),
+        (9, dict(bel=+14, baz=-12, arl=+26, bend=+12, ty=0,   hy=+1,  cr=13, lg=+3,  ws=0,  wf=+3)),
+        (10, dict(bel=+11, baz=+16, arl=+30, bend=+10, ty=+14, hy=+8,  cr=14, lg=+15, ws=+5, wf=+8)),
+        (11, dict(bel=+10, baz=+38, arl=+32, bend=+9,  ty=+23, hy=+13, cr=13, lg=+23, ws=+9, wf=+11)),
+        (12, dict(bel=+9,  baz=+62, arl=+31, bend=+10, ty=+31, hy=+18, cr=12, lg=+29, ws=+11, wf=+12)),
+        (13, dict(bel=+10, baz=+78, arl=+30, bend=+12, ty=+36, hy=+21, cr=11, lg=+32, ws=+12, wf=+12)),
+        (14, dict(bel=+11, baz=+75, arl=+29, bend=+13, ty=+34, hy=+20, cr=10, lg=+30, ws=+11, wf=+11)),
+        (15, dict(bel=+13, baz=+70, arl=+27, bend=+13, ty=+31, hy=+18, cr=9,  lg=+28, ws=+10, wf=+10)),
+        (16, dict(bel=+15, baz=+63, arl=+24, bend=+13, ty=+28, hy=+16, cr=8,  lg=+25, ws=+9, wf=+9)),
+        (17, dict(bel=+18, baz=+55, arl=+21, bend=+12, ty=+24, hy=+14, cr=6,  lg=+22, ws=+8, wf=+8)),
+        (18, dict(bel=+20, baz=+47, arl=+18, bend=+11, ty=+20, hy=+12, cr=5,  lg=+18, ws=+6, wf=+6)),
+        (19, dict(bel=+23, baz=+39, arl=+15, bend=+10, ty=+16, hy=+9,  cr=4,  lg=+15, ws=+5, wf=+5)),
+        (20, dict(bel=+25, baz=+32, arl=+12, bend=+8,  ty=+13, hy=+7,  cr=3,  lg=+12, ws=+4, wf=+4)),
+        (21, dict(bel=+27, baz=+26, arl=+9,  bend=+6,  ty=+10, hy=+6,  cr=2,  lg=+9,  ws=+3, wf=+3)),
     ]),
 }
-HAND_CH = ("bel", "baz", "arl", "bend", "ty", "tp", "tr", "hy", "cr", "lg", "gw")
+
+HAND_CH = ("bel", "baz", "arl", "bend", "ty", "tp", "tr", "hy", "cr", "lg",
+           "wf", "ws", "gw")
+
+# ================================ 16차 신설: 게임 카메라 화면 좌표 ================================
+# ★★15차까지 세 판을 전부 **월드 좌표**(칼끝의 위/옆/앞)로 판정했고 세 판 다 통과했는데
+#   오너는 세 판 다 기각했다. 16차에 처음으로 화면으로 재 보니 이유가 나왔다:
+#     · 게임 카메라는 pitch 49.3도로 내려본다. 월드에서 1m 올라가면 화면 세로 43px,
+#       1m **앞으로** 가도 화면 세로 47px 다 — 즉 내려베기의 "아래로"와 "앞으로"가
+#       화면에서 서로 상쇄된다.
+#     · 더 나쁜 것: **칼이 시선축과 나란해지면 화면에서 접힌다.** 칼 방향이
+#       (위 -0.758, 앞 +0.653) 근처면 화면 길이가 83px -> 5px 로 준다.
+#       15차 X(수면참)는 그 자리에 여덟 장(f10~f17) 머물렀다 = 임팩트와 팔로스루
+#       내내 **칼이 화면에서 사라져 있었다.**
+#   그래서 이제 굽는 자리에서 화면을 같이 잰다. 카메라 값은 main.js CAM 과 같다.
+CAM_PITCH = 0.86          # rad. main.js CAM.pitch
+CAM_DIST = 24.0           # main.js CAM.dist
+CAM_FOV = 24.0            # main.js CAM.fov (세로 fov, 도)
+CAM_LEAD = 1.25           # main.js CAM.lead (바라보는 점을 캐릭터 앞으로 민다)
+SCR_W, SCR_H = 960, 640   # 판정 해상도
+CHAR_H_GAME = 1.75        # 게임 캐릭터 키
+
+
+def _cam_axes():
+    """(l,u,f) 기저에서 카메라 눈·축. l=캐릭터 왼쪽 u=위 f=앞(캐릭터가 보는 쪽).
+    ★main.js placeCamera 를 그대로 옮긴 것이다. 카메라는 캐릭터 **뒤 위**에 있고
+      바라보는 점은 캐릭터보다 lead 만큼 앞이다."""
+    sp, cp = math.sin(CAM_PITCH), math.cos(CAM_PITCH)
+    tgt = Vector((0.0, CHAR_H_GAME * 0.62, CAM_LEAD))     # camTarget
+    eye = tgt + Vector((0.0, sp * CAM_DIST, -cp * CAM_DIST))
+    zc = (eye - tgt).normalized()                         # three.js lookAt 의 z(뒤쪽)
+    up = Vector((0.0, 1.0, 0.0))
+    xc = Vector((up.y * zc.z - up.z * zc.y,               # up x zc  (l,u,f 우수계)
+                 up.z * zc.x - up.x * zc.z,
+                 up.x * zc.y - up.y * zc.x)).normalized()
+    yc = Vector((zc.y * xc.z - zc.z * xc.y,
+                 zc.z * xc.x - zc.x * xc.z,
+                 zc.x * xc.y - zc.y * xc.x)).normalized()
+    return eye, xc, yc, zc
+
+
+CAM_EYE, CAM_X, CAM_Y, CAM_Z = _cam_axes()
+CAM_TAN = math.tan(math.radians(CAM_FOV) * 0.5)
+CAM_ASPECT = SCR_W / float(SCR_H)
+
+
+def screen_px(p):
+    """게임 미터 (l,u,f) -> 화면 픽셀 (x 오른쪽+, y 아래+). 원점은 캐릭터 발밑."""
+    d = Vector(p) - CAM_EYE
+    zz = -d.dot(CAM_Z)                       # 카메라 앞쪽 거리
+    if zz < 0.01:
+        zz = 0.01
+    nx = d.dot(CAM_X) / (zz * CAM_TAN * CAM_ASPECT)
+    ny = d.dot(CAM_Y) / (zz * CAM_TAN)
+    return (nx * SCR_W * 0.5, -ny * SCR_H * 0.5)
 
 
 def _sph(el, az):
@@ -1963,7 +2082,7 @@ def bake_hand(name):
     BASE = dict(zip(("bel", "baz"), _unsph(C0.inverted() @ d0w)))
     _e1, _e2 = _bframe(d0w, C0)
     BASE["arl"] = math.degrees(math.atan2(a0w.dot(_e2), a0w.dot(_e1)))
-    for c in ("bend", "ty", "tp", "tr", "hy", "cr", "lg"):
+    for c in ("bend", "ty", "tp", "tr", "hy", "cr", "lg", "wf", "ws"):
         BASE[c] = 0.0
     BASE["gw"] = 1.0
     print("\n[%s] ★수제 키프레임 %d장 (%.3f초 @30fps) / 키 %d개"
@@ -2007,6 +2126,26 @@ def bake_hand(name):
             # 정강이·발은 안 건드린다(월드 회전 유지) = 발바닥이 계속 바닥과 나란하고
             # 무릎만 앞뒤로 벌어진다. 그만큼 골반이 내려앉는다.
             pw = pw - W_UP * (THIGH_LEN * (1.0 - math.cos(lg)))
+        # ── 무게중심 옮기기 (16차 신설) ──
+        # ★골반을 실제로 옮긴다. 발이 같이 끌려가면 미끄러지므로 허벅지를 **반대로**
+        #   돌려 발을 제자리에 붙들어 둔다(다리가 뒤로 끌리는 = 앞으로 체중을 실은 그림).
+        kcm = DH / CHAR_H_GAME / 100.0            # 게임 cm -> 블렌더 단위
+        wf = val("wf", i) * kcm
+        ws = val("ws", i) * kcm
+        if abs(wf) > 1e-9 or abs(ws) > 1e-9:
+            pw = pw + W_FWD * wf + W_LFT * ws
+            if abs(wf) > 1e-9:
+                th = math.asin(max(-0.7, min(0.7, wf / LEG_LEN)))
+                mq = Quaternion(W_LFT, -CR_SGN * th).to_matrix()
+                for bn in THIGHS:
+                    Rw[bn] = mq @ Rw[bn]
+                pw = pw - W_UP * (LEG_LEN * (1.0 - math.cos(th)))
+            if abs(ws) > 1e-9:
+                th = math.asin(max(-0.7, min(0.7, ws / LEG_LEN)))
+                mq = Quaternion(W_FWD, -th).to_matrix()
+                for bn in THIGHS:
+                    Rw[bn] = mq @ Rw[bn]
+                pw = pw - W_UP * (LEG_LEN * (1.0 - math.cos(th)))
         hy = math.radians(val("hy", i))
         if abs(hy) > 1e-6:                       # 골반 돌림(발은 제자리)
             mp = Quaternion(W_UP, hy).to_matrix()
@@ -2176,6 +2315,57 @@ def bake_hand(name):
               % (i, i / 30.0, vs[i], cl[i], hz[i], pf, devs[i] / FIST,
                  "#" * int(vs[i] / max(1e-9, max(vs)) * 28),
                  "  <-hot" if vs[i] > 15.8 else ""))
+
+    # ── ★★16차: 게임 카메라 화면 판정 ──
+    # 오너는 월드가 아니라 **화면**을 본다. 여기서 재는 셋이 15차까지 한 번도
+    # 안 잰 차원이다: 화면 칼 길이(접힘) · 화면 칼끝 이동(px) · 등속 구간.
+    def _luf(P):
+        d = P - BASE_P
+        return (d.dot(W_LFT) * gk, (P.z + shift - BIND_LOW) * gk, d.dot(W_FWD) * gk)
+
+    sc_tip = [screen_px(_luf(t)) for t in tips]
+    sc_hnd = [screen_px(_luf(h)) for h in hnds]
+    sblade = [math.hypot(a[0] - b[0], a[1] - b[1]) for a, b in zip(sc_tip, sc_hnd)]
+    sv = [0.0] + [math.hypot(sc_tip[i][0] - sc_tip[i - 1][0],
+                             sc_tip[i][1] - sc_tip[i - 1][1]) for i in range(1, nf)]
+    smax = max(sblade)
+    pk = max(sv)
+    # 등속 구간: 이웃 세 장의 화면속도가 서로 15% 안이고 그게 4장 이상 이어지면 기계적이다
+    flat, cur = [], 0
+    for i in range(2, nf):
+        a, bq = sv[i - 1], sv[i]
+        if a > pk * 0.12 and abs(bq - a) <= max(1.0, a * 0.15):
+            cur += 1
+        else:
+            if cur >= 3:
+                flat.append((i - cur - 1, cur + 1))
+            cur = 0
+    if cur >= 3:
+        flat.append((nf - cur - 1, cur + 1))
+    dead, cur = [], 0
+    for i in range(1, nf):
+        if sv[i] < pk * 0.10:
+            cur += 1
+        else:
+            if cur >= 2:
+                dead.append((i - cur, cur))
+            cur = 0
+    if cur >= 2:
+        dead.append((nf - cur, cur))
+    thin = [i for i in range(nf) if sblade[i] < smax * 0.45]
+    print("   ★게임 카메라 화면(960x640): 칼 길이 최대 %.0f px · 최소 %.0f px(%.0f%%)"
+          % (smax, min(sblade), min(sblade) / smax * 100))
+    print("     45%% 미만(칼이 시선축과 나란해 접힌 장) %d장%s"
+          % (len(thin), ("  f" + ",f".join(str(x) for x in thin)) if thin else ""))
+    print("     화면 칼끝 최고 %.0f px/장 · 중앙 %.0f px/장" % (pk, sorted(sv)[nf // 2]))
+    print("     등속 구간(4장 이상) %s / 죽은 장(<10%%, 2장 이상) %s"
+          % (" ".join("f%d~%d" % (s, s + c - 1) for s, c in flat) or "없음",
+             " ".join("f%d~%d" % (s, s + c - 1) for s, c in dead) or "없음"))
+    print("     f    화면칼끝(x,y)px   화면칼길이  화면속도px/장")
+    for i in range(nf):
+        print("     f%-3d (%+7.1f,%+7.1f) %8.0f %10.1f  %s"
+              % (i, sc_tip[i][0], sc_tip[i][1], sblade[i], sv[i],
+                 "#" * int(sv[i] / max(1e-9, pk) * 34)))
 
     # --- 2차: 키 찍기 ---
     act = new_action(name)
