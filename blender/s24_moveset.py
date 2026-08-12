@@ -170,6 +170,67 @@ GRIP_K = float(os.environ.get("GRIP_K", "1.0"))
 # 주먹 하나를 키의 몇 %로 볼 것인가. 175cm 성인 주먹 폭 ~9.6cm.
 FIST = 0.055
 
+# ── Meshy 프리셋 모션을 **다른 소스**에서 끌어오기 (13-모션이식, 2026-08-12) ──
+# 오너 "베는모션을 meshy ai로 해와 차라리". 베기 3종(Z/X/C)만 slayer 가 아니라
+# Meshy 애니메이트 프리셋에서 가져온다. 나머지(Idle/Walk/Run/Jump)는 그대로 slayer 다.
+#   ANIM_DIR   프리셋 glb 폴더            예 incoming/meshy_anim
+#   ANIM_SPEC  클립별 이어붙이기 대본     ";" 로 클립, "+" 로 구간을 나눈다
+#              "Attack=sword_slash:9-24@1.15+left_slash:13-28@1.15; Heavy=axe_chop:118-140@1.7"
+#              구간 = 파일이름:소스첫프레임-끝프레임@배속   (배속 1.5 = 1.5배 빠르게)
+#              소스 프레임은 **소수도 된다**(subframe 으로 샘플한다).
+#   ANIM_BLEND 구간 이음매 크로스페이드 프레임 수(기본 4). 0 이면 뚝 끊긴다
+#   ANIM_TIP_K 칼끝 진단용 배율. 하류 s34 가 1번 칼을 키우는 몫(s27 TIP_K 와 같은 값)
+# ★이 소스에는 검이 없다(맨손 프리셋이다). 그래서 왼손 파지 IK·손목 교정은
+#   이 클립들에 **안 건다** — 두 손 거리 실측 0.48~0.87H(=69~125cm)라 애초에
+#   한 손 파지 모션이다. 억지로 왼손을 자루로 끌면 원본 모션이 망가진다.
+ANIM_DIR = os.environ.get("ANIM_DIR", "")
+ANIM_SPEC = os.environ.get("ANIM_SPEC", "")
+ANIM_BLEND = int(os.environ.get("ANIM_BLEND", "4"))
+ANIM_TIP_K = float(os.environ.get("ANIM_TIP_K", "1.7806"))
+
+
+def parse_anim_spec(s):
+    """'Attack=a:1-20@1.2+b:5-14~6' -> {클립: [(파일, f0, f1, 배속, 앞이음매길이)]}
+
+    ~N 은 **이 구간으로 넘어오는 이음매**를 몇 장에 걸쳐 섞을지다.
+    안 적으면 ANIM_BLEND. 단 앞 구간과 **같은 파일이고 프레임이 이어지면 0**이다
+    (같은 소스가 이어지는 자리는 자세가 이미 연속이라 섞을 게 없다.
+     이 문법이 곧 '배속 램프' 다 — 구간을 잘라 배속만 바꿔 이어 붙이면 된다).
+    """
+    out = {}
+    for part in s.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        clip, rest = part.split("=", 1)
+        segs = []
+        for sg in rest.split("+"):
+            sg = sg.strip()
+            bl = None
+            if "~" in sg:
+                sg, bb = sg.split("~")
+                bl = int(bb)
+            spd = 1.0
+            if "@" in sg:
+                sg, sp = sg.split("@")
+                spd = float(sp)
+            stem, rng = sg.split(":")
+            fa, fb = rng.split("-")
+            stem = stem.strip()
+            fa, fb = float(fa), float(fb)
+            if bl is None:
+                # ★1 이다(0 이 아니다). 앞 구간의 마지막 소스 프레임과 이 구간의 첫
+                #   프레임이 같은 자리라, 0 으로 두면 **같은 자세가 두 장 연달아** 나가
+                #   그 한 장에서 칼끝 속도가 0 으로 꺼진다(= 타격 구간이 갈라진다).
+                bl = (1 if (segs and segs[-1][0] == stem
+                            and abs(segs[-1][2] - fa) < 1e-6) else ANIM_BLEND)
+            segs.append((stem, fa, fb, spd, bl))
+        out[clip.strip()] = segs
+    return out
+
+
+ANIM = parse_anim_spec(ANIM_SPEC) if (ANIM_DIR and ANIM_SPEC) else {}
+
 # Meshy 원본 이름 -> 우리 규칙(s13/s14 와 같은 표). 순서 중요(긴 것부터).
 # ★"r hand", "l thigh" 같은 부분 문자열로 뼈를 찾는 코드가 게임·포즈 양쪽에 있다.
 RENAME = [
@@ -254,9 +315,11 @@ src = next(o for o in src_objs if o.type == "ARMATURE")
 SRC_ACT = {a.name[4:]: a for a in src_acts}
 print("\n[소스] 아마추어 %s / 뼈 %d / 액션 %s"
       % (src.name, len(src.data.bones), sorted(SRC_ACT)))
-missing = [c for c in CLIPS if c not in SRC_ACT]
+missing = [c for c in CLIPS if c not in SRC_ACT and c not in ANIM]
 if missing:
     raise SystemExit("소스에 없는 클립: %s (있는 것: %s)" % (missing, sorted(SRC_ACT)))
+if ANIM:
+    print("       ★Meshy 프리셋에서 가져올 클립: %s" % sorted(ANIM))
 
 # ================================================================ 3) 타깃
 dst_objs, dst_acts = imp(DST_GLB)
@@ -398,6 +461,86 @@ print("\n[레스트] 소스 키 %.4f / 타깃 키 %.4f  (키비율 K_H=%.4f)" % 
 print("         다리(골반-발목) 소스 %.4f / 타깃 %.4f  (골반이동 배율 %.4f)"
       % (LEG_S, LEG_D, K_TRANS))
 print("         타깃 바인드 최저 z %.4f" % BIND_LOW)
+
+# ================================================ 4b) Meshy 프리셋 소스 (2026-08-12)
+# 프리셋 glb 하나하나가 자기 아마추어·메시를 들고 온다. 뼈 이름은 Meshy 원본
+# (Hips/LeftArm/Spine02)이라 위 RENAME 표를 그대로 먹인다. 그러면 계층·이름이
+# 타깃과 **한 글자도 안 틀리게** 같아진다(실측: 24본 전부 일치, 부모도 전부 일치).
+# 레스트만 다르다 — 손 5.2도 / 팔뚝 10.4도 / 위팔 11.4도, 골반 head 최대 6.5cm.
+# 그래서 절대 회전 복사가 아니라 **레스트 델타**로 옮긴다(이 파일의 기본 방식 그대로).
+ALT_CTX = {}          # 파일이름 -> (아마추어, S2W, SREST, SH, SLOW, MAP, 액션)
+
+
+def load_alt(stem):
+    """프리셋 glb 하나를 소스로 읽어 리타게팅에 필요한 것만 재 둔다."""
+    path = os.path.join(ROOT, ANIM_DIR, stem + ".glb")
+    objs, acts = imp(path)
+    a = next(o for o in objs if o.type == "ARMATURE")
+    a.name = "ALT_" + stem
+    src_objs.extend(objs)                          # ★함정 6: 정리 목록에 같이 넣는다
+    have = set(b.name for b in a.data.bones)
+    todo = [(o_, n_) for o_, n_ in RENAME if o_ in have and n_ not in have]
+    nm = dict(todo)
+    for old, new in todo:
+        a.data.bones[old].name = new
+    meshes = [o for o in objs if o.type == "MESH"]
+    for m in meshes:                               # ★함정 7: 정점 그룹도 같이
+        for g in m.vertex_groups:
+            if g.name in nm:
+                g.name = nm[g.name]
+    for b in a.pose.bones:
+        b.rotation_mode = "QUATERNION"
+        b.matrix_basis = Matrix()
+    W, R = rest_world(a)
+    body = [o for o in meshes if not junk(o)]
+    a.data.pose_position = "REST"
+    bpy.context.view_layer.update()
+    H, LOW = height(body)
+    a.data.pose_position = "POSE"
+    bones = set(b.name for b in a.data.bones)
+    M = {}
+    for bn in DST_BONES:
+        M[bn] = bn if bn in bones else (
+            FALLBACK[bn] if bn in FALLBACK and FALLBACK[bn] in bones else None)
+    act = acts[0]
+    act.name = "ALT_" + stem
+    if a.animation_data is None:
+        a.animation_data_create()
+    a.animation_data.action = act
+    try:
+        slots = list(getattr(act, "slots", []))
+        if slots:
+            a.animation_data.action_slot = slots[0]
+    except Exception:
+        pass
+    unmapped = [bn for bn in DST_BONES if M[bn] is None]
+    print("   %-14s 뼈 %d(이름바꿈 %d) / 키 %.4f / 액션 %s f%.0f~%.0f"
+          " / 대응없는 타깃뼈 %s"
+          % (stem, len(bones), len(todo), H, act.name,
+             act.frame_range[0], act.frame_range[1], unmapped or "없음"))
+    return dict(arm=a, S2W=W, SREST=R, SH=H, SLOW=LOW, MAP=M, act=act,
+                f0=int(act.frame_range[0]), f1=int(act.frame_range[1]))
+
+
+if ANIM:
+    print("\n[프리셋 소스] %s" % os.path.join(ROOT, ANIM_DIR))
+    for _stems in ANIM.values():
+        for _st in [g[0] for g in _stems]:
+            if _st not in ALT_CTX:
+                ALT_CTX[_st] = load_alt(_st)
+    # 레스트 어긋남을 도 단위로 한 번 찍어 둔다(리타게팅이 필요한 근거)
+    for _st, _cx in ALT_CTX.items():
+        worst, wbn = 0.0, ""
+        for bn in DST_BONES:
+            sn = _cx["MAP"].get(bn)
+            if not sn:
+                continue
+            X = _cx["SREST"][sn][0].inverted() @ DREST[bn][0]
+            d = math.degrees(X.to_quaternion().angle)
+            if d > worst:
+                worst, wbn = d, bn
+        print("   %-14s 레스트 최대 어긋남 %.2f도 (%s) / 키비율 %.4f"
+              % (_st, worst, wbn, DH / _cx["SH"]))
 
 
 def norm(seg, W, H):
@@ -684,6 +827,26 @@ def delta_rots():
         else:
             Rw[bn] = src_world_rot(sn) @ SREST[sn][0].inverted() @ DREST[bn][0]
     return Rw
+
+
+# ── 소스 갈아끼우기 (13-모션이식) ──
+# 리타게팅 식은 소스가 누구든 똑같다. 바뀌는 것은 '어느 아마추어를 읽나(src/S2W)',
+# '그 소스의 레스트가 뭐냐(SREST)', '뼈를 어떻게 대느냐(MAP)', '키가 얼마냐(SH)' 뿐이다.
+# 그래서 전역 넷만 갈아끼우면 위 함수들이 그대로 프리셋 소스를 읽는다.
+# ★ANIM 을 안 쓰면 이 함수는 한 번도 안 불린다 = 옛 경로는 한 글자도 안 변한다.
+_SRC_MAIN = None
+
+
+def switch_src(cx):
+    global src, S2W, SREST, MAP, SH
+    if cx is None:
+        src, S2W, SREST, MAP, SH = _SRC_MAIN
+    else:
+        src, S2W, SREST, MAP, SH = (cx["arm"], cx["S2W"], cx["SREST"],
+                                    cx["MAP"], cx["SH"])
+
+
+_SRC_MAIN = (src, S2W, SREST, MAP, SH)
 
 
 def build(Rw, pelvis_world):
@@ -1303,9 +1466,163 @@ def bake(name):
     return act
 
 
+# ================================================ 7b) 프리셋 굽기 (13-모션이식)
+# bake() 와 다른 점은 셋뿐이다.
+#   1) 소스가 프리셋 아마추어다(switch_src 로 갈아끼운다)
+#   2) 소스 프레임을 **소수로** 샘플한다 = 트림·배속이 여기서 일어난다
+#   3) 구간을 여러 개 이어붙일 수 있다(3연타). 이음매는 월드 회전 쿼터니언 슬러프로
+#      ANIM_BLEND 장에 걸쳐 섞는다. 안 섞으면 자세가 뚝 끊겨 "칼질이 끊긴다"로 읽힌다.
+# ★골반은 **구간마다 자기 평균을 뺀다**. 프리셋마다 서 있는 자리가 다른데 그대로
+#   이으면 이음매에서 몸이 순간이동한다. 평균을 빼면 구간 안의 몸짓(런지·기울임)은
+#   살고 구간 사이의 자리 차이만 사라진다(= 루트 모션 제거. 게임 이동과 이중이 안 된다).
+def _q(m):
+    q = m.to_quaternion()
+    q.normalize()
+    return q
+
+
+def alt_timeline(segs):
+    """구간 목록 -> [ (구간번호, 파일, 소스프레임(소수), 가중치) ... ] 프레임별 목록."""
+    plan = []
+    for stem, fa, fb, spd, bl in segs:
+        n = max(2, int(round(abs(fb - fa) / spd)) + 1)
+        step = (fb - fa) / (n - 1)
+        plan.append((stem, [fa + i * step for i in range(n)]))
+    ns = len(plan)
+    BL = [0] + [min(segs[j][4], len(plan[j - 1][1]) - 1, len(plan[j][1]) - 1)
+                for j in range(1, ns)]
+    starts, s = [], 0
+    for j, (stem, fr) in enumerate(plan):
+        starts.append(s)
+        s += len(fr) - (BL[j + 1] if j < ns - 1 else 0)
+    tl = [[] for _ in range(s)]
+    for j, (stem, fr) in enumerate(plan):
+        bin_ = BL[j]                                # 이 구간으로 들어오는 이음매
+        bout = BL[j + 1] if j < ns - 1 else 0        # 이 구간에서 나가는 이음매
+        for i, f in enumerate(fr):
+            k = starts[j] + i
+            if not (0 <= k < s):
+                continue
+            w = 1.0
+            if j > 0 and bin_ > 0 and i < bin_:
+                w = (i + 1) / float(bin_ + 1)
+            if bout > 0 and i >= len(fr) - bout:
+                w = min(w, (len(fr) - i) / float(bout + 1))
+            tl[k].append((j, stem, f, w))
+    for k in range(s):
+        tot = sum(x[3] for x in tl[k]) or 1.0
+        tl[k] = [(j, st, f, w / tot) for j, st, f, w in tl[k]]
+    return plan, tl
+
+
+def bake_alt(name, segs):
+    plan, tl = alt_timeline(segs)
+    nf = len(tl)
+    print("\n[%s] ★Meshy 프리셋 %d구간 -> %d장 (%.3f초 @30fps)"
+          % (name, len(segs), nf, (nf - 1) / 30.0))
+    for j, ((stem, fa, fb, spd, bl), (_, fr)) in enumerate(zip(segs, plan)):
+        print("   %-14s 소스 f%.1f~%.1f (%.3f초) x배속 %.2f -> %d장 (%.3f초)"
+              "  앞이음매 %d장"
+              % (stem, fa, fb, (fb - fa) / 30.0, spd, len(fr),
+                 (len(fr) - 1) / 30.0, 0 if j == 0 else bl))
+
+    def sample(stem, f):
+        """프리셋 한 장을 소수 프레임으로 읽어 (타깃 월드회전 dict, 소스 골반)."""
+        switch_src(ALT_CTX[stem])
+        fi = int(math.floor(f))
+        sc.frame_set(fi, subframe=float(f - fi))
+        bpy.context.view_layer.update()
+        return delta_rots(), (S2W @ src.pose.bones[PELVIS].matrix).translation.copy()
+
+    # 구간별 골반 평균(자리 차이 제거용)
+    pmean = []
+    for (stem, fr) in plan:
+        acc = Vector((0, 0, 0))
+        for f in fr:
+            acc += sample(stem, f)[1]
+        pmean.append(acc / len(fr))
+
+    def frame_pose(k):
+        Rw, off, wsum = None, Vector((0, 0, 0)), 0.0
+        for j, stem, f, w in tl[k]:
+            R2, pel = sample(stem, f)
+            off += (pel - pmean[j]) * w
+            if Rw is None:
+                Rw = {bn: _q(R2[bn]) for bn in ORDER}
+                wsum = w
+            else:
+                t = w / max(1e-9, wsum + w)
+                for bn in ORDER:
+                    Rw[bn] = Rw[bn].slerp(_q(R2[bn]), t)
+                wsum += w
+        return {bn: Rw[bn].to_matrix() for bn in ORDER}, off
+
+    # --- 1차: 접지 보정량·칼끝 진단 ---
+    lows, maxerr, tips = [], 0.0, []
+    for k in range(nf):
+        Rw, off = frame_pose(k)
+        pw = DREST[ROOT_BONE][1] + off * K_TRANS
+        pose, basis = build(Rw, pw)
+        for bn in ORDER:
+            arm.pose.bones[bn].matrix_basis = basis[bn]
+        bpy.context.view_layer.update()
+        if k % 10 == 0:                             # 해석식 자기검증(★함정 8)
+            for bn in ORDER:
+                a_ = (A2W @ arm.pose.bones[bn].matrix).translation
+                b_ = (A2W @ pose[bn]).translation
+                maxerr = max(maxerr, (a_ - b_).length)
+        lows.append(low_of(DST_BODY))
+        if TIP_DIR is not None and D_SW:
+            HM = A2W @ pose[HAND_R]
+            tips.append(HM @ (TIP_DIR * D_SW[2] * ANIM_TIP_K / HM.to_3x3().to_scale()[0]))
+    shift = BIND_LOW - pct(lows, 0.10)
+    print("   해석식 자기검증: Blender 평가와 뼈 위치 최대 오차 %.7f (키의 %.5f%%)"
+          % (maxerr, maxerr / DH * 100))
+    if maxerr > DH * 1e-4:
+        raise SystemExit("해석식 FK 가 Blender 평가와 다르다. 리타게팅 신뢰 불가")
+    print("   접지 보정: 메시 최저 %.4f~%.4f (10분위 %.4f) -> 바인드 %.4f (%+.4f)"
+          % (min(lows), max(lows), pct(lows, 0.10), BIND_LOW, shift))
+    if tips:
+        gk = 1.75 / DH                              # 게임이 키를 1.75 로 정규화한다
+        vs = [0.0] + [(tips[i] - tips[i - 1]).length * 30.0 * gk
+                      for i in range(1, len(tips))]
+        cl = [(t.z + shift - BIND_LOW) * gk for t in tips]
+        vmax = max(vs)
+        vi = vs.index(vmax)
+        hot = [i for i, v in enumerate(vs) if v > 15.8]   # enemy.js HOT_ON 환산
+        print("   칼끝(게임 환산 1.75m 키, 배속 1.0 기준): 최고속 %.1f m/s"
+              " @f%d(%.3f초) / 바닥여유 %+.3f~%+.3f m"
+              % (vmax, vi, vi / 30.0, min(cl), max(cl)))
+        print("   타격 구간(칼끝 15.8 m/s 초과 = enemy.js HOT_ON 환산): %s"
+              % (", ".join("f%d~%.3fs" % (i, i / 30.0) for i in hot)
+                 or "★없음! 이 클립은 안 벤다"))
+        print("   프레임별 칼끝 속도/바닥여유:")
+        for i in range(nf):
+            print("     f%-3d %5.3fs  v%6.1f  z%+6.3f  %s"
+                  % (i, i / 30.0, vs[i], cl[i],
+                     "#" * int(vs[i] / max(1e-9, vmax) * 34)))
+
+    # --- 2차: 키 찍기 ---
+    act = new_action(name)
+    for k in range(nf):
+        Rw, off = frame_pose(k)
+        pw = DREST[ROOT_BONE][1] + off * K_TRANS + Vector((0, 0, shift))
+        pose, basis = build(Rw, pw)
+        for bn in ORDER:
+            arm.pose.bones[bn].matrix_basis = basis[bn]
+        bpy.context.view_layer.update()
+        for b in arm.pose.bones:
+            b.keyframe_insert("location", frame=k + 1)
+            b.keyframe_insert("rotation_quaternion", frame=k + 1)
+            b.keyframe_insert("scale", frame=k + 1)
+    switch_src(None)
+    print("   -> 액션 %s  f1~%d (%.3f초 @30fps)" % (name, nf, (nf - 1) / 30.0))
+    return act
+
+
 BAKED = {}
 for c in CLIPS:
-    BAKED[c] = bake(c)
+    BAKED[c] = bake_alt(c, ANIM[c]) if c in ANIM else bake(c)
 
 # ================================================================ 8) 정리
 print("\n[정리]")

@@ -21,8 +21,21 @@
     #      (같은 날 오너 지시 2차. 빼면 검을 앞으로 겨눈 채 뛴다)
     #    ★기본값 HAND_GRIP=1 로 **왼손목 방향을 자루에서 역산**한다(오너 지시 3차.
     #      빼면 왼손목이 Attack 169도·Heavy 161도까지 꺾인다. WRIST_LIM=60 이 상한)
+    #    ★2026-08-12 13-모션이식(오너 "베는모션을 meshy ai로 해와 차라리"):
+    #      **베기 3종(Attack/Heavy/Wide)만 Meshy 애니메이트 프리셋에서 온다.**
+    #      ANIM_DIR/ANIM_SPEC 을 빼면 옛 slayer 베기가 그대로 돌아온다(md5 재현 확인).
+    #      대본 읽는 법 = 파일:소스프레임범위@배속~앞이음매장수, "+" 로 이어붙임.
+    #        Attack 3연타 = left_slash 의 두 스윙(가운데 @0.85 로 늦춰 **타격 구간을
+    #                       끊는다** - 안 끊으면 스윙 번호가 하나라 2·3타가 안 박힌다)
+    #                       + sword_slash 의 큰 대각베기. 이음매 8장은 양쪽이 다
+    #                       멈춰 있는 자리에 뒀다(칼끝 15.8m/s 를 안 넘겨야 유령 스윙이 없다)
+    #        Heavy  수면참 = axe_chop 의 **모으는 구간만**(7.70초 원본에서 f96~132) +
+    #                       sword_slash 슬램. axe_chop 자체 내려찍기는 칼끝 23m/s 라 약하다
+    #        Wide   횡일섬 = left_slash 첫 스윙을 @0.9 로 늦춰 예비동작을 벌었다
     SRC_GLB=web/slayer.glb DST_GLB=web/basic2_body.glb OUT_GLB=web/basic2_moves.glb \
       DST_SWORD=SW_baekah.001 SWORD_FIT=0 GRIP_K=1.0 KEEP_ORIG=1 \
+      ANIM_DIR=incoming/meshy_anim ANIM_BLEND=8 \
+      ANIM_SPEC="Attack=left_slash:2-33@1.9+left_slash:33-41@0.85+left_slash:41-52@1.9+left_slash:52-55@0.35+sword_slash:1-12@1.0~8+sword_slash:12-30@1.9;Heavy=axe_chop:96-132@1.3+sword_slash:4-21@1.4~8;Wide=left_slash:6-31@0.9" \
       OUTDIR=renders/history/v97_wave11/char_basic2/moveset blender -b -P blender/s24_moveset.py
     # 3) 걷기·달리기만 basic2 네이티브로 교체(+오른팔 감쇠·팔 들기·스윙 자연화·손목 보정)
     #    ★SW_NAME/TIP_K/ARM_LIFT/TIP_ELEV 는 2026-08-12 에 붙었다. 빼면 칼끝이

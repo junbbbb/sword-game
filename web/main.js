@@ -2284,7 +2284,24 @@ let heavy = false;                 // 일격기 중이면 궤적이 커진다
 //     Heavy  : [842.3~954.6]                                          (한 방, 클립 1.797초)
 //     Wide   : [559.8~679.0]                                          (한 방, 클립 1.500초)
 //   X·C 가 긴 건 모아서 늦게 베는 기술이라 그렇다. "타격 구간 끝 기준"은 셋 다 같다.
-const ATK_COMMIT = { Attack: 0.28, Heavy: 0.94, Wide: 0.68 };
+//
+// ── 2026-08-12 13-모션이식: 베기 3종을 Meshy 프리셋으로 갈았다 ──
+// 오너 "베는모션을 meshy ai로 해와 차라리". 클립이 통째로 바뀌었으므로 위 수치는
+// **옛 클립의 기록**이다. 새 클립을 같은 방법으로 다시 쟀다(평시 URL·요괴 없는 자리·
+// 8판, renders/history/v99_wave13/meshy_moves/). 입력 후 경과 초, hot 상승~하강:
+//     Attack : [0.133~0.517] [0.583~0.785] [1.017~1.32]   (스윙 3개, 클립 1.800초)
+//              ★맨 앞 [0.017~0.083] 은 Idle->Attack 크로스페이드(0.06초)의 자세 점프다.
+//                1타와 0.116초 차라 SWING_GAP(0.22) 안에서 같은 번호로 묶인다(옛 판과 같다).
+//     Heavy  : [0.775~클립끝 0.98]                        (한 방, 클립 1.100초)
+//     Wide   : [0.300~클립끝 0.80]                        (한 방, 클립 0.933초)
+//   ★커밋은 **HOT_ON(15.8m/s 환산)을 넘는 구간의 끝**으로 잡는다. hot 하강 엣지가
+//     아니다 - 하강은 히스테리시스(HOT_OFF 0.16) 꼬리라 칼이 다 느려질 때까지 안 꺼진다.
+//     그 꼬리까지 커밋에 넣으면 Z 1타가 0.51초를 묶는다(옛 판 0.28). 꼬리를 빼는
+//     것이 애초에 TAIL_SLACK 을 만든 이유이기도 하다.
+//     그 기준으로 잰 값(blender/s24_moveset.py 의 [Attack]/[Heavy]/[Wide] 진단표):
+//       Attack 스윙별 HOT_ON 구간 끝 = 클립 0.533 / 0.933 / 1.667초
+//       Heavy 1.100초 · Wide 0.933초
+const ATK_COMMIT = { Attack: 0.40, Heavy: 0.96, Wide: 0.78 };
 let atkClip = null;                // 지금 도는 공격 클립 이름. 없으면 공격 중이 아니다
 let atkStartT = 0;                 // 공격이 시작된 **게임시간**(히트스톱 중에는 안 흐른다)
 let atkStruck = false;             // 이번 공격에서 타격 구간(hot)을 한 번이라도 지났나
@@ -3288,8 +3305,13 @@ function play(name, fade = 0.18) {
 //   을 클립초(=ms/1000*1.35)로 환산하면 스윙 셋이 클립 0.093~0.357 / 0.495~0.586 /
 //   0.980~1.114 에 있다. 진입점은 각 스윙의 예비동작 0.09초 앞이고,
 //   커밋은 "그 스윙의 타격이 끝나는 순간"까지다(= (hot끝 - 진입)/1.35).
-const ATK_STEP_T = [0, 0.40, 0.89];
-const ATK_STEP_COMMIT = [0.28, 0.14, 0.17];
+// ★2026-08-12 13-모션이식으로 클립이 바뀌어 다시 쟀다(위 ATK_COMMIT 주석의 새 표).
+//   새 클립(1.800초)의 스윙 셋: hot 상승 0.133 / 0.583 / 1.017초(입력 후 경과).
+//   클립초로 = 0.180 / 0.787 / 1.373. 진입점은 여기서 예비동작 0.09초를 뺀 값이다.
+//   커밋은 그 스윙의 **HOT_ON 구간 끝**(클립 0.533 / 0.933 / 1.667) 에서 진입점을 뺀 값
+//   (= 클립초 차 / 1.35). 옛 값 [0, 0.40, 0.89] / [0.28, 0.14, 0.17].
+const ATK_STEP_T = [0, 0.70, 1.28];
+const ATK_STEP_COMMIT = [0.40, 0.17, 0.29];
 
 function tryAttack() {
   if (!actions.Attack) return;
@@ -4363,7 +4385,9 @@ function tick() {
     if (current && current === actions.Attack) {
       const cdur = current.getClip().duration;
       const u = cdur > 0 ? current.time / cdur : 0;
-      gainTarget = u > 0.58 ? 1.80 : (u > 0.30 ? 1.55 : 1.35);
+      // ★2026-08-12 13-모션이식. 클립이 바뀌어 단수별 구간이 옮겨졌다(옛 0.58/0.30).
+      //   새 클립 1.800초에서 스윙 셋이 있는 자리 u = 0.09~0.30 / 0.43~0.52 / 0.76~0.93.
+      gainTarget = u > 0.65 ? 1.80 : (u > 0.36 ? 1.55 : 1.35);
     }
   }
   trailGain += (gainTarget - trailGain) * Math.min(1, dt * 9);
@@ -4388,7 +4412,7 @@ function tick() {
     let burstOK = true;
     if (current && current === actions.Attack) {
       const cd = current.getClip().duration;
-      burstOK = cd > 0 && current.time > cd * 0.58;   // 3타 구간
+      burstOK = cd > 0 && current.time > cd * 0.65;   // 3타 구간 (13-모션이식으로 0.58->0.65)
     }
     if (attacking && swordFast > 0.55 && burstOK) {
       if (!released) spawnBurst(a, b, _spd);   // 타격 순간 한 번: 충격 링 + 물보라
