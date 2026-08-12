@@ -126,10 +126,12 @@ const IS_DUNGEON = (() => {
 // 배경·안개·조명을 옅은 하늘빛 아침으로 통째로 옮긴다. 배경색과 안개색은
 // **같은 값**이어야 한다(다르면 화면 끝에서 지형이 안개색으로 사라졌다가
 // 배경색으로 한 번 더 갈아타서 띠가 생긴다).
-// ── 어둠에 잠긴 회랑 (던전) ──
-// 컨셉 아트(incoming/codex_dungeon/concept_hall.png) 실측 전체 평균이 #181e25 다.
-// 배경도 그 어둠과 같은 계열이어야 벽 위로 화면이 새지 않는다(1차의 "하늘 샘").
-const SKY = IS_DUNGEON ? 0x0b1420 : 0x9fc2d8;
+// ── 색색의 석조 회랑 (던전. 14차 브롤스타즈·포트나이트 화풍) ──
+// ★★14차. 오너 "브롤스타즈, 포트나이트 풍의 그림체 맵을 원했는데 지금과 많이 다르다."
+//   정본이 incoming/codex_dungeon2/ 로 갈렸다. 배경도 같이 갈린다:
+//   컨셉의 빈 공간은 **검정이 아니라 깊은 남보라**(실측 #1a1636, 화면의 13.6%)다.
+//   0x0b1420(13차)은 그 자리를 검게 죽여서 벽 위가 구멍으로 보인다.
+const SKY = IS_DUNGEON ? 0x1a1636 : 0x9fc2d8;
 scene.background = new THREE.Color(SKY);
 // ★안개 거리는 **카메라 거리에 물려 있다.** near 가 카메라-플레이어 거리보다 멀어야
 //   플레이어 자신이 안개를 먹지 않는다. 카메라가 34m 였던 시절 값이 34~66 이었고,
@@ -226,11 +228,25 @@ for (const ev of ['keydown', 'pointerdown', 'touchstart']) {
 //   ★해를 남기는 이유: 캐릭터 발밑 접지 그림자가 이 게임 손맛의 일부다(v90).
 //     대신 각도를 훨씬 세워(2.5,12,3.5) 그림자를 짧게 만든다 - 던전에서 긴 그림자가
 //     대각으로 누우면 그 순간 실외가 된다.
+// ★★14차 던전 개정. 세 등을 통째로 갈았다.
+//       13차  E = (0.391, 0.565, 0.864)  휘도 0.55  R/B 0.45   ← 차고 어두운 달빛
+//       14차  E = (0.877, 0.831, 0.983)  휘도 0.85  R/B 0.89   ← 밝은 중립광
+//   컨셉의 어둠은 **조명이 어두워서**가 아니라 벽 알베도가 보라·코발트라서 어둡다.
+//   조명으로 어둠을 만들면 바닥까지 같이 죽어서 "못 보겠는 던전"이 된다(13차가 그랬다:
+//   통로 컷 휘도 하위 25% 가 0.0024).
+//   ★반구광의 **아랫빛을 보라**로 둔 것이 이 판의 핵심 한 줄이다. 수직면(벽)은
+//     sky/ground 반반을 받으므로 벽만 보라로 가라앉고 바닥(윗면)은 밝게 남는다 =
+//     컨셉의 "바닥 Y 0.31 : 벽 Y 0.04" 비율이 조명에서 저절로 나온다.
+//   ★2차 조정. 첫 판 (0xbcc6f0/0x5b4a86 2.20 · 0xffeacb 1.55) 은 E R/B 0.89 로
+//     **중립보다 찼다**. 판정에서 밝은 띠 R/B 가 3.7(컨셉 7.6~9.9)로 나왔다.
+//     윗빛만 조금 데운다(R/B 0.89 -> 1.11). 더 데우면 **벽까지 갈색**이 되어
+//     보라 석조가 사라진다(안 B·C 를 계산해 보고 버린 이유가 그것이다:
+//     벽면 E R/B 가 1.68 까지 뜬다).
 scene.add(IS_DUNGEON
-  ? new THREE.HemisphereLight(0x6f9ad2, 0x161f30, 1.70)
+  ? new THREE.HemisphereLight(0xd6cdf2, 0x8a68b8, 2.05)
   : new THREE.HemisphereLight(0xcfe4f2, 0x5b5140, 1.55));
 const key = IS_DUNGEON
-  ? new THREE.DirectionalLight(0xc4d8f0, 1.70)            // 찬 달빛
+  ? new THREE.DirectionalLight(0xffe4b4, 1.62)            // 횃불 쪽에서 오는 따뜻한 키
   : new THREE.DirectionalLight(0xfff0d4, 2.35);           // 따뜻한 해
 key.position.set(...(IS_DUNGEON ? [2.5, 12, 3.5] : [5, 9, 4]));
 key.castShadow = true;
@@ -256,7 +272,7 @@ scene.add(key.target);       // 캐릭터를 따라가게(범위가 좁아야 �
 // 반대쪽 하늘빛. 그림자 쪽 실루엣이 배경에 녹지 않게 잡아 주는 역할이라 남긴다.
 // 밤에는 진한 파랑(0x66aaff)이었는데 아침에는 옅게 깔아야 색이 안 튄다.
 const rim = IS_DUNGEON
-  ? new THREE.DirectionalLight(0x3f6ea6, 0.45)
+  ? new THREE.DirectionalLight(0x7a63c8, 0.55)            // 보라 반사광
   : new THREE.DirectionalLight(0x9dc8ee, 0.55);
 rim.position.set(-6, 4, -5);
 scene.add(rim);
@@ -465,8 +481,10 @@ function applyDist() {
   // ★던전은 안개가 **훨씬 빨리** 닫힌다. 컨셉에서 화면 위쪽 벽은 이미 남색 어둠에
   //   녹아 있고 그게 "깊이"의 정보다. near 는 초원과 같이 플레이어 뒤에 둔다
   //   (여기를 당기면 캐릭터가 안개를 먹어 실루엣이 흐려진다).
-  scene.fog.near = dist + (IS_DUNGEON ? 1 : 2);
-  scene.fog.far = dist + (IS_DUNGEON ? 17 : 30);
+  scene.fog.near = dist + (IS_DUNGEON ? 4 : 2);
+  // ★14차. 던전 안개를 17 -> 30 으로 넓혔다. 안개색이 배경색(#1a1636, 어둡다)이라
+  //   좁으면 화면 위쪽 절반이 통째로 그 어둠으로 덮인다 — 밝은 카툰과 정면으로 싸운다.
+  scene.fog.far = dist + (IS_DUNGEON ? 38 : 30);
   const half = 10 * (dist / CAM.dist);
   const sc = key.shadow.camera;
   sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half;

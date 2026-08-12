@@ -70,12 +70,16 @@ EXPOSURE = 1.05          # web/main.js renderer.toneMappingExposure
 #   (반구광 1.55 + 해 2.35 + 림 0.55 는 램버트 1/PI 와 감쇠를 거쳐 1.0 으로 앉는다.)
 IRRADIANCE = np.array([0.99, 0.99, 1.00], np.float64)
 
-# ★13차D 신설. 던전(level2)은 조명이 다르다 — 같은 자로 환산한 값이 이것이다.
-#   반구 0x6f9ad2 1.70 · 키 0xc4d8f0 1.70 · 림 0x3f6ea6 0.45  (web/main.js 던전 분기)
-#   휘도 0.55 = 초원의 55% · 파랑/빨강 2.21배. **차고 어둡다.**
+# ★13차D 신설 · ★★14차 개정(브롤스타즈 화풍 전환. 조명을 통째로 갈았다).
+#   반구 0xd6cdf2/0x8a68b8 2.05 · 키 0xffe4b4 1.62 · 림 0x7a63c8 0.55 (web/main.js 던전 분기)
+#   휘도 0.87 = 초원의 88% · 빨강/파랑 1.11배. **밝고 조금 따뜻하다**
+#   (13차는 0.391,0.565,0.864 = 휘도 0.55 · 파랑/빨강 2.21 이었다).
 #   blender/s40_dungeon1.py 의 PAL 은 이 조도로 역산한 값이라, main.js 조명을
 #   건드리면 이 숫자와 던전 팔레트가 같이 거짓이 된다.
-IRR_DUNGEON = np.array([0.391, 0.565, 0.864], np.float64)
+# ★★14차부터 **면 방향으로 둘**이다. 반구광 아랫빛이 보라라 수직면이 크게 다르다.
+#   벽·기둥·아치의 목표색은 IRR_DUNGEON_WALL 로 풀어야 맞는다.
+IRR_DUNGEON = np.array([0.993, 0.830, 0.895], np.float64)
+IRR_DUNGEON_WALL = np.array([0.469, 0.374, 0.540], np.float64)
 
 
 def srgb_to_lin(c):
