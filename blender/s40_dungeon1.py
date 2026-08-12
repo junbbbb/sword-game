@@ -1083,8 +1083,34 @@ def face_normal(pts):
     return (nx / L, nz / L, -ny / L)
 
 
-def add_quad(buf, p0, p1, p2, p3, boost=0.0, moss=0.0, nrm=None):
-    """게임 좌표 네 점(시계 반대)으로 사각면 하나. 정점색은 그 자리에서 굽는다."""
+def _mix_nrm(a, b, t):
+    """법선 두 개를 섞어 정규화. t=1 이면 b 쪽."""
+    x = a[0] * (1 - t) + b[0] * t
+    y = a[1] * (1 - t) + b[1] * t
+    z = a[2] * (1 - t) + b[2] * t
+    L = math.sqrt(x * x + y * y + z * z)
+    return (x / L, y / L, z / L) if L > 1e-9 else a
+
+
+# ★★16차 — **곡면 부재의 정점색을 면 단위가 아니라 정점 단위로 굽는다.**
+#   오너 가설("Meshy 로 안 만들어서 그런가")을 같은 자로 재 보니 이렇게 나왔다:
+#     · 실루엣 각짐    던전 기둥 top4 0.563 < Meshy 바위 0.651  → 가설 기각 쪽
+#     · 면 내부 정보   던전 잔해 에지 0.955 ≈ Meshy 바위 0.964  → 가설 기각 쪽
+#     · 면 크기·단차   던전 계단 간격 8.1px · p99 단차 1.31~1.54
+#                      Meshy 계단 간격 4.2px · p99 단차 0.93~0.96  → ★가설 지지
+#   즉 갈리는 축은 제작 도구가 아니라 **"면이 크고 그 경계에서 값이 세게 튄다"** 다.
+#   폴리를 두 배로 늘리면 glb 예산이 죽으므로, **정점색만 부드럽게** 만든다.
+#   기하는 그대로(각진 실루엣 유지 = 로우폴리 화풍 유지), 명암만 곡면으로 읽힌다.
+#   ★섞는 비율을 1.0 으로 두면 원통이 물렁한 관이 된다(14차 "사탕 블록" 함정의 사촌).
+#     0.72 는 모서리가 살아 있으면서 계단이 안 보이는 값이다.
+SMOOTH_MIX = 0.72
+
+
+def add_quad(buf, p0, p1, p2, p3, boost=0.0, moss=0.0, nrm=None, vnrms=None):
+    """게임 좌표 네 점(시계 반대)으로 사각면 하나. 정점색은 그 자리에서 굽는다.
+
+    ★`vnrms` 를 주면 **정점마다 다른 법선**으로 색을 굽는다(원기둥용).
+      기하 법선은 그대로 면 단위라 실루엣·TOP_MUL 판정은 안 바뀐다."""
     b = len(buf.v)
     if nrm is None:
         nrm = face_normal((p0, p1, p2, p3))
@@ -1104,9 +1130,10 @@ def add_quad(buf, p0, p1, p2, p3, boost=0.0, moss=0.0, nrm=None):
         _hh = _hh - math.floor(_hh)
         fv = 1.0 + (_hh - 0.5) * 0.10                       # 밝기 ±5%
         fw = 1.0 + (((_hh * 7.13) % 1.0) - 0.5) * 0.06      # 색온도 ±3%
-    for (gx, gz, y) in (p0, p1, p2, p3):
+    for _vi, (gx, gz, y) in enumerate((p0, p1, p2, p3)):
         buf.v.append(bpos(gx, gz, y))
-        col = lum(gx, gz, y, moss, nrm) * tm * fv
+        vn = nrm if vnrms is None else _mix_nrm(nrm, vnrms[_vi], SMOOTH_MIX)
+        col = lum(gx, gz, y, moss, vn) * tm * fv
         if buf.wallfam:
             col = col * np.array((fw, 1.0, 2.0 - fw), np.float32)
         if boost:
@@ -1197,16 +1224,23 @@ def add_box(buf, gx, gz, y0, y1, hx, hz, rot=0.0, seg=None, top_boost=0.0,
                 add_quad(buf, P(x0, z0, y0), P(x1, z0, y0), P(x1, z1, y0), P(x0, z1, y0))
 
 
-def add_prism(buf, gx, gz, y0, y1, r0, r1, n=8, phase=0.0, top_boost=0.0, cap=True):
-    """n각 원뿔대. 기둥·화로·불꽃에 쓴다."""
+def add_prism(buf, gx, gz, y0, y1, r0, r1, n=8, phase=0.0, top_boost=0.0, cap=True,
+              smooth=False):
+    """n각 원뿔대. 기둥·화로·불꽃에 쓴다.
+
+    ★`smooth=True` 는 **정점색만** 원통으로 굽는다(기하는 그대로 각져 있다).
+      잔해 돌덩이에는 주지 않는다 — 돌은 각져야 돌이다(젤리곰 함정)."""
     ring0, ring1 = [], []
+    vn = []
     for i in range(n):
         a = phase + i * 2 * math.pi / n
         ring0.append((gx + math.cos(a) * r0, gz + math.sin(a) * r0, y0))
         ring1.append((gx + math.cos(a) * r1, gz + math.sin(a) * r1, y1))
+        vn.append((math.cos(a), 0.0, math.sin(a)))
     for i in range(n):
         j = (i + 1) % n
-        add_quad(buf, ring0[i], ring0[j], ring1[j], ring1[i])
+        add_quad(buf, ring0[i], ring0[j], ring1[j], ring1[i],
+                 vnrms=(vn[i], vn[j], vn[j], vn[i]) if smooth else None)
     if cap and r1 > 1e-4:
         b = len(buf.v)
         buf.v.append(bpos(gx, gz, y1))
@@ -1238,12 +1272,24 @@ buf_floorb = Buf("FLOOR_DGB", tile=True, uv_scale=FLOOR_UV_SCALE,
                  uv_rot=FLOOR_UV_ROT)                               # 성긴 포장(흙이 많다)
 buf_dirt = Buf("FLOOR_DIRT", tile=True, uv_scale=FLOOR_UV_SCALE, uv_rot=FLOOR_UV_ROT)
 buf_wall = Buf("COL_WALL", tile=True, uv_scale=WALL_UV_SCALE, wallfam=True)
-buf_cut = Buf("COL_CUT", tile=True, uv_scale=WALL_UV_SCALE, wallfam=True)   # 기둥·아치·문설주
-buf_altar = Buf("COL_ALTAR", tile=True, uv_scale=WALL_UV_SCALE)
-buf_stair = Buf("DECO_STAIR", tile=True, uv_scale=WALL_UV_SCALE, wallfam=True)
+# ★★16차 — **텍셀 스케일을 부재 크기에 맞춘다.**
+#   15차까지 기둥·제단·계단·잔해가 전부 벽과 같은 4.6m UV 를 받았다. 그런데
+#   `dg_block` 은 tools/dungeon_tex.py 가 **2.6m 기준**으로 구운 타일이다.
+#   4.6m 로 붙이면 블록이 1.77배로 확대돼, 폭 0.92m 기둥에는 **블록 한 장의 속**만
+#   올라간다 = 그 면은 통째로 민짜다. 오너가 본 "무텍스처 저폴리 상자"가 이것이다.
+#   실측: 기둥 화면 국소변조가 텍스처가 아니라 **각면 계단**(5.5~13.7 계단/m)에서
+#   나오고 있었다. 굽는 쪽 값(2.6m)으로 되돌리면 기둥 하나에 돌이 서너 단 올라간다.
+#   ★곱수 계약은 안 건드린다 — 곱수는 타일의 **선형 평균**으로 풀고 평균은
+#     UV 스케일과 무관하다(값·채도 계약 무회귀는 실측으로 확인한다).
+CUT_UV_SCALE = 2.6         # 기둥·아치 어귀·계단 기둥 (= dg_block 을 구운 그 크기)
+ALTAR_UV_SCALE = 2.6       # 제단
+RUBBLE_UV_SCALE = 1.45     # 잔해. 조각이 0.3~0.9m 라 한 조각에 돌이 한둘 걸린다
+buf_cut = Buf("COL_CUT", tile=True, uv_scale=CUT_UV_SCALE, wallfam=True)   # 기둥·아치·문설주
+buf_altar = Buf("COL_ALTAR", tile=True, uv_scale=ALTAR_UV_SCALE)
+buf_stair = Buf("DECO_STAIR", tile=True, uv_scale=CUT_UV_SCALE, wallfam=True)
 buf_iron = Buf("DECO_IRON")
 buf_banner = Buf("DECO_BANNER")
-buf_rubble = Buf("COL_RUBBLE", tile=True, uv_scale=WALL_UV_SCALE, wallfam=True)
+buf_rubble = Buf("COL_RUBBLE", tile=True, uv_scale=RUBBLE_UV_SCALE, wallfam=True)
 # ★★15차 신설 — 벽의 **가로 띠와 모서리 돌**(주춧돌·띠돌·갓돌·quoin).
 #   처방전 C 의 분업: 벽 몸통은 타일 텍스처, 띠는 따로. 우리는 트림 시트를 새 텍스처로
 #   만드는 대신 **다듬은 돌 타일을 작은 UV(2.2m)로** 받아 띠를 만든다 — 텍스처 0장
@@ -1850,6 +1896,9 @@ def add_fluted(buf, gx, gz, y0, y1, r0, r1, n=16, phase=0.0, flute=0.88,
     if jag > 0.0:
         dy = [-jag * (0.25 + 0.75 * ((i * 0.6180339887 * 7 + 0.31) % 1.0))
               for i in range(n)]
+    # ★16차. 정점 법선(수평 방사). 정점색을 이걸로 구우면 각면 계단이 사라진다
+    vn = [(math.cos(phase + i * 2 * math.pi / n), 0.0,
+           math.sin(phase + i * 2 * math.pi / n)) for i in range(n)]
     for k in range(vseg):
         t0, t1 = k / vseg, (k + 1) / vseg
         A = ring(y0 + (y1 - y0) * t0, r0 + (r1 - r0) * t0)
@@ -1857,7 +1906,8 @@ def add_fluted(buf, gx, gz, y0, y1, r0, r1, n=16, phase=0.0, flute=0.88,
                  dy if k == vseg - 1 else None)
         for i in range(n):
             j = (i + 1) % n
-            add_quad(buf, A[i], A[j], B[j], B[i])
+            add_quad(buf, A[i], A[j], B[j], B[i],
+                     vnrms=(vn[i], vn[j], vn[j], vn[i]))
     if cap and jag <= 0.0:
         b = len(buf.v)
         buf.v.append(bpos(gx, gz, y1))
@@ -1872,30 +1922,43 @@ def add_fluted(buf, gx, gz, y0, y1, r0, r1, n=16, phase=0.0, flute=0.88,
             buf.f.append((b, b + 1 + i, b + 1 + j))
 
 
+# ★★16차 — 기둥 몸통을 **16각 홈판 -> 10각 민판**으로.
+#   화면에서 기둥 폭이 55px 인데 16각이면 면 하나가 **3.4px** 이다. 거기에 홈
+#   (한 칸 걸러 반지름 0.88)까지 겹치니 세로 줄무늬가 가로 정점색 띠와 엮여
+#   **직물 같은 크로스해치 무아레**가 생겼다(before 컷 확대에서 그대로 보인다).
+#   면이 화면 3px 짜리면 그건 "곡면"이 아니라 지글거림이다.
+#   컨셉(codex_dungeon3)의 기둥도 홈 판 원기둥이 아니라 **모서리가 선 각기둥**을
+#   돌 단으로 쌓은 것이다 — 곡면을 흉내 내는 대신 dg_block 의 단이 일을 한다.
+#   ★삼각형이 오히려 준다(16 -> 10). 콜라이더 반경 0.60 은 그대로다.
+COL_SIDES = 10
+
+
 def add_column(buf, gx, gz, h, r=0.46, broken=0.0, phase=0.0):
-    """주춧돌 + 몰딩 + 홈 판 몸통 + 주두. broken 이면 그 비율에서 부러진다."""
+    """주춧돌 + 몰딩 + 각기둥 몸통 + 주두. broken 이면 그 비율에서 부러진다."""
     y = FLOOR_Y
+    n = COL_SIDES
     add_box(buf, gx, gz, y, y + 0.22, r * 1.62, r * 1.62, seg=0.9,
             top_boost=TOP_BONUS)
-    add_fluted(buf, gx, gz, y + 0.22, y + 0.40, r * 1.34, r * 1.14, n=16,
+    add_fluted(buf, gx, gz, y + 0.22, y + 0.40, r * 1.34, r * 1.14, n=n,
                phase=phase, flute=1.0, vseg=1, cap=False)
     if broken > 0.0:
         top = y + 0.40 + (h - 0.40) * broken
-        add_fluted(buf, gx, gz, y + 0.40, top, r * 1.10, r * 1.02, n=16,
-                   phase=phase, vseg=max(2, int((top - y) * 2)), jag=0.30)
+        add_fluted(buf, gx, gz, y + 0.40, top, r * 1.10, r * 1.02, n=n,
+                   phase=phase, flute=1.0,
+                   vseg=max(2, int((top - y) * 2)), jag=0.30)
         return top
     top = y + h
-    add_fluted(buf, gx, gz, y + 0.40, top - 0.34, r * 1.10, r * 0.94, n=16,
-               phase=phase, vseg=6, cap=False)
+    add_fluted(buf, gx, gz, y + 0.40, top - 0.34, r * 1.10, r * 0.94, n=n,
+               phase=phase, flute=1.0, vseg=6, cap=False)
     # 주두. 위로 벌어져야 기둥이 무엇을 받치고 있는 것처럼 보인다
-    add_fluted(buf, gx, gz, top - 0.34, top - 0.14, r * 0.98, r * 1.26, n=16,
+    add_fluted(buf, gx, gz, top - 0.34, top - 0.14, r * 0.98, r * 1.26, n=n,
                phase=phase, flute=1.0, vseg=1, cap=False)
     add_box(buf, gx, gz, top - 0.14, top, r * 1.42, r * 1.42, seg=0.9,
             top_boost=TOP_BONUS)
     return top
 
 
-def add_fallen_column(buf, gx, gz, yaw, length, r, n=14, bands=(0.24, 0.62),
+def add_fallen_column(buf, gx, gz, yaw, length, r, n=10, bands=(0.24, 0.62),
                       lseg=10):
     """**가로로 쓰러진 원기둥.** 컨셉 홀 전경의 그 물건이다.
 
@@ -1925,6 +1988,9 @@ def add_fallen_column(buf, gx, gz, yaw, length, r, n=14, bands=(0.24, 0.62),
             rr = r * 1.10
         return rr
 
+    # ★16차. 누운 원기둥의 정점 법선(축에 수직인 방사)
+    vn = [(sx * math.cos(i * 2 * math.pi / n), math.sin(i * 2 * math.pi / n),
+           sz * math.cos(i * 2 * math.pi / n)) for i in range(n)]
     for k in range(lseg):
         u0, u1 = k / lseg, (k + 1) / lseg
         t0 = -length * 0.5 + length * u0
@@ -1932,7 +1998,8 @@ def add_fallen_column(buf, gx, gz, yaw, length, r, n=14, bands=(0.24, 0.62),
         A, B = ring(t0, rad_at(u0)), ring(t1, rad_at(u1))
         for i in range(n):
             j = (i + 1) % n
-            add_quad(buf, A[i], A[j], B[j], B[i])
+            add_quad(buf, A[i], A[j], B[j], B[i],
+                     vnrms=(vn[i], vn[j], vn[j], vn[i]))
     # 끝 마감 두 장(부러진 단면)
     for (t, rad) in ((-length * 0.5, rad_at(0.0)), (length * 0.5, rad_at(1.0))):
         pts = ring(t, rad)
@@ -2106,7 +2173,7 @@ for _i in range(4):
         _idx = _i * 2 + _k
         _bk = 0.42 if _idx in _BROKEN_PILLAR else 0.0
         _h = add_column(buf_cut, px, pz, 3.55, r=0.46,
-                        broken=_bk, phase=math.pi / 16)
+                        broken=_bk, phase=math.pi / COL_SIDES)
         push_col_circle(px, pz, 0.60, _h, "pillar")
 
 # ── 세워 두는 화로 (자리는 4절 FREE_BRAZIERS 에 있다) ──
@@ -2120,7 +2187,7 @@ for (_bi, (_bx, _bz)) in enumerate(FREE_BRAZIERS):
     add_fluted(buf_cut, _bx, _bz, FLOOR_Y + 0.16 * _bs, 1.04 * _bs, 0.23 * _bs,
                0.17 * _bs, n=10, vseg=3, cap=False, phase=_br)
     add_prism(buf_iron, _bx, _bz, 1.04 * _bs, 1.28 * _bs, 0.19 * _bs, 0.36 * _bs,
-              n=10, phase=_br)
+              n=10, phase=_br, smooth=True)
     add_flame(_bx, _bz, 1.28 * _bs, w=0.46 * _bs, h=0.72 * _bs,
               seed=RND.uniform(0, 1.0), tilt=(_br - 0.31) * 0.35)
     add_halo(_bx, _bz, 1.34 * _bs, r=0.70 * _bs)
@@ -2179,7 +2246,7 @@ add_box(buf_iron, STAIR_X, _dz - 0.9, FLOOR_Y + 1.02, 3.02, STAIR_HX + 0.10, 0.0
 EXIT_X, EXIT_Z = STAIR_X, STAIR_Z0 - 1.4
 
 # ── 북서 우물 ──
-add_prism(buf_cut, WELL_X, WELL_Z, FLOOR_Y, FLOOR_Y + 0.72, 1.28, 1.22, n=10,
+add_prism(buf_cut, WELL_X, WELL_Z, FLOOR_Y, FLOOR_Y + 0.72, 1.28, 1.22, n=10, smooth=True,
           top_boost=TOP_BONUS)
 add_prism(buf_iron, WELL_X, WELL_Z, FLOOR_Y + 0.02, FLOOR_Y + 0.06, 1.02, 1.02, n=10)
 push_col_circle(WELL_X, WELL_Z, 1.30, 0.72, "well")

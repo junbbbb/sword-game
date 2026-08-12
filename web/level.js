@@ -394,8 +394,31 @@ export async function loadLevel(scene, search) {
     if (!o.isMesh) return;
     // 바닥은 그림자를 받기만 한다. 던지게 두면 자기 자신에게 얼룩이 생긴다.
     const isFloor = o.name.startsWith('FLOOR');
-    o.receiveShadow = true;
+    // ★★16차. **던전에서는 바닥만 그림자를 받는다.**
+    //   기둥·벽·잔해가 그림자를 받고 있었는데, 던전에 해가 없어 방향광이 거의
+    //   눕는 각도라 그 수직면들이 **자기그림자 아크네**를 먹고 있었다 —
+    //   화면에서는 돌 표면을 덮은 **사선 직물 무늬**로 보인다(probe_hatch/ 참조:
+    //   receiveShadow 만 끄면 그 무늬가 통째로 사라진다). 오너가 "저퀄"이라고
+    //   느낀 것의 한 조각이 이 격자다. 텍스처도 폴리곤도 아니었다.
+    //   ★캐릭터 접지 그림자는 **바닥에** 떨어지므로 그대로 산다(그게 본래 목적이다).
+    //   ★초원(level1)은 손대지 않는다 — 거기는 해가 서 있고 아크네가 없다.
+    o.receiveShadow = dungeon ? isFloor : true;
     o.castShadow = dungeon ? !noCast(o.name) : !isFloor;
+    // ★★16차. **glb 안의 타일에 비등방 필터를 건다.** GLTFLoader 는 anisotropy 를
+    //   1 로 둔다. 우리 카메라는 pitch 0.86 의 고정 쿼터뷰라 바닥이 거의 눕고,
+    //   그 각도에서 mip 이 텍스처를 통째로 뭉갠다 — 돌 안에 무엇을 그려 넣든
+    //   화면에 도달을 못 한다. 초원 바닥은 이미 8 로 켜 두고 있었는데(applyFloorLook)
+    //   던전 바닥만 빠져 있었다. 텍스처 0장·드로우콜 0·바이트 0 의 순수 이득이다.
+    if (dungeon) {
+      const ms = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of ms) {
+        if (!m) continue;
+        for (const k of ['map', 'emissiveMap']) {
+          const t = m[k];
+          if (t && t.anisotropy !== 8) { t.anisotropy = 8; t.needsUpdate = true; }
+        }
+      }
+    }
   });
   // 바닥에만 결을 얹는다. 실패해도 맵은 그대로 뜬다.
   // ★13차. 던전(level2)은 `floorLook: false` 다. 아래 결·타일·스플랫은 전부 **초원용**
