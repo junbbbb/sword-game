@@ -561,7 +561,14 @@ def main():
     med, gain = normalize_mean(med, TARGET_MEAN)
     # ★512 로 줄인다. 데칼 하나가 5m 를 덮으니 102px/m 로 충분하고, 1024 png(알파라
     #   jpg 로 못 간다)는 그 자체로 2MB 라 glb 예산의 40% 를 혼자 먹는다.
-    MRES = 512
+    # ★★13차D. 512 -> 384. 이 한 장이 glb 예산의 **14%(695KB)** 를 혼자 먹는데
+    #   쓰이는 곳은 제단 앞 바닥 카드 **한 장(정점 4개)** 뿐이다. 알파가 있어 jpg 로
+    #   못 가고 png 압축이 33% 밖에 안 먹는다(512x512x4 = 1MB 원본).
+    #   6.1m 짜리 카드라 384px = 63px/m 이고, 게임 카메라(dist 24)에서 그 카드가
+    #   차지하는 화면 폭이 430px 이므로 눈으로 재면 거의 1:1 이다.
+    #   ★여기서 아낀 300KB 가 바닥 0.25m 격자 120칸이 된다(정점 하나가 인덱스까지
+    #     40~46바이트. 곱게 쪼갠 칸 하나가 2.54KB). 어느 쪽이 화면에 더 남는가로 골랐다.
+    MRES = 384
     med = np.asarray(Image.fromarray((np.clip(med, 0, 1) * 255 + 0.5).astype(np.uint8))
                      .resize((MRES, MRES), Image.LANCZOS), np.float32) / 255.0
     yy, xx = np.mgrid[0:MRES, 0:MRES].astype(np.float32) / (MRES - 1) * 2 - 1
@@ -577,7 +584,12 @@ def main():
     # ★13차C. 웜 풀은 **가산 합성**(web/level.js)이 전제다. 알파는 이제 '돌을 얼마나
     #   덮는가'가 아니라 '빛을 얼마나 더하는가'라서 조금 올려도 돌이 안 지워진다.
     #   심 황백 -> 주황 -> 붉게 소멸. 세 색을 **반경**으로 섞는다.
-    rgb, a = bake_pool(256, ((1.00, 0.95, 0.80), (1.00, 0.62, 0.26), (0.90, 0.34, 0.11)),
+    # ★13차D. 끝색 (0.90,0.34,0.11) -> (0.88,0.44,0.15). 팔레트를 따뜻하게 돌린 뒤
+    #   웜 풀 **가장자리가 자홍으로** 떴다. 원인은 뺄셈이다 - 가산이라 알파가 얕은
+    #   자리에는 R 만 남아 남는데, 바닥돌이 아직 푸르므로 R+파랑 = 자홍이 된다.
+    #   초록을 조금 올리면 같은 알파에서 합이 호박색으로 앉는다(컨셉의 횃불 둘레
+    #   실측이 R/B 8.8 · G/B 2.71 = 초록이 파랑의 2.7배다).
+    rgb, a = bake_pool(256, ((1.00, 0.95, 0.78), (1.00, 0.66, 0.24), (0.88, 0.44, 0.15)),
                        311, squash=1.0, wob=0.22, core=0.28, amax=0.72,
                        tail=0.70, rough=0.44)
     save_rgba("dg_pool", rgb, a)
@@ -605,6 +617,30 @@ def main():
     print("\n[메타] %s" % META)
 
 
+def bake_light_only():
+    """**빛 데칼만** 굽는다(웜 풀 · 달빛 웅덩이 · 샤프트 · 벽 자국 · 후광용 재사용).
+
+    ★따로 뗀 이유는 bake_flip_only 와 같다. main() 은 dungeon_tex.json 의
+      평균·게인을 다시 쓰는데 그 값이 이미 구워 둔 level2.glb 의 재질 곱수와 짝이다.
+      그런데 이 넉 장은 `mat_glow` 가 쓰는 이미시브라 **곱수 계약 밖**이다
+      (tile_lin 을 안 본다). 그래서 혼자 구워도 맵 색이 안 밀린다.
+    ★단 s40 은 다시 돌려야 한다 - 이미지가 glb 안에 들어 있다."""
+    os.makedirs(OUT_DIR, exist_ok=True)
+    print("[빛 데칼] 웜 풀 · 달빛 웅덩이 · 샤프트 · 벽 자국")
+    rgb, a = bake_pool(256, ((1.00, 0.95, 0.78), (1.00, 0.66, 0.24), (0.88, 0.44, 0.15)),
+                       311, squash=1.0, wob=0.22, core=0.28, amax=0.72,
+                       tail=0.70, rough=0.44)
+    save_rgba("dg_pool", rgb, a)
+    rgb, a = bake_pool(256, ((0.72, 0.88, 1.00), (0.30, 0.58, 1.00), (0.14, 0.32, 0.80)),
+                       517, squash=0.74, wob=0.16, core=0.44, amax=0.80,
+                       tail=0.66, rough=0.34)
+    save_rgba("dg_pool_cold", rgb, a)
+    rgb, a = bake_shaft(128, 512)
+    save_rgba("dg_shaft", rgb, a * 0.36)
+    rgb, a = bake_wall_glow(128, 192)
+    save_rgba("dg_wglow", rgb, a)
+
+
 def bake_flip_only():
     """불꽃 플립북만 굽는다.
 
@@ -620,7 +656,10 @@ def bake_flip_only():
 
 if __name__ == "__main__":
     # `python3 tools/dungeon_tex.py flame` = 불꽃 플립북만(원자재 · glb 무관)
+    # `python3 tools/dungeon_tex.py light` = 빛 데칼만(곱수 계약 밖. s40 은 다시 돌릴 것)
     if len(sys.argv) > 1 and sys.argv[1] == "flame":
         bake_flip_only()
+    elif len(sys.argv) > 1 and sys.argv[1] == "light":
+        bake_light_only()
     else:
         main()

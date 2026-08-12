@@ -292,7 +292,21 @@ const FLAME_SWAY = 0.055;        // 꼭대기 좌우 진폭(m). 불꽃 폭이 0.
                                  //   "바람에 눕는다"로 읽히고 그 위는 자리가 흔들려 보인다
 const FLAME_RISE = 0.030;        // 키 숨쉬기(m). 좌우만 흔들면 깃발이 된다
 const FLAME_PULSE = 0.13;        // 불꽃 밝기 맥동 ±13%
-const POOL_PULSE = 0.05;         // 바닥 웜 풀 맥동 ±5%. ★더 주면 바닥이 깜빡여서 촌스럽다
+// ★★13차D. 0.05 -> 0.20. 오너 "불꽃은 활활 타는데 그림자는 왜 이리 고요하노?"
+//   옛 값은 **실측으로도 안 보였다**: 13차-불꽃 판정에서 계약 ±5% 에 화면 변동이
+//   0.15~1.05% 였다(같은 판이 ±40% 로 올리면 12.5~63.9% 였으니 배선은 멀쩡했다).
+//   즉 "안전하게 잡아 둔 값"이 아니라 **없는 것과 같은 값**이었다. 불꽃이 ±13% 로
+//   타는데 그 불이 만든 웅덩이가 ±0.5% 면 눈은 둘을 다른 물건으로 읽는다.
+const POOL_PULSE = 0.20;         // 바닥 웜 풀 맥동 ±20%
+const HALO_PULSE = 0.20;         // 불꽃 후광. 불꽃 바로 옆이라 웜 풀과 같이 뛴다
+// ★벽 자국은 **약하게**. 벽은 넓고 평평해서 같은 폭으로 흔들면 벽지가 펄럭이는
+//   그림이 된다(바닥은 데칼이 작고 겹쳐 있어 견딘다).
+const WGLOW_PULSE = 0.12;
+// ★웜 풀 **가장자리 일렁임**(라디안). 빛이 흔들리면 그 빛이 만든 경계도 흔들린다 -
+//   웅덩이 데칼 UV 를 제 중심 둘레로 이만큼 돌리고 크기를 그 42% 만큼 흔든다.
+//   0.030rad = 1.7도. 과하면 웅덩이가 통째로 도는 게 보여서 촌스럽다(0.08 에서
+//   이미 회전이 읽힌다). 알파가 0 으로 죽는 꼬리만 움직이는 폭이 이 값이다.
+const POOL_WOB = 0.030;
 let FLAME_N_PATCHED = 0;
 
 let LV = null;                   // level1.json 원본
@@ -921,7 +935,12 @@ async function applyFlameLook(root, q) {
   // 바닥 웜 풀 · 불꽃 후광 · 벽 자국. **불꽃과 같은 위상**이어야 한 불로 읽힌다.
   // ★자리가 정확히 같지는 않다 - 벽 횃불은 불꽃이 벽에서 0.24m, 웅덩이가 0.34m 다
   //   (s40_dungeon1.py 참조). 그래서 좌표를 맞추지 않고 **가장 가까운 자루**를 찾는다.
-  for (const m of [pool, halo, wglow]) {
+  // ★13차D. 맥동 폭이 셋 다 달라졌다(위 상수 주석 참고). 가장자리 일렁임은
+  //   **바닥 웜 풀에만** 건다 - 벽 자국은 네모 카드라 돌리면 카드 모서리가 드러나고,
+  //   후광은 불꽃 뒤에 가려 보이지도 않는다.
+  for (const [m, amp, wob] of [[pool, POOL_PULSE, POOL_WOB],
+                               [halo, HALO_PULSE, 0.0],
+                               [wglow, WGLOW_PULSE, 0.0]]) {
     if (!m) continue;
     const pc = splitCards(m.geometry);
     if (!pc) continue;
@@ -934,7 +953,7 @@ async function applyFlameLook(root, q) {
       }
       c.ph = best;
     }
-    for (const mat of matList(m)) if (patchPoolMaterial(m, mat, uT)) n++;
+    for (const mat of matList(m)) if (patchPoolMaterial(m, mat, uT, amp, wob)) n++;
     setCardAttr(m.geometry, pc);
   }
   // 달빛 웅덩이는 **맥동을 안 건다**(달은 안 흔들린다). 합성만 가산으로 바꾼다.
@@ -1134,27 +1153,66 @@ function patchFlameMaterial(mesh, mat, tex, frames, uT) {
   return true;
 }
 
-function patchPoolMaterial(mesh, mat, uT) {
+// amp = 밝기 맥동 폭 · wob = 가장자리 일렁임(라디안. 0 이면 UV 를 안 건드린다)
+function patchPoolMaterial(mesh, mat, uT, amp, wob) {
   if (!mat || mat.userData.flameLook) return false;
   mat.userData.flameLook = true;
   // ★13차C. 맥동보다 **이게** 먼저다 - 합성이 알파 블렌딩인 한 어떤 모양을 구워도
   //   빛이 바닥을 지운다(위 makeAdditive 주석에 이유가 다 적혀 있다).
   makeAdditive(mat);
+  // ★어느 UV 가 셰이더에 실제로 있는지는 **재질이 든 맵**이 정한다. three 는
+  //   USE_MAP / USE_EMISSIVEMAP 이 켜진 것만 varying 을 선언하므로, 없는 이름에
+  //   대입하면 컴파일이 통째로 실패한다(화면이 검게 죽는다).
+  const uvs = [];
+  if (mat.map) uvs.push('vMapUv');
+  if (mat.emissiveMap) uvs.push('vEmissiveMapUv');
+  if (mat.alphaMap) uvs.push('vAlphaMapUv');
+  const doWob = wob > 0.0 && uvs.length > 0;
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uFT = uT;
-    shader.uniforms.uFPulse = { value: POOL_PULSE };
+    shader.uniforms.uFPulse = { value: amp };
+    shader.uniforms.uFWob = { value: wob };
     mat.userData.fShader = shader;
-    shader.vertexShader = shader.vertexShader
+    let vs = shader.vertexShader
       .replace('#include <common>', ['#include <common>'].concat(FLAME_HEAD)
-        .concat(['uniform float uFPulse;']).join('\n'))
+        .concat(['uniform float uFPulse;', 'uniform float uFWob;']).join('\n'))
       .replace('#include <begin_vertex>', ['#include <begin_vertex>', '{']
         .concat(FLAME_PULSE_LINE('uFPulse')).concat(['}']).join('\n'));
+    if (doWob) {
+      // ★★"불꽃은 활활 타는데 그림자는 왜 이리 고요하노?"의 나머지 절반.
+      //   밝기만 뛰면 웅덩이는 **모양이 박제된 채 껌뻑이는 판**이다. 빛이 일렁이면
+      //   그 빛이 그리는 경계도 같이 일렁여야 눈이 '불'로 읽는다.
+      //   웅덩이 데칼을 제 중심 둘레로 아주 조금 돌리고 크기를 흔든다 - 가장자리는
+      //   두 옥타브 잡음으로 갉아 놓았으므로(dungeon_tex.bake_pool) 1.7도만 돌아도
+      //   그 요철이 자리를 바꾼다 = **그림자 경계가 스멀거린다.**
+      //   ★시각은 맥동과 **같은 24fps 칸·같은 위상**에서 뽑는다. 따로 굴리면
+      //     밝아지는 순간과 흔들리는 순간이 어긋나서 둘이 다른 물건으로 보인다.
+      const w = ['#include <uv_vertex>', '{',
+        '  float wq = floor( uFT * 24.0 ) / 24.0;',
+        '  float wp = aFlame.x * 6.2831853;',
+        '  float wa = ( sin( wq * 1.9 + wp ) * 0.62'
+            + ' + sin( wq * 3.1 + wp * 2.3 ) * 0.38 ) * uFWob;',
+        '  float ws = 1.0 + sin( wq * 2.3 + wp * 1.4 ) * uFWob * 0.42;',
+        '  float wc = cos( wa ), wn = sin( wa );'];
+      for (const v of uvs) {
+        w.push('  { vec2 d = ' + v + ' - 0.5;');
+        w.push('    ' + v + ' = 0.5 + vec2( d.x * wc - d.y * wn,'
+                              + ' d.x * wn + d.y * wc ) * ws; }');
+      }
+      w.push('}');
+      vs = vs.replace('#include <uv_vertex>', w.join('\n'));
+    }
+    shader.vertexShader = vs;
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vFPul;')
       .replace('#include <emissivemap_fragment>',
                '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vFPul;');
   };
-  mat.customProgramCacheKey = () => 'dgPool1';
+  // ★프로그램 캐시 키. three 는 onBeforeCompile 을 키에 안 넣으므로 손으로 가른다.
+  //   ★셰이더를 고치면 이 문자열을 같이 올려라(안 올리면 옛 프로그램이 재활용된다).
+  //   ★일렁임 유무가 **소스를 가르므로** 키에 같이 넣는다.
+  const key = 'dgPool2' + (doWob ? 'w' + uvs.join('') : '');
+  mat.customProgramCacheKey = () => key;
   mat.needsUpdate = true;
   mesh.onBeforeRender = () => { uT.value = performance.now() * 0.001; };
   return true;
