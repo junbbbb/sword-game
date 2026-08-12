@@ -176,6 +176,10 @@ const SW_COMP = [];          // 동반 획 폐기(9B-2 가 만든 세 장)
 //   롤백 = 이 문자열을 './tex/slash_flip.png' 로 되돌리는 것뿐이다(옛 시트는 그대로 있다).
 const IMPACT_SHEET = './tex/slash_flip3.png';
 const FRAME_T = 1 / 24;      // 한 장을 붙드는 시간(초)
+// ── v99 16-FX 포말 마루 A/B ──
+// 1 = 칼끝 궤적에 붙는 구운 포말 마루 + 타격 팝 f1 물방울 제거.
+// 0 = 새 층을 완전히 끄고 기존 팝 두 장 경로로 돌아간다(롤백은 이 한 줄).
+const FOAM_CREST_V2 = 1;
 const FLIP_N = 6;            // 시트 세로 칸 수 = 한 획의 프레임 수
 const FLIP_C = 2;            // 시트 가로 칸 수 = 획 종류
 const FLIP_A = [1.0, 1.0, 1.0, 1.0, 0.90, 0.70];   // 프레임별 알파도 계단이다
@@ -834,7 +838,10 @@ export function createFeel(opts) {
   // ★텍스처가 없다. 절차로 그린다 - 시트를 한 장 더 굽는 것보다 확실하고, 이 그림은
   //   형태가 단순해서(덩어리 + 테두리 + 방울) 절차로도 손그림처럼 나온다.
   const POP_MAX = 12;
-  const POP_N = 2;                 // 장 수(24fps). 1 = 번쩍만, 2 = 번쩍 + 먹 튀김
+  // 오너가 기각한 것은 '사방으로 튀는 낱알'이라는 그림 자체다. 새 포말 마루가 켜진
+  // 판에서는 f0 접점 붓획만 남기고 f1 방울은 재생하지 않는다. 롤백 상수를 0 으로
+  // 내리면 기존 두 장 경로가 그대로 살아난다(아래 f1 셰이더도 지우지 않았다).
+  const POP_N = FOAM_CREST_V2 ? 1 : 2;
   // ★v96. 0.62 -> 0.44. 아래 먹 테두리를 좁히면서 크기도 같이 줄인다(오너 지시 7항).
   const POP_SIZE = 0.44;           // size 1 일 때 반지름(m)
   const popGeo = new THREE.BufferGeometry();
@@ -888,18 +895,33 @@ export function createFeel(opts) {
         if (!(vA > 0.004)) discard;
         vec2 q = vUV * 2.0 - 1.0;
         float r = length(q);
-        float th = atan(q.y, q.x);
         if (vFrm < 0.5) {
-          // ── f0. 흰 번쩍 ── 각도마다 반지름이 다른 **찢긴 덩어리**. 원판이면 CG 다.
-          float a1 = h1(floor(th * 2.5465 + vSd) + vSd * 3.1);        // 16등분 각 구간
-          float a2 = h1(floor(th * 1.2732 + vSd * 2.0) + vSd * 7.7);  // 8등분(큰 결)
-          float R = 0.50 + 0.34 * a2 + 0.16 * a1;
-          if (r > R) discard;
-          // 테두리가 형태를 정의한다. 안쪽 0.88R 까지가 흰빛, 그 바깥은 먹.
-          // ★v96. 0.72 -> 0.88. 옛 값은 반지름의 바깥 28%(면적의 48%)가 먹이라
-          //   화면에서 60px 짜리 이 한 장이 **속 빈 검은 타원 고리 = 눈알**로 보였다
-          //   (오너 지시 7항. 처치 프레임에 그게 두세 개 깔린다). 먹은 테두리 한 겹이면 된다.
-          gl_FragColor = vec4(r > R * 0.88 ? uInk : uWht, 1.0);
+          if (${FOAM_CREST_V2 ? 'true' : 'false'}) {
+            // ── R2 f0. 접점 붓획 ── f1 제거 뒤 홀로 남은 흰 원판을 3:1의 짧고
+            // 찢긴 붓자국으로 바꾼다. 팝마다 기울기·가장자리 결을 달리해 UI 대시도 피한다.
+            float ta = (h1(vSd * 2.9 + 0.7) - 0.5) * 2.4;
+            vec2 e = vec2(q.x * cos(ta) + q.y * sin(ta),
+                          -q.x * sin(ta) + q.y * cos(ta));
+            float ax = abs(e.x);
+            if (ax > 0.92) discard;
+            float taper = pow(max(0.0, 1.0 - ax / 0.92), 0.56);
+            float grain = (h1(floor((e.x + 1.0) * 11.0) + vSd * 5.3) - 0.5) * 0.055;
+            float bend = 0.045 * sin(e.x * 5.7 + vSd);
+            float outer = 0.055 + 0.245 * taper + grain;
+            float ey = abs(e.y - bend);
+            if (ey > outer) discard;
+            float rim = 0.050 + 0.018 * h1(floor(e.x * 13.0) + vSd * 7.1);
+            bool ink = ey > max(0.0, outer - rim) || ax > 0.82;
+            gl_FragColor = vec4(ink ? uInk : uWht, 1.0);
+          } else {
+            // 롤백 경로: R1 이전의 불규칙 흰 덩어리를 그대로 보존한다.
+            float th = atan(q.y, q.x);
+            float a1 = h1(floor(th * 2.5465 + vSd) + vSd * 3.1);
+            float a2 = h1(floor(th * 1.2732 + vSd * 2.0) + vSd * 7.7);
+            float R = 0.50 + 0.34 * a2 + 0.16 * a1;
+            if (r > R) discard;
+            gl_FragColor = vec4(r > R * 0.88 ? uInk : uWht, 1.0);
+          }
           return;
         }
         // ── f1. 먹 튀김 ── 접점에서 방사로 튄 방울.
@@ -992,6 +1014,342 @@ export function createFeel(opts) {
     popGeo.attributes.aAlpha.needsUpdate = true;
     popGeo.attributes.aFrm.needsUpdate = true;
     popGeo.attributes.aSeed.needsUpdate = true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 칼끝 포말 마루 (v99 16-FX) — 물방울 대신 리본 바깥면에 붙는 흰 거품
+  //
+  // main.js 의 파란 B 리본은 다른 에이전트 소유라 여기서 갈지 않는다. 이 층은 매 프레임
+  // 넘어오는 칼날 선분 a→b 중 **칼끝 b의 지나간 자리**에 구운 포말 덩어리를 겹쳐 놓는다.
+  // 원화 한 덩어리의 아래 긴 먹선이 기존 리본 바깥 가장자리와 포개져 두 메시가 한 몸으로
+  // 읽히고, 흰 갈고리/와권은 그 먹선 바깥쪽으로만 솟는다.
+  //
+  // 시간 계약:
+  //   · trailFoamSample() 은 재사용되는 a,b와 선택적인 플레이어 기준점을 즉시 복사한다.
+  //   · 실제 생성·자리·알파 변화는 updateFoamCrests() 의 1/24초 칸에서만 일어난다.
+  //   · 흰 머리는 3칸, 그 뒤는 시안/먹 잔흔. 수명은 4/5/6칸으로 어긋난다.
+  //   · wake<=0.18 이 되는 순간 생성을 끊고 최대 6칸(0.25초) 안에 전부 죽는다.
+  //     본 리본 11칸보다 반드시 먼저 회수되어 C의 늦은 회수 동작을 추가타로 만들지 않는다.
+  const FOAM_MAX = 28;
+  const FOAM_COLS = 4, FOAM_ROWS = 4;
+  const FOAM_WAKE_MIN = 0.18;
+  const FOAM_SPACING = 0.22;       // R2: 빠른 칼에서도 마루가 끊기지 않는 칼끝 이동거리(m)
+  const FOAM_SEAM_V = 0.20;        // 이 UV부터 밝은 포말. 굽기 스크립트와 같은 계약
+  const FOAM_OUT_GAP = 0.080;      // 밝은 포말 시작선을 리본/블룸 외곽 밖에 두는 간격(m)
+  const FOAM_RIBBON_TIP_K = 1.03;  // main.js B 리본의 칼끝 반경 정박 배수와 동일
+  const FOAM_ALPHA = [1.00, 1.00, 0.96, 0.82, 0.55, 0.32];
+  const FOAM_SCALE = [1.00, 1.00, 0.92, 0.75, 0.54, 0.34];
+  const foamGeo = new THREE.BufferGeometry();
+  const fcPos = new Float32Array(FOAM_MAX * 4 * 3);
+  const fcUV = new Float32Array(FOAM_MAX * 4 * 2);
+  const fcA = new Float32Array(FOAM_MAX * 4);
+  const fcCell = new Float32Array(FOAM_MAX * 4);
+  const fcAge = new Float32Array(FOAM_MAX * 4);
+  const fcIdx = [];
+  for (let i = 0; i < FOAM_MAX; i++) {
+    const o = i * 4;
+    fcIdx.push(o, o + 1, o + 2, o, o + 2, o + 3);
+    fcUV[o * 2] = 0; fcUV[o * 2 + 1] = 0;
+    fcUV[(o + 1) * 2] = 1; fcUV[(o + 1) * 2 + 1] = 0;
+    fcUV[(o + 2) * 2] = 1; fcUV[(o + 2) * 2 + 1] = 1;
+    fcUV[(o + 3) * 2] = 0; fcUV[(o + 3) * 2 + 1] = 1;
+  }
+  foamGeo.setAttribute('position', new THREE.BufferAttribute(fcPos, 3));
+  foamGeo.setAttribute('aUV', new THREE.BufferAttribute(fcUV, 2));
+  foamGeo.setAttribute('aAlpha', new THREE.BufferAttribute(fcA, 1));
+  foamGeo.setAttribute('aCell', new THREE.BufferAttribute(fcCell, 1));
+  foamGeo.setAttribute('aAge', new THREE.BufferAttribute(fcAge, 1));
+  foamGeo.setIndex(fcIdx);
+
+  const foamMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, depthTest: false, fog: false,
+    blending: THREE.NormalBlending, side: THREE.DoubleSide,
+    uniforms: {
+      uTex: { value: null }, uHasTex: { value: 0 },
+      // THREE.Color(hex)는 sRGB→선형 변환을 한다. 아래 sRGB 값은 변환 뒤 먹≈0.02~0.10,
+      // 감청≈0.04~0.35, 시안≈0.18~0.82, 포말≤1.0 에 앉도록 고른 값이다.
+      // 어느 단도 블룸 문턱 1.02를 넘지 않는다 — 흰색은 먹 옆의 대비로 만든다.
+      uInk: { value: new THREE.Color(0x263d57) },
+      uEdge: { value: new THREE.Color(0x3b6eaa) },
+      uCyan: { value: new THREE.Color(0x76c8ea) },
+      uFoam: { value: new THREE.Color(0xf4fbff) },
+    },
+    vertexShader: `
+      attribute vec2 aUV; attribute float aAlpha; attribute float aCell; attribute float aAge;
+      varying vec2 vUV; varying float vA; varying float vCell; varying float vAge;
+      void main(){ vUV = aUV; vA = aAlpha; vCell = aCell; vAge = aAge;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      varying vec2 vUV; varying float vA; varying float vCell; varying float vAge;
+      uniform sampler2D uTex; uniform float uHasTex;
+      uniform vec3 uInk; uniform vec3 uEdge; uniform vec3 uCyan; uniform vec3 uFoam;
+      void main(){
+        // 부정형 알파 검사: NaN이 HDR 버퍼로 빠지는 v88 계열 사고를 막는다.
+        if (!(vA > 0.004)) discard;
+        float lum;
+        float ta;
+        if (uHasTex > 0.5) {
+          vec2 cuv = clamp(vUV, 0.003, 0.997);
+          float ci = floor(vCell + 0.5);
+          float cx = mod(ci, ${FOAM_COLS.toFixed(1)});
+          // three TextureLoader의 flipY를 상쇄: 원화 0번은 시트의 맨 윗줄이다.
+          float cy = ${(FOAM_ROWS - 1).toFixed(1)} - floor(ci / ${FOAM_COLS.toFixed(1)});
+          vec4 tx = texture2D(uTex, (vec2(cx, cy) + cuv)
+                                    * vec2(${(1 / FOAM_COLS).toFixed(6)}, ${(1 / FOAM_ROWS).toFixed(6)}));
+          lum = dot(tx.rgb, vec3(0.30, 0.59, 0.11));
+          ta = tx.a;
+        } else {
+          // 시트가 빠진 배포본의 조용한 절차 폴백. 원판/낱알이 아니라 아래 먹선에
+          // 붙은 세 덩어리 하나만 그린다. 전부 step이라 반투명 CG 페이드가 없다.
+          vec2 q = vUV;
+          float base = step(0.12, q.x) * step(q.x, 0.96)
+                     * step(abs(q.y - (0.23 + 0.035 * sin(q.x * 17.0))), 0.075);
+          float p0 = step(length((q - vec2(0.28,0.38)) / vec2(0.18,0.25)), 1.0);
+          float p1 = step(length((q - vec2(0.52,0.34)) / vec2(0.16,0.19)), 1.0);
+          float p2 = step(length((q - vec2(0.73,0.30)) / vec2(0.13,0.14)), 1.0);
+          float live = max(base, max(p0, max(p1, p2)));
+          if (!(live > 0.5)) discard;
+          // 바닥은 먹, 마루는 흰색. 작은 폴백에서도 '눈알'이 될 내부 점은 없다.
+          lum = q.y < 0.28 ? 0.12 : (q.y < 0.34 ? 0.70 : 0.95);
+          ta = 1.0;
+        }
+        float a = ta * vA;
+        if (!(a > 0.004)) discard;
+        vec3 c = lum > 0.82 ? uFoam : (lum > 0.62 ? uCyan : (lum > 0.30 ? uEdge : uInk));
+        // 머리 3칸 뒤에는 흰 면을 없애고 한 단씩 어둡게 내려 꼬리를 포말이 아닌
+        // 기존 감청 리본의 결로 돌려준다. 알파·색 모두 칸 단위라 스르르 녹지 않는다.
+        if (vAge > 2.5)
+          c = lum > 0.82 ? uCyan : (lum > 0.62 ? uEdge : uInk);
+        gl_FragColor = vec4(c, a);
+      }`,
+  });
+  const foamMesh = new THREE.Mesh(foamGeo, foamMat);
+  foamMesh.frustumCulled = false;
+  foamMesh.renderOrder = 6;          // 궤적3·감김4·물보라5 위, 실루엣7·링8 아래
+  foamMesh.visible = true;           // 알파 0으로 숨겨 첫 스윙 셰이더 컴파일 히치를 막는다
+  scene.add(foamMesh);
+
+  let foamSheetLoaded = 0;
+  new THREE.TextureLoader().load('./tex/foam_crest_sheet.png' + location.search, (t) => {
+    // 회색조 밝기 0.12/0.46/0.70/0.95를 선형 그대로 읽어야 한다. colorSpace 금지.
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    t.generateMipmaps = false;
+    t.minFilter = THREE.LinearFilter;
+    t.magFilter = THREE.LinearFilter;
+    foamMat.uniforms.uTex.value = t;
+    foamMat.uniforms.uHasTex.value = 1;
+    foamSheetLoaded = 1;
+  }, undefined, () => { /* 시트가 없으면 위 절차 포말로 조용히 돈다 */ });
+
+  const foams = [];                 // {p, dir, blade, out, drift, birth, life, variant, wake}
+  const foamPending = {
+    a: new THREE.Vector3(), b: new THREE.Vector3(), chest: new THREE.Vector3(),
+    wake: 0, valid: false, anchored: false, seq: 0,
+  };
+  const foamPrevTip = new THREE.Vector3();
+  const foamLastSpawn = new THREE.Vector3();
+  let foamPrevValid = false, foamLastSpawnValid = false, foamActive = false;
+  let foamClock = 0, foamQFrame = -1, foamHold = 0, foamProcessedSeq = 0;
+  let foamSerial = 0, foamSpawnN = 0, foamDropped = 0, foamLastWake = 0;
+  const _fcDir = new THREE.Vector3(), _fcBlade = new THREE.Vector3();
+  const _fcOut = new THREE.Vector3(), _fcDrift = new THREE.Vector3();
+  const _fcFrom = new THREE.Vector3(), _fcP = new THREE.Vector3();
+  const _fcR = new THREE.Vector3(), _fcU = new THREE.Vector3();
+  const _fcL = new THREE.Vector3(), _fcN = new THREE.Vector3(), _fcC = new THREE.Vector3();
+  const _fcQ = new THREE.Vector3();
+  const FOAM_CORNER = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+
+  function finiteV3(v) {
+    return !!v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+  }
+
+  // main.js 한 줄 통로. a,b/rootPos는 매 프레임 재사용되는 객체이므로 즉시 복사한다.
+  function trailFoamSample(a, b, wake, rootPos, charH) {
+    foamPending.seq++;
+    if (!FOAM_CREST_V2 || !finiteV3(a) || !finiteV3(b) || !Number.isFinite(wake)) {
+      foamPending.valid = false;
+      return false;
+    }
+    foamPending.a.copy(a);
+    foamPending.b.copy(b);
+    foamPending.wake = Math.max(0, Math.min(1, wake));
+    // R2 합성용 선택 인자. main.js B 리본과 같은 가슴 기준 바깥 방향을 재현한다.
+    // 옛 3인자 호출도 안전하게 돌며 그때는 칼날 방향을 보수적 폴백으로 쓴다.
+    foamPending.anchored = finiteV3(rootPos) && Number.isFinite(charH) && charH > 0;
+    if (foamPending.anchored) {
+      foamPending.chest.copy(rootPos);
+      foamPending.chest.y += charH * 0.55;
+    }
+    foamPending.valid = true;
+    return true;
+  }
+
+  function spawnFoamCrest(p, dir, blade, out, drift, wake, anchored) {
+    if (foams.length >= FOAM_MAX) { foams.shift(); foamDropped++; }
+    const n = foamSerial++;
+    foams.push({
+      p: p.clone(), dir: dir.clone(), blade: blade.clone(), out: out.clone(),
+      drift: drift.clone(), anchored: !!anchored, birth: foamQFrame,
+      // 4/5/6칸. 같은 칸 동시 소멸을 피하고 최대치는 0.25초로 못 박는다.
+      life: 4 + (n % 3),
+      // 빠른 머리는 날카로운 claw 0..7, 낮은 wake는 둥근 crest 8..15.
+      variant: wake > 0.58 ? (n % 8) : (8 + (n % 8)),
+      wake,
+    });
+    foamSpawnN++;
+  }
+
+  function consumeFoamSample() {
+    if (!foamPending.valid) {
+      foamActive = false; foamPrevValid = false; foamLastSpawnValid = false;
+      return;
+    }
+    _fcP.copy(foamPending.b);
+    _fcBlade.copy(foamPending.b).sub(foamPending.a);
+    if (_fcBlade.lengthSq() < 1e-8) _fcBlade.set(0, 1, 0);
+    else _fcBlade.normalize();
+    if (foamPrevValid) _fcDir.copy(_fcP).sub(foamPrevTip);
+    else _fcDir.copy(_fcBlade);
+    // main.js 의 vb = 칼끝 속도*0.16 과 같은 바깥 흐름. 정지 도장은 리본만
+    // 바깥으로 날아가며 갈고리 방향이 어긋났으므로, R2부터 포말도 같이 운반한다.
+    if (foamPrevValid) _fcDrift.copy(_fcP).sub(foamPrevTip).multiplyScalar(0.16 / FRAME_T);
+    else _fcDrift.set(0, 0, 0);
+    if (_fcDir.lengthSq() < 1e-8) _fcDir.copy(_fcBlade);
+    else _fcDir.normalize();
+    const wake = foamPending.wake;
+    foamLastWake = wake;
+    if (wake > FOAM_WAKE_MIN) {
+      if (!foamActive || !foamLastSpawnValid) {
+        if (foamPending.anchored) _fcOut.copy(_fcP).sub(foamPending.chest);
+        else _fcOut.copy(_fcBlade);
+        spawnFoamCrest(_fcP, _fcDir, _fcBlade, _fcOut, _fcDrift, wake,
+                       foamPending.anchored);
+        foamLastSpawn.copy(_fcP);
+        foamLastSpawnValid = true;
+      } else {
+        _fcFrom.copy(foamLastSpawn);
+        const dist = _fcFrom.distanceTo(_fcP);
+        // 한 작화 칸에 너무 많은 도장이 찍히지 않게 상한 3. 빠른 칼은 간격이 넓어져도
+        // 각 원화 길이가 0.5~0.7m라 서로 겹쳐 한 마루로 남는다.
+        const count = Math.min(3, Math.floor(dist / FOAM_SPACING));
+        for (let j = 1; j <= count; j++) {
+          // 마지막 점으로 균등분할하면 0.31m 이동/count 1에서 간격이 두 배로 뛴다.
+          // 실제 자 FOAM_SPACING 만큼씩만 전진해 다음 칸에 남은 거리를 넘긴다.
+          _fcQ.copy(_fcFrom).lerp(_fcP, Math.min(1, j * FOAM_SPACING / Math.max(dist, 1e-4)));
+          if (foamPending.anchored) _fcOut.copy(_fcQ).sub(foamPending.chest);
+          else _fcOut.copy(_fcBlade);
+          spawnFoamCrest(_fcQ, _fcDir, _fcBlade, _fcOut, _fcDrift, wake,
+                         foamPending.anchored);
+          foamLastSpawn.copy(_fcQ);
+        }
+      }
+      foamActive = true;
+    } else {
+      // 캐스트 시각 종료. 기존 포말은 제 수명표대로 죽되 새 덩어리는 즉시 끊는다.
+      foamActive = false;
+      foamLastSpawnValid = false;
+    }
+    foamPrevTip.copy(_fcP);
+    foamPrevValid = true;
+  }
+
+  function rebuildFoamGeometry() {
+    _fcR.setFromMatrixColumn(camera.matrixWorld, 0);
+    _fcU.setFromMatrixColumn(camera.matrixWorld, 1);
+    for (let i = 0; i < FOAM_MAX; i++) {
+      const o = i * 4;
+      if (i >= foams.length) {
+        for (let k = 0; k < 4; k++) fcA[o + k] = 0;
+        continue;
+      }
+      const s = foams[i];
+      const age = Math.max(0, foamQFrame - s.birth);
+      const ai = Math.min(age, FOAM_ALPHA.length - 1);
+      const alpha = FOAM_ALPHA[ai];
+      const scale = FOAM_SCALE[ai];
+      // 진행 방향을 카메라 평면에 내린다. 아래에서 리본의 방사 방향과 직교시켜
+      // 원화의 왼쪽 큰 갈고리가 진행 방향을 보게 한다(왼쪽 머리→오른쪽 바늘 꼬리).
+      let dx = s.dir.dot(_fcR), dy = s.dir.dot(_fcU);
+      let dl = Math.hypot(dx, dy);
+      if (dl < 1e-5) { dx = 1; dy = 0; dl = 1; }
+      dx /= dl; dy /= dl;
+      // main.js B 리본과 똑같이 '플레이어 가슴 -> 칼끝'의 화면 방사 방향을 쓴다.
+      // 선택 anchor가 없는 옛 호출에서는 저장한 칼날 방향으로 조용히 폴백한다.
+      if (s.anchored && foamPending.anchored) _fcOut.copy(s.p).sub(foamPending.chest);
+      else _fcOut.copy(s.out);
+      let nx = _fcOut.dot(_fcR), ny = _fcOut.dot(_fcU);
+      let nl = Math.hypot(nx, ny);
+      if (nl < 1e-5) {
+        nx = s.blade.dot(_fcR); ny = s.blade.dot(_fcU); nl = Math.hypot(nx, ny);
+      }
+      if (nl < 1e-5) { nx = -dy; ny = dx; nl = 1; }
+      nx /= nl; ny /= nl;
+      _fcN.copy(_fcR).multiplyScalar(nx).addScaledVector(_fcU, ny);
+      // 길이축은 리본 바깥축과 정확히 직교시킨다. 그래야 아래 L 오프셋이 포말을
+      // 다시 리본 안으로 밀지 않고, 갈고리도 리본의 진행 접선을 따라 눕는다.
+      let lx = -ny, ly = nx;
+      if (lx * -dx + ly * -dy < 0) { lx = -lx; ly = -ly; }
+      _fcL.copy(_fcR).multiplyScalar(lx).addScaledVector(_fcU, ly);
+      // 최신/강한 마루만 크다. 원화 한 덩어리는 최대 1.30x0.56m지만 R2 절단 뒤
+      // 셀의 live 면은 8~36%이고 먹선·구멍으로 갈라져 통짜 흰 판이 되지 않는다. 길이는
+      // 칼끝 반경+반길이 약 2.1m라 3.2m 판정 리치 안에 남는다.
+      const hl = (0.40 + 0.25 * s.wake) * scale;
+      const hh = (0.18 + 0.10 * s.wake) * scale;
+      // B 리본 바깥 가장자리는 tipR*1.03 에 정박한다. 시트의 v=FOAM_SEAM_V를
+      // 그 가장자리보다 FOAM_OUT_GAP 바깥에 놓아 밝은 몸통이 흰 리본과 겹치지 않게
+      // 기하로 보장한다. 그 아래에는 굽기에서 남긴 얇은 먹 경계만 있다.
+      const tipPad = s.anchored ? nl * (FOAM_RIBBON_TIP_K - 1.0) : 0.045;
+      const seamCenter = tipPad + FOAM_OUT_GAP + hh * (1.0 - 2.0 * FOAM_SEAM_V);
+      _fcC.copy(s.p)
+          .addScaledVector(_fcL, hl * 0.55)   // 머리(로컬 -x)가 b 근처에 앉는다
+          .addScaledVector(_fcN, seamCenter); // 먹 경계만 리본에 걸치고 흰 몸통은 바깥으로
+      for (let k = 0; k < 4; k++) {
+        _fcQ.copy(_fcC).addScaledVector(_fcL, FOAM_CORNER[k][0] * hl)
+            .addScaledVector(_fcN, FOAM_CORNER[k][1] * hh);
+        fcPos[(o + k) * 3] = _fcQ.x;
+        fcPos[(o + k) * 3 + 1] = _fcQ.y;
+        fcPos[(o + k) * 3 + 2] = _fcQ.z;
+        fcA[o + k] = alpha;
+        fcCell[o + k] = s.variant;
+        fcAge[o + k] = age;
+      }
+    }
+    foamGeo.attributes.position.needsUpdate = true;
+    foamGeo.attributes.aAlpha.needsUpdate = true;
+    foamGeo.attributes.aCell.needsUpdate = true;
+    foamGeo.attributes.aAge.needsUpdate = true;
+  }
+
+  function updateFoamCrests(dtGame) {
+    if (!FOAM_CREST_V2) {
+      if (foams.length) foams.length = 0;
+      for (let i = 0; i < fcA.length; i++) fcA[i] = 0;
+      foamGeo.attributes.aAlpha.needsUpdate = true;
+      return;
+    }
+    foamClock += Math.max(0, Number.isFinite(dtGame) ? dtGame : 0);
+    const qf = Math.floor(foamClock / FRAME_T);
+    if (qf === foamQFrame) { foamHold++; return; }
+    foamQFrame = qf;
+    foamHold = 0;
+    // 이미 태어난 포말을 main.js 리본 샘플과 같은 계수로 바깥에 운반한다.
+    // 새로 태어날 포말은 아직 한 칸도 흐르지 않아야 하므로 consume보다 먼저 돈다.
+    const driftDecay = Math.pow(0.40, FRAME_T);
+    for (const s of foams) {
+      s.p.addScaledVector(s.drift, FRAME_T);
+      s.drift.multiplyScalar(driftDecay);
+    }
+    if (foamPending.seq !== foamProcessedSeq) {
+      consumeFoamSample();
+      foamProcessedSeq = foamPending.seq;
+    } else {
+      // 샘플 통로가 끊긴 판에서도 옛 마지막 점에서 새 포말을 만들지 않는다.
+      foamActive = false; foamPrevValid = false; foamLastSpawnValid = false;
+    }
+    for (let i = foams.length - 1; i >= 0; i--) {
+      if (foamQFrame - foams[i].birth >= foams[i].life) foams.splice(i, 1);
+    }
+    rebuildFoamGeometry();
   }
 
   // ── 무리 전멸 링 (tex/ring_shock.png) ──
@@ -1354,6 +1712,8 @@ export function createFeel(opts) {
     updateImpactSlashes(rawDt * timeScale);
     // 타격 팝(흰 번쩍 + 먹 튀김). 같은 이유로 게임시계, 같은 이유로 early return 앞.
     updatePops(rawDt * timeScale);
+    // 칼끝 포말 마루. 같은 게임시계·같은 1/24 칸이며, 데이터가 안 오면 조용히 비어 있다.
+    updateFoamCrests(rawDt * timeScale);
 
     // 링. 지면 데칼이라 자리는 한 번 정하면 그대로고 크기·투명도만 간다.
     // ★아래 early return 보다 먼저 와야 한다. 붓자국이 다 사라진 뒤에도 링은 남는다.
@@ -1685,8 +2045,12 @@ export function createFeel(opts) {
     // ★"이펙트가 화면의 몇 %인가"는 **이펙트를 껐다 켠 두 장의 차이**로만 정확히 잰다.
     //   색으로 마스크를 추리면 배경의 하늘·물까지 걸려서 숫자가 거짓말을 한다.
     //   그림에는 아무 영향이 없다(배열 하나를 내줄 뿐이다).
-    fxMeshes: [slashMesh, lineMesh, impMesh, impfMesh, popMesh, ringMesh],
+    fxMeshes: [slashMesh, lineMesh, impMesh, impfMesh, popMesh, foamMesh, ringMesh],
     step, updateShake, shakeOffset, updateOverlay, slash, speedLines, shake,
+    // ★v99 16-FX main.js 한 줄 통로.
+    // a,b = 칼날 선분, wake = 0..1, rootPos/charH = B 리본과 같은 바깥축을 만드는 기준.
+    // 벡터는 main.js가 재사용하므로 함수 안에서 즉시 복사한다. 호출이 없어도 빈 층이다.
+    trailFoamSample,
     // ★v94. 화면공간 본 획. main.js 궤적 구역이 **스윙이 터지는 프레임마다** 부른다
     //   (처치 여부와 무관). 이게 "화면에 그은 획" 문법의 주인공이다.
     swing,
@@ -1820,6 +2184,16 @@ export function createFeel(opts) {
                      // 타격 지점 참격(월드 플립북): 지금 몇 장이 떠 있고 각각 몇 번째 칸인가
                      impf: impfs.map(s => Math.floor(s.t / FRAME_T)),
                      impfSheet: !!impfMat.uniforms.uTex.value,
+                     // 포말 마루: 새 메시도 fxMeshes 계측에 들어가며 수명/24fps 홀드를 여기서 본다.
+                     foam: { enabled: !!FOAM_CREST_V2, tex: !!foamSheetLoaded,
+                             n: foams.length, frame: foamQFrame, hold: foamHold,
+                             wake: +foamLastWake.toFixed(3), spawned: foamSpawnN,
+                             dropped: foamDropped,
+                             anchored: !!foamPending.anchored,
+                             spacing: FOAM_SPACING, seam: FOAM_SEAM_V,
+                             ages: foams.map(s => foamQFrame - s.birth),
+                             lives: foams.map(s => s.life),
+                             cells: foams.map(s => s.variant) },
                      frm: slashMat.uniforms.uFrm.value.slice(),
                      col: slashMat.uniforms.uCol.value.slice(),
                      line: +lineMat.uniforms.uP.value.toFixed(3),

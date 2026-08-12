@@ -707,7 +707,11 @@ const FX_TABLE = {};
     ladderW: [1.00, 1.00, 1.00, 0.98, 0.94, 0.88, 0.80, 0.70, 0.56, 0.38, 0.12],
     profile: 'comet', comet: { head: 0.32, nose: 0.78, tailp: 1.18, tail: 0.06 },
     offK: [0.45, 0.55], headSpan: 0.55, alpha: 'binary', tipK: 1.03,
-    bodyR: 0.82, outR: 3.50, sprayK: 1.0, wrapK: 1.0,
+    // ★16-FX. sprayK 1.0 -> 0. 오너 지시 "물방울이 튀기듯이 그거 너무별로야".
+    //   spawnSpray 가 `if (!ink) count *= FX.sprayK` 이므로 이 한 자리는 **물보라만**
+    //   죽인다(처치의 붉은 먹물 튐 spawnInk 는 ink=1 이라 배수를 안 탄다 - 그대로 산다).
+    //   흰 거품은 이제 feel.js 의 포말 마루층이 리본 바깥면에 붙여 그린다.
+    bodyR: 0.82, outR: 3.50, sprayK: 0.0, wrapK: 1.0,
     cfg: [
       // 포말 마루 = 칼끝에 붙는다. 리본 본체는 그 바로 안쪽에서 방을 넓게 쓴다.
       { kind: 2, at: 0.95, w: 0.09, inset: 0.00, headOnly: 1, lifeK: 0.80 },
@@ -4655,6 +4659,7 @@ function tick() {
       vb: _spd.clone().multiplyScalar((attacking ? 0.16 : 0) * invDt) });
     while (trailBuf.length > TRAIL_MAX) trailBuf.shift();
     updateTrail();
+    feel.trailFoamSample(a, b, attacking ? wake : 0, root.position, charH);  // ★16-FX 포말 마루 통로(한 줄)
     updateWrap(dt, a, b, attacking);
     // 베는 동안에만 조각이 튄다. 세게 벨수록 많이.
     if (attacking && wake > 0.15) {
