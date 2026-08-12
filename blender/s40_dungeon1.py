@@ -144,13 +144,17 @@ AMB_MIN = 0.135       # 어떤 채널도 이보다 어두워지지 않는다
 TORCH_RGB = np.array((1.00, 0.56, 0.20), np.float32)   # 횃불 빛의 색(1차보다 진하다)
 COLD_RGB = np.array((0.34, 0.60, 1.00), np.float32)    # 계단·천장 틈의 찬 빛
 MOSS_RGB = np.array((0.10, 0.26, 0.06), np.float32)    # 벽 밑동 이끼(정점색에 더한다)
-TORCH_R = 4.3         # 횃불 반경(m). 이 거리에서 세기의 1/2 x 창 이 남는다
+# ★13차C. 4.3 -> 3.6. 옛 값은 꼬리가 5m 넘게 완만해서(실측 벽 R/B 0.6m 1.66 ->
+#   3.6m 1.19) 횃불이 '안개'였다. 컨셉의 횃불은 1m 안이 황백이고 2m 밖은 이미
+#   남색이다 - '가까이 세다'가 아니라 '**빨리 죽는다**'가 불의 문법이고, 그 대비가
+#   있어야 빛이 정보가 된다. 평균 밝기는 재질 곱수가 자동으로 되받는다(곱수 계약).
+TORCH_R = 3.6         # 횃불 반경(m). 이 거리에서 세기의 1/2 x 창 이 남는다
 TORCH_P = 0.98        # 횃불 세기
 # ★★꼬리를 자르는 창(window). 1/(1+(d/R)^2) 만 쓰면 꼬리가 길어서 **광원 마흔 개가
 #   서로를 더해 맵 전체가 1.0 으로 포화**된다(첫 판에서 실제로 그랬다:
 #   바닥 정점밝기 최소 0.96 · 최대 1.00 = 리듬 0). 사거리 밖은 0 이 되게 잘라야
 #   "웅덩이"가 생긴다.
-TORCH_RANGE = 2.5     # 사거리 = R 의 몇 배까지 빛이 닿는가
+TORCH_RANGE = 2.3     # 사거리 = R 의 몇 배까지 빛이 닿는가
 TOP_BONUS = 0.10      # 벽 마루(윗면)에 얹는 밝기. 두께가 읽히게 한다
 
 # ★★높이 감쇠 — 쿼터뷰에서 **벽 상단이 어둠으로 사라지게** 하는 장치.
@@ -306,8 +310,10 @@ LIGHTS = []
 TORCH_PROPS = []      # 실제로 벽에 다는 횃불(불꽃 지오메트리). (gx, gz, y, face)
 
 
-def add_light(gx, gz, y, rad, power, rgb):
-    LIGHTS.append((gx, gz, y, rad, power, np.asarray(rgb, np.float32)))
+def add_light(gx, gz, y, rad, power, rgb, near=0.0):
+    """near = 근접 웜 세기 배수(13차C). 횃불만 1.0 이고 달빛·계단은 0 이다 —
+    찬 빛은 넓게 번지는 게 맞고, 뜨거운 불만 옆면을 국소로 태운다."""
+    LIGHTS.append((gx, gz, y, rad, power, np.asarray(rgb, np.float32), near))
 
 
 def face_of_wall(c, r):
@@ -369,7 +375,7 @@ def mount_torch(c, r):
     y = PED_Y if ped else TORCH_Y
     TORCH_PROPS.append((gx, gz, y, dx, dz, ped))
     add_light(gx + dx * (PED_OUT if ped else 0.30), gz + dz * (PED_OUT if ped else 0.30),
-              y, TORCH_R, TORCH_P, TORCH_RGB)
+              y, TORCH_R, TORCH_P, TORCH_RGB, near=1.0)
     return True
 
 
@@ -438,11 +444,11 @@ ALTAR_C, ALTAR_R = 13, 3          # 제단 칸(방 R_ALTAR 안. 북쪽에 붙인
 ALTAR_X, ALTAR_Z = gxf(ALTAR_C + 1.0), gz_of(ALTAR_R)   # 제단 중심(칸 경계에 걸친다)
 ALTAR_TOP = 0.30                  # 제단 단 높이(platforms[] 로 나간다)
 # 제단 화로 둘. 던전에서 가장 밝은 자리가 목표다
-add_light(ALTAR_X - 2.4, ALTAR_Z + 0.2, 1.15, 7.0, 0.95, TORCH_RGB)
-add_light(ALTAR_X + 2.4, ALTAR_Z + 0.2, 1.15, 7.0, 0.95, TORCH_RGB)
+add_light(ALTAR_X - 2.4, ALTAR_Z + 0.2, 1.15, 7.0, 0.95, TORCH_RGB, near=1.0)
+add_light(ALTAR_X + 2.4, ALTAR_Z + 0.2, 1.15, 7.0, 0.95, TORCH_RGB, near=1.0)
 
 CAMP_X, CAMP_Z = gx_of(23), gz_of(5)      # 북동 취사장 모닥불
-add_light(CAMP_X, CAMP_Z, 0.55, 6.2, 0.85, TORCH_RGB)
+add_light(CAMP_X, CAMP_Z, 0.55, 6.2, 0.85, TORCH_RGB, near=1.0)
 
 SHAFT_X, SHAFT_Z = gx_of(13), gz_of(23)   # 낙하방 천장 구멍에서 내려오는 찬 빛
 add_light(SHAFT_X, SHAFT_Z, 2.6, 6.0, 0.62, COLD_RGB)
@@ -461,7 +467,7 @@ FREE_BRAZIERS = [
     (-7.2, -17.2), (7.2, -17.2),                            # 제단 방 입구
 ]
 for (_bx, _bz) in FREE_BRAZIERS:
-    add_light(_bx, _bz, 1.34, TORCH_R * 1.05, TORCH_P * 1.05, TORCH_RGB)
+    add_light(_bx, _bz, 1.34, TORCH_R * 1.05, TORCH_P * 1.05, TORCH_RGB, near=1.0)
 
 STAIR_C0, STAIR_R0 = 22, 21               # 계단 바닥 칸(북으로 오른다)
 STAIR_X = gxf(STAIR_C0 + 1.0)
@@ -488,6 +494,82 @@ def height_fall(y):
 #   NL_FLOOR 는 완전히 등진 면에도 남기는 몫이다(0 이면 뒷면이 시커먼 구멍이 된다).
 NL_FLOOR = 0.42
 
+# ═════════════════════════════════════════════════════════════
+# 4b) 13차C — 근접 웜(횃불이 옆면을 데운다) · 바닥 매크로 변주 · 벽 밑 접지 어둠
+# ═════════════════════════════════════════════════════════════
+# 오너 지시: "불꽃 있으면 주변 밝아지는 효과는 왜 이리 이상하냐. 그리고 던전 타일도
+#            너무 타일스럽고. 그림인 듯한 느낌이지만 3D인, 그런 느낌으로 가야지."
+#
+# ★진단(실측). 옛 판의 횃불 빛은 **너무 넓게 퍼진 한 겹**이었다.
+#     벽 정점색 R/B  0.6m 1.66 / 1.8m 1.41 / 3.6m 1.19 / 5.4m 0.64
+#   = 5m 넘게 완만하게 데워진다. 컨셉(concept_hall.png)의 횃불은 반대다 — 1m 안쪽이
+#   황백으로 타고 2m 밖은 이미 남색이다. "가까이 세다"가 아니라 "**빨리 죽는다**"가
+#   횃불의 문법이고, 그 대비가 없으니 빛이 정보가 아니라 안개로 보였다.
+#
+# 그래서 층을 하나 더 얹는다(넓은 스필은 그대로 두고 그 위에).
+#   NEAR_*  = 반경 1.2m 짜리 **근접 웜**. N·L 이 거의 전부라 빛을 본 면만 데워지고
+#             뒷면은 차갑게 남는다 = 기둥이 둥글게 서고 벽이 판때기를 벗는다.
+NEAR_R = 1.20         # 근접 웜 반경(m). 이 거리에서 세기의 1/2
+NEAR_P = 0.95         # 근접 웜 세기
+NEAR_RANGE = 2.30     # 사거리 = R 의 몇 배. 넘으면 0(꼬리를 안 남긴다)
+NEAR_NL = 0.05        # 등진 면에 남기는 몫. 0.05 = 사실상 안 남긴다(뒷면은 차다)
+
+# ── 바닥 매크로 변주 (탈타일화 ①) ──
+# ★격자로 읽히는 원인의 절반은 텍스처가 아니라 **바닥이 통째로 같은 밝기**라는 것이다.
+#   4.5m 마다 같은 무늬가 오는데 밝기까지 같으면 눈이 주기를 센다. 격자 주기와 아무
+#   상관 없는 3~9m 얼룩을 정점색에 실으면 그 셈이 끊긴다(초원에서 쓴 그 처방이다).
+MACRO_A = 0.175       # 큰 얼룩 진폭(곱수). 밝은 마모 존 / 어두운 습윤 존
+MACRO_S1 = 7.30       # 저주파 파장(m). 격자 4.5m 와 **약분이 안 되는** 수여야 한다
+MACRO_S2 = 3.10       # 중주파 파장(m)
+# ── 벽 밑 접지 어둠 (탈타일화 ④) ──
+# 벽 발치가 바닥과 같은 밝기면 벽이 바닥 위에 **붕 떠 보인다**. 부드러운 띠를 깐다.
+CONTACT_AO = 0.30     # 벽에 딱 붙은 자리에서 몇 % 어두워지는가
+CONTACT_R = 0.95      # 그 띠의 폭(m)
+
+
+def _hash2(ix, iy, seed):
+    """격자점 하나에서 0..1. ★random 모듈을 안 쓴다 - 자리로만 정해져야 다시 구울 때
+    같은 그림이 나오고, 한 군데를 고쳐도 나머지가 안 흔들린다."""
+    h = math.sin(ix * 127.1 + iy * 311.7 + seed * 74.7) * 43758.5453
+    return h - math.floor(h)
+
+
+def _vnoise2(gx, gz, scale, seed):
+    """파장 scale(m) 짜리 값잡음. smoothstep 보간이라 띠가 안 보인다."""
+    fx, fz = gx / scale, gz / scale
+    ix, iz = math.floor(fx), math.floor(fz)
+    tx, tz = fx - ix, fz - iz
+    tx = tx * tx * (3.0 - 2.0 * tx)
+    tz = tz * tz * (3.0 - 2.0 * tz)
+    a = _hash2(ix, iz, seed)
+    b = _hash2(ix + 1, iz, seed)
+    c = _hash2(ix, iz + 1, seed)
+    d = _hash2(ix + 1, iz + 1, seed)
+    return (a * (1 - tx) * (1 - tz) + b * tx * (1 - tz)
+            + c * (1 - tx) * tz + d * tx * tz)
+
+
+def macro_at(gx, gz):
+    """바닥 매크로 명암 곱수. 1 을 중심으로 위아래로 흔든다(평균 1 = 곱수 계약 유지)."""
+    n = (_vnoise2(gx, gz, MACRO_S1, 11.0) * 0.68
+         + _vnoise2(gx, gz, MACRO_S2, 29.0) * 0.32)
+    return 1.0 + (n - 0.5) * 2.0 * MACRO_A
+
+
+def wall_dist(gx, gz):
+    """제일 가까운 벽 칸의 면까지 거리(m). 이끼·접지 어둠·마모 데칼이 같이 쓴다."""
+    c, r = cell_of(gx, gz)
+    best = 9.0
+    for dr in range(-2, 3):
+        for dc in range(-2, 3):
+            if not blocked(c + dc, r + dr):
+                continue
+            cx, cz = gx_of(c + dc), gz_of(r + dr)
+            dx = max(0.0, abs(gx - cx) - CELL * 0.5)
+            dz = max(0.0, abs(gz - cz) - CELL * 0.5)
+            best = min(best, math.hypot(dx, dz))
+    return best
+
 
 def lum(gx, gz, y, moss=0.0, nrm=None):
     """정점 밝기 곱수(RGB). 이 값이 glTF COLOR_0 으로 나간다.
@@ -503,21 +585,36 @@ def lum(gx, gz, y, moss=0.0, nrm=None):
             선형 감쇠는 웅덩이가 아니라 넓은 얼룩으로 읽힌다(1차의 인상).
     """
     acc = AMB.copy()
-    for (lx, lz, ly, rad, power, rgb) in LIGHTS:
+    for (lx, lz, ly, rad, power, rgb, near) in LIGHTS:
         dx = gx - lx
         dz = gz - lz
         dy = y - ly
         d2 = dx * dx + dz * dz + dy * dy * 0.55   # 세로 거리는 덜 센다(벽면이 통째로 죽는다)
-        rng = rad * TORCH_RANGE
-        if d2 >= rng * rng:
-            continue
-        w = 1.0 - math.sqrt(d2) / rng
-        f = power * (w ** 2.4) / (1.0 + d2 / (rad * rad))
+        # ★N·L 은 두 층이 같이 쓴다. 한 번만 구한다
+        ndl = None
         if nrm is not None:
             dd = math.sqrt(dx * dx + dz * dz + (y - ly) ** 2) + 1e-4
             ndl = (nrm[0] * (-dx) + nrm[1] * (ly - y) + nrm[2] * (-dz)) / dd
-            f *= NL_FLOOR + (1.0 - NL_FLOOR) * max(0.0, ndl)
-        acc = acc + rgb * f
+        rng = rad * TORCH_RANGE
+        if d2 < rng * rng:
+            w = 1.0 - math.sqrt(d2) / rng
+            f = power * (w ** 2.7) / (1.0 + d2 / (rad * rad))
+            if ndl is not None:
+                f *= NL_FLOOR + (1.0 - NL_FLOOR) * max(0.0, ndl)
+            acc = acc + rgb * f
+        # ── 근접 웜(13차C) ──
+        # ★★거리는 **세로를 안 깎는다.** 넓은 스필은 벽면이 통째로 죽는 걸 막으려고
+        #   dy 를 0.55 로 눌렀는데, 근접 웜에서 같은 짓을 하면 횃불 위 3m 벽까지
+        #   데워져서 다시 안개가 된다. 여기서는 실제 거리를 그대로 쓴다.
+        if near > 0.0:
+            nrng = NEAR_R * NEAR_RANGE
+            dn2 = dx * dx + dz * dz + dy * dy
+            if dn2 < nrng * nrng:
+                wn = 1.0 - math.sqrt(dn2) / nrng
+                fn = near * NEAR_P * (wn ** 3.0) / (1.0 + dn2 / (NEAR_R * NEAR_R))
+                if ndl is not None:
+                    fn *= NEAR_NL + (1.0 - NEAR_NL) * max(0.0, ndl)
+                acc = acc + rgb * fn
     acc = acc * height_fall(y)
     if moss > 0.0:
         acc = acc + MOSS_RGB * moss
@@ -546,7 +643,17 @@ def lum(gx, gz, y, moss=0.0, nrm=None):
 #   1차의 2.0m 는 판을 0.35m 로 만들어 바닥이 자갈밭처럼 촘촘했다.
 TEX_DIR = os.path.join(ROOT, "web", "tex")
 WALL_UV_SCALE = 2.8        # 벽. 블록 한 단이 0.40m 가 되는 값
-FLOOR_UV_SCALE = 4.5       # 바닥. 판 하나가 0.75~0.9m
+# ★13차C. 4.5 -> 6.2. 두 가지를 같이 산다.
+#   (가) 판 하나가 0.75~0.9m 에서 **1.05~1.25m** 가 된다 - 컨셉의 큰 판석 크기다
+#       (컨셉에서 고블린 어깨 폭보다 판이 확실히 크다. 옛 값은 자갈에 가까웠다)
+#   (나) 되풀이 주기가 4.5m -> 6.2m. 화면에 들어오는 바닥이 20m 남짓이라
+#       되풀이 횟수가 4.4번에서 3.2번으로 준다 = 눈이 주기를 덜 센다
+#   해상도는 1024/6.2 = 165 texel/m 로 게임 화면(49 px/m)의 세 배라 여유가 있다
+FLOOR_UV_SCALE = 6.2
+# ★★바닥 UV 를 살짝 **돌린다**. 되풀이 자체는 못 없애지만, 격자축이 방·벽·통로의
+#   직각과 나란하면 눈이 "타일이 벽에 맞춰 깔렸다"고 읽는다 - 그게 격자감의 절반이다.
+#   17도는 어느 벽과도 안 맞으면서 판석의 손그림 방향이 부자연스럽지 않은 각이다.
+FLOOR_UV_ROT = math.radians(17.0)
 
 with open(os.path.join(TEX_DIR, "dungeon_tex.json")) as _f:
     TEXMETA = json.load(_f)
@@ -577,6 +684,11 @@ IMG_POOL, _ = load_tex("dg_pool", "png")
 IMG_POOLC, _ = load_tex("dg_pool_cold", "png")
 IMG_SHAFT, _ = load_tex("dg_shaft", "png")
 IMG_FLAME, _ = load_tex("dg_flame", "png")
+# ★13차C 신설 둘
+#   dg_wglow = 횃불이 벽을 타고 오르는 자국(세로로 긴 이미시브 카드)
+#   dg_wear  = 바닥 마모·이끼 데칼 2x2 아틀라스(알베도. 조명·정점색을 탄다)
+IMG_WGLOW, _ = load_tex("dg_wglow", "png")
+IMG_WEAR, WEAR_LIN = load_tex("dg_wear", "png")
 
 
 # ═════════════════════════════════════════════════════════════
@@ -798,11 +910,12 @@ class Buf:
       정보라서 세 채널을 다 쓴다). glTF COLOR_0 으로 나가 three.js 가 베이스컬러에
       곱한다. 이게 던전의 어둠·웜 라이트를 재질 하나로 내는 장치다."""
 
-    def __init__(self, name, tile=None, uv_scale=None, glow=False):
+    def __init__(self, name, tile=None, uv_scale=None, glow=False, uv_rot=0.0):
         self.name = name
         self.mat = None
         self.tile = tile              # 참이면 UV 를 만든다
         self.uv_scale = uv_scale      # None 이면 **면마다 0..1** (데칼·스프라이트)
+        self.uv_rot = uv_rot          # 바닥 격자축을 벽과 어긋나게 돌린다(13차C)
         self.glow = glow              # 이미시브라 정점색을 안 쓴다
         self.v = []
         self.f = []
@@ -962,9 +1075,12 @@ def add_prism(buf, gx, gz, y0, y1, r0, r1, n=8, phase=0.0, top_boost=0.0, cap=Tr
 #   빛나는 판이 그림자를 던지면 그 자리만 시커멓게 죽는다.
 #   ★초원용 스플랫이 얹힐 걱정은 없다: level2.json 의 `floorLook:false` 가
 #     applyFloorLook 을 통째로 건너뛴다(level.js 322행).
-buf_floor = Buf("FLOOR_DG", tile=True, uv_scale=FLOOR_UV_SCALE)
-buf_floorb = Buf("FLOOR_DGB", tile=True, uv_scale=FLOOR_UV_SCALE)   # 금 간 바닥(통로)
-buf_dirt = Buf("FLOOR_DIRT", tile=True, uv_scale=FLOOR_UV_SCALE)
+buf_floor = Buf("FLOOR_DG", tile=True, uv_scale=FLOOR_UV_SCALE, uv_rot=FLOOR_UV_ROT)
+# ★통로는 **다른 각으로** 돌린다. 방과 통로가 같은 각이면 두 메시의 격자가 이어져
+#   한 판으로 읽히고, 그러면 UV 를 돌린 뜻이 절반 날아간다.
+buf_floorb = Buf("FLOOR_DGB", tile=True, uv_scale=FLOOR_UV_SCALE,
+                 uv_rot=-FLOOR_UV_ROT * 1.6)                        # 금 간 바닥(통로)
+buf_dirt = Buf("FLOOR_DIRT", tile=True, uv_scale=FLOOR_UV_SCALE, uv_rot=FLOOR_UV_ROT)
 buf_wall = Buf("COL_WALL", tile=True, uv_scale=WALL_UV_SCALE)
 buf_cut = Buf("COL_CUT", tile=True, uv_scale=WALL_UV_SCALE)        # 기둥·아치·문설주
 buf_altar = Buf("COL_ALTAR", tile=True, uv_scale=WALL_UV_SCALE)
@@ -979,6 +1095,10 @@ buf_shaft = Buf("FLOOR_SHAFT", tile=True, glow=True)      # 달빛 샤프트 콘
 buf_flame = Buf("FLOOR_FLAME", tile=True, glow=True)      # 불꽃 스프라이트
 buf_dust = Buf("FLOOR_DUST", tile=True, glow=True)        # 샤프트 속 먼지
 buf_medal = Buf("FLOOR_MEDAL", tile=True, glow=False)     # 제단 메달리온(조명을 탄다)
+# ── 13차C 신설 ──
+buf_wglow = Buf("FLOOR_WGLOW", tile=True, glow=True)      # 횃불이 벽을 타고 오르는 자국
+buf_halo = Buf("FLOOR_HALO", tile=True, glow=True)        # 불꽃 뒤 부드러운 후광
+buf_wear = Buf("FLOOR_WEAR", tile=True, glow=False)       # 바닥 마모·이끼(조명을 탄다)
 
 
 # ═════════════════════════════════════════════════════════════
@@ -1084,19 +1204,24 @@ def moss_at(gx, gz):
     """벽에서 얼마나 가까운가 -> 이끼 세기.
 
     ★컨셉 바닥의 초록은 판 한가운데가 아니라 **벽 밑동과 판 사이 줄눈**에 낀다.
-      그래서 벽까지의 거리로만 만든다. 거리 1.15m 밖은 0."""
-    c, r = cell_of(gx, gz)
-    best = 9.0
-    for dr in range(-2, 3):
-        for dc in range(-2, 3):
-            if not blocked(c + dc, r + dr):
-                continue
-            cx, cz = gx_of(c + dc), gz_of(r + dr)
-            dx = max(0.0, abs(gx - cx) - CELL * 0.5)
-            dz = max(0.0, abs(gz - cz) - CELL * 0.5)
-            best = min(best, math.hypot(dx, dz))
-    t = max(0.0, 1.0 - best / 1.15)
-    return (t ** 1.5) * 0.62
+      그래서 벽까지의 거리로만 만든다. 거리 1.15m 밖은 0.
+    ★13차C. 타일 텍스처에서 초록 줄눈을 69% 걷어냈다(tools/dungeon_tex.py).
+      바닥 전체에 깔려 있던 그 초록이 이제 **여기에만** 남는다 = 컨셉과 같은 배치다.
+      그래서 세기를 0.62 -> 0.78 로 올렸다(총량은 오히려 크게 줄었다).
+    ★가장자리를 잡음으로 흔든다. 벽과 나란한 띠로 깔리면 그것 자체가 또 격자다."""
+    t = max(0.0, 1.0 - wall_dist(gx, gz) / 1.15)
+    t *= 0.55 + 0.90 * _vnoise2(gx, gz, 2.60, 47.0)
+    return (min(1.0, t) ** 1.5) * 0.78
+
+
+def contact_ao(gx, gz):
+    """벽 발치 접지 어둠(13차C). 1 이 기본, 벽에 붙을수록 어두워진다.
+
+    ★쿼터뷰에서 바닥과 벽이 같은 밝기로 만나면 벽이 바닥 위에 **붕 떠 보인다**
+      (컨셉은 벽 밑에 항상 짙은 띠가 있다). 실광원 AO 없이 정점색으로 굽는다."""
+    t = max(0.0, 1.0 - wall_dist(gx, gz) / CONTACT_R)
+    t = t * t * (3.0 - 2.0 * t)
+    return 1.0 - CONTACT_AO * t
 
 
 def _fv(buf, i, j):
@@ -1110,6 +1235,9 @@ def _fv(buf, i, j):
     idx = len(buf.v)
     buf.v.append(bpos(gx, gz, FLOOR_Y))
     col = lum(gx, gz, FLOOR_Y, moss_at(gx, gz), (0.0, 1.0, 0.0))
+    # ★13차C 탈타일화. 격자 주기(4.5m)와 약분 안 되는 3~9m 얼룩 + 벽 밑 접지 어둠.
+    #   AMB_MIN 아래로는 안 내린다(구석이 검은 구멍이 되면 캐릭터가 안 뜬다).
+    col = np.clip(col * (macro_at(gx, gz) * contact_ao(gx, gz)), AMB_MIN * 0.80, 1.0)
     buf.c.append((float(col[0]), float(col[1]), float(col[2])))
     _vidx[key] = idx
     return idx
@@ -1426,6 +1554,9 @@ def add_banner(buf, gx, gz, face, top, w=0.72, drop=1.75):
 FLAME_W, FLAME_H = 0.40, 0.62
 POOL_Y = FLOOR_Y + 0.014          # 바닥 데칼 띄우는 높이(z-fighting 방지)
 POOL_Y2 = FLOOR_Y + 0.020         # 두 겹째(달빛). 같은 높이면 서로 깜빡인다
+# ★13차C. 마모 데칼은 **빛보다 아래**다 - 돌의 일부이지 빛이 아니므로 웜 풀이
+#   그 위에 얹혀야 한다. 메달리온(0.006)보다는 위, 웜 풀(0.014)보다는 아래.
+WEAR_Y = FLOOR_Y + 0.009
 
 
 def add_flame(gx, gz, y, w=FLAME_W, h=FLAME_H, seed=0.0):
@@ -1444,21 +1575,72 @@ def add_pool(gx, gz, rad, cold=False, rot=0.0, squash=1.0, y=None):
     add_ground_card(buf, gx, gz, yy, rad, rad * squash, rot)
 
 
-def add_wall_glow(gx, gz, dx, dz, y, w=2.3, h=2.6):
-    """벽에 번진 횃불 자국.
+def add_wall_glow(gx, gz, dx, dz, y, w=1.70, h=2.05, back=0.0):
+    """벽에 번진 횃불 자국. **13차C 에서 되살렸다.**
 
-    ★폐기했다(호출부 없음). 정점색에 N·L 이 들어간 뒤로는 **벽이 이미 횃불 쪽으로
-      밝다** - 같은 빛을 두 번 그리는 셈이라 벽면이 실제보다 뜬다.
-      (처음엔 화면이 붉게 물드는 원인으로 지목했는데 그건 오진이었다. 진범은
-       UI 의 피격 표시였다. 그래도 이중 계산이라는 이유는 그대로 유효해서 안 되살렸다.)
-      남겨 둔 것은 다음 사람이 다시 만들지 말라는 표시다."""
+    ★한 번 폐기했던 장치다("정점색 N·L 이 이미 벽을 데우니 이중 계산"). 그 판단은
+      절반만 맞았다 — 벽은 데워지고 **있었지만**(실측 R/B 0.6m 1.66) 벽 상자가
+      seg 1.1m 로 잘려 있어서 그 열이 정점 격자에 뭉개졌다. 뜨거운 심(반경 0.45m)이
+      1m 격자에 안 잡히면 남는 것은 **넓고 밋밋한 얼룩**뿐이고, 그게 오너가 본
+      "이상한 주변광"의 벽쪽 절반이다.
+      벽을 0.6m 로 다시 자르는 길은 삼각형이 세 배가 되어 glb 예산(5MB)을 넘긴다.
+      그래서 **역할을 나눈다**: 넓은 스필은 정점색이, 뜨거운 심은 이 카드가 낸다.
+    ★가산 합성이다(web/level.js 가 AdditiveBlending 으로 갈아 준다). 알파 블렌딩으로
+      두면 벽돌을 지우는 물감이 되어 폐기했던 그 그림이 그대로 돌아온다.
+    back = 불꽃이 벽에서 떨어져 있는 거리(받침대형 0.62m). 멀수록 넓고 옅다.
+    """
     sx, sz = -dz, dx
-    ox, oz = gx - dx * 0.04, gz - dz * 0.04      # 벽면에 살짝 붙인다
-    add_card(buf_pool,
-             (ox - sx * w * 0.5, oz - sz * w * 0.5, y - h * 0.5),
-             (ox + sx * w * 0.5, oz + sz * w * 0.5, y - h * 0.5),
-             (ox + sx * w * 0.5, oz + sz * w * 0.5, y + h * 0.5),
-             (ox - sx * w * 0.5, oz - sz * w * 0.5, y + h * 0.5))
+    # ★★함정. 횃불 자리(gx, gz)는 칸 중심에서 0.88m 다 = **벽면(1.0m)보다 0.12m 안쪽**
+    #   이다(mount_torch 가 CELL*0.5 - 0.12 로 잡는다). 그대로 카드를 놓으면 벽 속에
+    #   파묻혀 화면에 한 픽셀도 안 나온다(첫 판이 정확히 그랬다 - 컷에 벽 자국이
+    #   아예 없었다). 벽면 밖으로 0.12 + 0.05 를 밀어야 보인다.
+    ox, oz = gx + dx * 0.17, gz + dz * 0.17
+    k = 1.0 + back * 0.55                        # 멀면 넓게 번진다
+    w, h = w * k, h * k
+    # ★불꽃 자리는 카드의 아래쪽 1/3 이다(dg_wglow 가 그렇게 구워져 있다).
+    #   카드 중심을 불꽃보다 위로 올려야 그림과 자리가 맞는다.
+    cy = y + h * 0.17
+    add_card(buf_wglow,
+             (ox - sx * w * 0.5, oz - sz * w * 0.5, cy - h * 0.5),
+             (ox + sx * w * 0.5, oz + sz * w * 0.5, cy - h * 0.5),
+             (ox + sx * w * 0.5, oz + sz * w * 0.5, cy + h * 0.5),
+             (ox - sx * w * 0.5, oz - sz * w * 0.5, cy + h * 0.5))
+
+
+def add_halo(gx, gz, y, r=0.62):
+    """불꽃 뒤에 세우는 부드러운 후광 한 장(13차C 신설).
+
+    ★불꽃 스프라이트는 알파 가장자리가 또렷해서 어둠 위에 **오려 붙인 그림**으로
+      떠 있었다. 실제 불은 언제나 제 둘레의 공기를 밝힌다 - 그 한 겹이 있어야
+      불꽃이 배경에 앉는다.
+    ★작고(반경 0.62m) 옅어야 한다. 세기를 올리면 블룸 임계(1.02)를 넘어서 불꽃과
+      후광이 같이 번져 흰 공이 된다. 번지는 것은 **불꽃만**이 계약이다.
+    ★불꽃과 같은 십자 두 장이 아니라 한 장이다. 두 장이면 겹치는 자리가 두 배로
+      밝아져 심에 십자 자국이 생긴다."""
+    for a in (math.pi * 0.25,):   # 한 장. 십자로 두 장이면 심에 십자 자국이 생긴다
+        sx, sz = math.cos(a) * r, math.sin(a) * r
+        add_card(buf_halo, (gx - sx, gz - sz, y - r * 0.62),
+                 (gx + sx, gz + sz, y - r * 0.62),
+                 (gx + sx, gz + sz, y + r * 1.38),
+                 (gx - sx, gz - sz, y + r * 1.38))
+
+
+def add_wear(gx, gz, rad, cell, rot=0.0, squash=1.0):
+    """바닥 마모·이끼 데칼 한 장(13차C 신설). cell 0..3 = dg_wear 아틀라스 칸.
+
+    ★격자 리듬을 끊는 **비반복** 얼룩이다. 되풀이 주기(6.2m)와 아무 관계 없는
+      자리에 놓여야 눈이 주기를 못 센다."""
+    cx, cy = (cell % 2) * 0.5, (cell // 2) * 0.5
+    # ★블렌더 UV 는 아래가 v=0 이고 익스포터가 뒤집는다. 아틀라스 행을 여기서
+    #   맞춰 두지 않으면 위아래 칸이 서로 바뀐다.
+    cy = 0.5 - cy
+    uv = [(cx, cy + 0.5), (cx, cy), (cx + 0.5, cy), (cx + 0.5, cy + 0.5)]
+    cs, sn = math.cos(rot), math.sin(rot)
+
+    def P(dx, dz):
+        return (gx + dx * cs - dz * sn, gz + dx * sn + dz * cs, WEAR_Y)
+    add_card(buf_wear, P(-rad, -rad * squash), P(-rad, rad * squash),
+             P(rad, rad * squash), P(rad, -rad * squash), uv)
 
 
 # ── 중앙 회랑 기둥 여덟 ──
@@ -1489,7 +1671,8 @@ for (_bx, _bz) in FREE_BRAZIERS:
                vseg=3, cap=False)
     add_prism(buf_iron, _bx, _bz, 1.04, 1.28, 0.19, 0.36, n=10)
     add_flame(_bx, _bz, 1.28, w=0.46, h=0.72, seed=RND.uniform(0, 1.0))
-    add_pool(_bx, _bz, 2.45)
+    add_halo(_bx, _bz, 1.34, r=0.70)
+    add_pool(_bx, _bz, 2.65)
     push_col_circle(_bx, _bz, 0.38, 1.3, "brazier")
 
 # ── 제단 ──
@@ -1514,6 +1697,7 @@ for _dx in (-2.4, 2.4):
                cap=False)
     add_prism(buf_iron, _bx, _bz, 0.86, 1.10, 0.22, 0.44, n=10)
     add_flame(_bx, _bz, 1.10, w=0.62, h=0.94, seed=RND.uniform(0, 1.0))
+    add_halo(_bx, _bz, 1.18, r=0.86)
     push_col_circle(_bx, _bz, 0.46, 1.6, "brazier")
 
 # ── 계단 (탈출구) ──
@@ -1555,6 +1739,7 @@ for _i in range(5):
     add_box(buf_iron, CAMP_X + math.cos(_a) * 0.34, CAMP_Z + math.sin(_a) * 0.34,
             FLOOR_Y + 0.18, FLOOR_Y + 0.62, 0.09, 0.30, rot=_a)
 add_flame(CAMP_X, CAMP_Z, FLOOR_Y + 0.26, w=0.86, h=1.05, seed=0.7)
+add_halo(CAMP_X, CAMP_Z, FLOOR_Y + 0.40, r=1.05)
 push_col_circle(CAMP_X, CAMP_Z, 1.05, 1.1, "campfire")
 
 # ── 동쪽 감옥 철창 ──
@@ -1727,7 +1912,11 @@ for _ti, (gx, gz, gy, dx, dz, ped) in enumerate(TORCH_PROPS):
         add_prism(buf_iron, px, pz, gy - 0.30, gy - 0.06, 0.17, 0.32, n=10)
         add_flame(px, pz, gy - 0.06, seed=_s)
         push_col_circle(px, pz, 0.34, 1.2, "brazier")
-        add_pool(px, pz, 2.30)
+        # ★13차C. 웜 풀을 **불꽃 바로 밑**으로 옮겼다. 옛 판은 받침대 밑이라 웅덩이의
+        #   심과 불꽃이 어긋나 있었고, 그래서 "빛이 어디서 오는지"가 안 읽혔다.
+        add_pool(px, pz, 2.55)
+        add_halo(px, pz, gy + 0.06)
+        add_wall_glow(gx, gz, dx, dz, gy - 0.06, back=PED_OUT)
     else:
         # 벽걸이형: 쇠 팔 + 관솔
         add_box(buf_iron, gx + dx * 0.10, gz + dz * 0.10, gy - 0.62, gy - 0.10,
@@ -1735,12 +1924,53 @@ for _ti, (gx, gz, gy, dx, dz, ped) in enumerate(TORCH_PROPS):
         add_prism(buf_iron, gx + dx * 0.22, gz + dz * 0.22, gy - 0.20, gy + 0.02,
                   0.10, 0.20, n=6)
         add_flame(gx + dx * 0.24, gz + dz * 0.24, gy + 0.00, seed=_s)
-        add_pool(gx + dx * 1.0, gz + dz * 1.0, 2.15)
+        # ★웜 풀도 불꽃 바로 밑(0.24m)으로 당겼다. 옛 판은 1.0m 나 방 안쪽으로
+        #   밀려 있어서 벽 횃불과 바닥 웅덩이가 따로 노는 두 물건이었다.
+        add_pool(gx + dx * 0.34, gz + dz * 0.34, 2.35)
+        add_halo(gx + dx * 0.24, gz + dz * 0.24, gy + 0.06)
+        add_wall_glow(gx, gz, dx, dz, gy, back=0.0)
 
 # ── 제단 화로 · 모닥불의 웜 풀 ──
 add_pool(ALTAR_X - 2.4, ALTAR_Z + 0.2, 3.10)
 add_pool(ALTAR_X + 2.4, ALTAR_Z + 0.2, 3.10)
 add_pool(CAMP_X, CAMP_Z, 2.90)
+
+# ═════════════════════════════════════════════════════════════
+# 11-9b) 바닥 마모·이끼 데칼 (13차C 탈타일화 ②)
+# ═════════════════════════════════════════════════════════════
+# ★"타일스럽다"는 되풀이의 문제다. 텍스처를 아무리 잘 구워도 6.2m 마다 같은 그림이
+#   오면 눈이 그 주기를 센다. 주기와 **아무 상관 없는 자리**에 얼룩을 흩어 놓으면
+#   그 셈이 끊긴다(초원 바닥에서 메달리온이 한 노릇이 이것이다).
+# ★어디에 놓는가가 종류를 정한다 — 사람이 다니는 자리는 반들반들 마모되고,
+#   구석·벽 밑은 습기가 차 이끼가 낀다. 아무 데나 흩으면 그냥 때가 탄 바닥이다.
+#     칸 0 통행 마모(밝고 누렇다)   1 습윤(어둡고 푸르다)
+#     칸 2 이끼 침식(어둡고 초록)   3 마모 변주(작고 옅다)
+WEAR_N = 74
+_wear_put = []
+_wear_try = 0
+while len(_wear_put) < WEAR_N and _wear_try < 6000:
+    _wear_try += 1
+    _wx = RND.uniform(-HALF + 2.0, HALF - 2.0)
+    _wz = RND.uniform(-HALF + 2.0, HALF - 2.0)
+    _wc, _wr = cell_of(_wx, _wz)
+    if blocked(_wc, _wr) or not walk[_wr][_wc]:
+        continue
+    # 잔해·기둥 밑에 깔면 안 보이고 낭비다
+    if any((_wx - rx) ** 2 + (_wz - rz) ** 2 < (rr + 0.4) ** 2 for (rx, rz, rr) in RUBBLE):
+        continue
+    _wd = wall_dist(_wx, _wz)
+    if any((_wx - px) ** 2 + (_wz - pz) ** 2 < 4.0 for (px, pz) in _wear_put):
+        continue
+    _wear_put.append((_wx, _wz))
+    # 벽에서 1.2m 안쪽 = 구석 -> 이끼·습윤. 방 한복판 = 통행 마모
+    if _wd < 1.20:
+        _cell = 2 if RND.random() < 0.62 else 1
+        _rad = RND.uniform(1.05, 1.85)
+    else:
+        _cell = 0 if RND.random() < 0.58 else 3
+        _rad = RND.uniform(1.35, 2.45)
+    add_wear(_wx, _wz, _rad, _cell, rot=RND.uniform(0, math.pi),
+             squash=RND.uniform(0.62, 1.0))
 
 # ── 달빛 샤프트 (컨셉의 서명) ──
 # 천장 틈에서 꽂히는 푸른 빛 한 줄. 반투명 가산 콘 + 바닥 타원 + 먼지 몇 알.
@@ -2018,7 +2248,8 @@ def shade_mean_of(buf):
 
 ALL_BUFS = [buf_floor, buf_floorb, buf_dirt, buf_wall, buf_cut, buf_altar,
             buf_stair, buf_iron, buf_banner, buf_rubble,
-            buf_medal, buf_pool, buf_poolc, buf_shaft, buf_flame, buf_dust]
+            buf_medal, buf_pool, buf_poolc, buf_shaft, buf_flame, buf_dust,
+            buf_wglow, buf_halo, buf_wear]
 for _b in ALL_BUFS:
     if _b.glow:
         _b.c = []          # 이미시브는 정점색을 안 탄다. 버퍼에서 지운다
@@ -2026,10 +2257,14 @@ for _b in ALL_BUFS:
     else:
         _b.shade = shade_mean_of(_b)
 
+# ★13차C. 바닥만 hue_keep 을 0.55 -> 0.40 으로 내린다. 타일 채도를 44% 뺐더니
+#   초록이 상쇄하던 분홍 돌기가 드러나 바닥이 **라벤더**로 떴다(증거 SHEET_floor_ab
+#   접사). hue_keep 을 내리면 채널별 보정이 세져서 평균이 목표 회색(#494745)에 더
+#   붙는다 = 돌은 무채색이 되고 색은 횃불·달빛이 칠한다(이 판의 문법 그대로다).
 buf_floor.mat = mat_tex("MAT_DG_FLOOR", PAL["floor"], IMG_FLOOR, FLOOR_LIN,
-                        shade=buf_floor.shade)
+                        shade=buf_floor.shade, hue_keep=0.40)
 buf_floorb.mat = mat_tex("MAT_DG_FLOORB", PAL["floor"], IMG_FLOOR_B, FLOOR_B_LIN,
-                         shade=buf_floorb.shade)
+                         shade=buf_floorb.shade, hue_keep=0.40)
 buf_dirt.mat = mat_tex("MAT_DG_DIRT", PAL["dirt"], IMG_FLOOR_B, FLOOR_B_LIN,
                        shade=buf_dirt.shade)
 buf_wall.mat = mat_tex("MAT_DG_WALL", PAL["wall"], IMG_WALL, WALL_LIN,
@@ -2052,8 +2287,11 @@ buf_medal.mat = mat_decal("MAT_DG_MEDAL", PAL["cut"], IMG_MEDAL, MEDAL_LIN,
 # ── 빛 자체 ──
 # ★세기는 ACES 를 견디는 선에서 고른다. 2 를 넘기면 주황이 흰색으로 말려 올라가
 #   "웜 풀"이 아니라 "흰 얼룩"이 된다(LOG.md 의 그 함정). 불꽃 심지만 그 위로 보낸다.
-buf_pool.mat = mat_glow("MAT_DG_POOL", IMG_POOL, 0.26)
-buf_poolc.mat = mat_glow("MAT_DG_POOLC", IMG_POOLC, 0.78)
+# ★13차C. 0.26 -> 0.52. 가산으로 바뀌면서 알파가 '가리는 양'이 아니라 '더하는 양'이
+#   됐다 = 옛 알파 블렌딩에서 바닥을 지우며 얻던 밝기를 이제 세기로 내야 한다.
+#   0.52 x 알파 0.66 = 0.34 선형 < 블룸 임계 1.02 (안 번진다)
+buf_pool.mat = mat_glow("MAT_DG_POOL", IMG_POOL, 0.52)
+buf_poolc.mat = mat_glow("MAT_DG_POOLC", IMG_POOLC, 0.62)
 buf_shaft.mat = mat_glow("MAT_DG_SHAFT", IMG_SHAFT, 0.52)
 buf_dust.mat = mat_glow("MAT_DG_DUST", IMG_POOLC, 1.15)
 # ★불꽃만 블룸 임계를 넘긴다. three 는 **렌더타겟에 그릴 때 톤매핑을 안 건다**
@@ -2066,6 +2304,18 @@ buf_dust.mat = mat_glow("MAT_DG_DUST", IMG_POOLC, 1.15)
 #   `rgba(150,16,16,0.44)` 그라디언트를 화면 가장자리에 깐다. 캠프 한복판에 세워 놓고
 #   찍었으니 매 컷이 피격 중이었다. 판정 컷은 **전투 밖에서** 찍을 것.
 buf_flame.mat = mat_glow("MAT_DG_FLAME", IMG_FLAME, 2.40)
+# ── 13차C ──
+# ★셋 다 web/level.js 가 **가산 합성**으로 갈아 준다. 알파 블렌딩으로 두면 빛이
+#   바닥돌·벽돌을 지우는 물감이 된다(옛 웜 풀이 스티커로 읽힌 진짜 원인이 그것이다).
+# ★세기는 블룸 임계(1.02) 아래로 묶는다. 번지는 것은 불꽃(2.40)뿐이 계약이다.
+#   후광 0.95 x 알파 0.66 = 0.63 · 벽 자국 0.70 x 0.37 = 0.26 — 둘 다 안 번진다.
+buf_halo.mat = mat_glow("MAT_DG_HALO", IMG_POOL, 0.82)
+# ★1.35 는 벽에 손전등을 켠 그림이 됐다(증거 shots/afterB_hall). 빛은 벽을
+#   "데우는" 것이지 "비추는" 것이 아니다 - 돌 무늬가 그 위로 계속 읽혀야 한다.
+buf_wglow.mat = mat_glow("MAT_DG_WGLOW", IMG_WGLOW, 0.78)
+# 마모·이끼는 **돌**이다. 조명·정점색을 그대로 타야 웜 풀 밑에서 같이 데워진다.
+buf_wear.mat = mat_decal("MAT_DG_WEAR", PAL["floor"], IMG_WEAR, WEAR_LIN,
+                         shade=buf_wear.shade)
 
 
 # ═════════════════════════════════════════════════════════════
@@ -2074,15 +2324,20 @@ buf_flame.mat = mat_glow("MAT_DG_FLAME", IMG_FLAME, 2.40)
 sc = bpy.context.scene
 
 
-def tri_uv(scale):
+def tri_uv(scale, rot=0.0):
     """면 법선의 우세 축으로 고르는 삼중평면 UV. 벽면은 (둘레, 높이) 로 찍힌다.
 
-    ★한 축으로만 투영하면 벽 마루(윗면)에서 무늬가 길게 늘어난다."""
+    ★한 축으로만 투영하면 벽 마루(윗면)에서 무늬가 길게 늘어난다.
+    ★13차C. rot 은 **윗면(바닥) 투영에만** 건다. 옆면까지 돌리면 벽돌 단이
+      비스듬히 기울어서 벽이 무너진 것처럼 보인다."""
+    cs, sn = math.cos(rot), math.sin(rot)
+
     def f(co, poly):
         n = poly.normal
         ax, ay, az = abs(n[0]), abs(n[1]), abs(n[2]) * 1.25
         if az >= ax and az >= ay:
-            return (co[0] / scale, co[1] / scale)
+            u, v = co[0] / scale, co[1] / scale
+            return (u * cs - v * sn, u * sn + v * cs)
         if ax >= ay:
             return (co[1] / scale, co[2] / scale)
         return (co[0] / scale, co[2] / scale)
@@ -2107,7 +2362,7 @@ def make_obj(buf):
                     u, v = buf.uv[me.loops[li].vertex_index]
                     arr += [u, v]
         else:
-            uvfn = tri_uv(buf.uv_scale)
+            uvfn = tri_uv(buf.uv_scale, buf.uv_rot)
             for poly in me.polygons:
                 for li in poly.loop_indices:
                     u, v = uvfn(me.vertices[me.loops[li].vertex_index].co, poly)

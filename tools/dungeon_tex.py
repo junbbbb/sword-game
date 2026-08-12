@@ -114,6 +114,48 @@ def calm_fine(rgb, keep=0.72):
     return np.clip(lo + (rgb - lo) * keep, 0.0, 1.0)
 
 
+# ═════════════════════════════════════════════════════════════
+# 탈타일화 (13차C. 오너 "던전 타일도 너무 타일스럽고")
+# ═════════════════════════════════════════════════════════════
+# ★진단부터. "타일스럽다"의 기계적 정체는 밝기가 아니라 **색**이었다.
+#     dg_floor 줄눈 L 0.585 vs 판석 L 0.610  = 밝기 차 -0.024 (거의 없다)
+#     dg_floor 줄눈 초록초과 0.117 vs 전체 0.028 = **채도 차가 네 배**
+#   즉 격자를 그리는 것은 그림자가 아니라 **산성 초록 그물**이다. 화면에서 눈은
+#   그 그물을 먼저 잡고, 그게 4.5m 마다 되풀이되니 바둑판으로 읽힌다.
+#   그래서 줄눈은 **색으로 지우고 밝기로 아주 조금만 남긴다** — 진짜 줄눈은
+#   패인 자리라 어두운 게 맞고, 초록은 벽 밑동에만 있어야 컨셉과 같다.
+def soften_grout(rgb, cut=0.030, keep=0.30, dark=0.105):
+    """줄눈의 초록을 걷어내고 아주 옅은 그늘만 남긴다.
+
+    cut  : 이 값 아래의 초록초과는 판석 자체의 색기라 안 건드린다
+    keep : cut 위쪽 초록을 얼마나 남기는가(0.30 = 70% 걷어냄)
+    dark : 걷어낸 자리를 얼마나 어둡게 눌러 '패인 줄'로 만드는가
+           ★0.05 는 너무 옅어서 줄눈이 **떠 보였다**(색만 빠지고 깊이가 안 생겼다).
+             0.105 면 판석이 위로 솟고 줄눈이 패인다 = 오너가 말한 '3D'가 여기서 난다.
+    """
+    R, G, B = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+    ge = G - np.maximum(R, B)                       # 초록 초과(줄눈 이끼의 지문)
+    over = np.maximum(0.0, ge - cut)
+    out = rgb.copy()
+    out[:, :, 1] = G - over * (1.0 - keep)          # 초록만 끌어내린다
+    # 걷어낸 만큼만 밝기를 눌러 **얇은 그늘**로 바꾼다(전체 대비는 오히려 내려간다)
+    sh = 1.0 - np.clip(over / max(1e-6, float(over.max())), 0, 1) * dark
+    return np.clip(out * sh[:, :, None], 0.0, 1.0)
+
+
+def pull_chroma(rgb, amount):
+    """알베도의 채도를 끌어내린다 — **색은 빛이 칠한다**는 문법.
+
+    ★컨셉(concept_hall.png)의 바닥은 그 자체로는 회갈색이고, 화면의 파랑·주황은
+      전부 조명이 얹은 것이다. 우리 타일은 알베도가 이미 청록으로 물들어 있어서
+      횃불 주황이 얹혀도 잘 안 데워졌다(채도 높은 파랑이 주황을 밀어낸다).
+      휘도는 그대로 두고 색기만 뺀다.
+    """
+    g = (0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1]
+         + 0.0722 * rgb[:, :, 2])[:, :, None]
+    return np.clip(g + (rgb - g) * (1.0 - amount), 0.0, 1.0)
+
+
 def normalize_mean(rgb, target=TARGET_MEAN):
     """한 **스칼라**로 밝기만 올린다(채널별로 하면 원본 색기가 지워진다).
 
@@ -153,6 +195,19 @@ def save_rgb(name, rgb):
     return [float(x) for x in lin]
 
 
+def _grout_stat(rgb):
+    """줄눈이 얼마나 튀는가. 탈타일화의 before/after 를 재는 자다."""
+    R, G, B = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+    ge = G - np.maximum(R, B)
+    L = 0.2126 * R + 0.7152 * G + 0.0722 * B
+    m = ge > np.percentile(ge, 80)
+    return {"ge": round(float(ge[m].mean()), 4),
+            "geStd": round(float(ge.std()), 4),
+            "chroma": round(float((rgb.max(axis=2) - rgb.min(axis=2)).mean()), 4),
+            "lumDelta": round(float(L[m].mean() - L[~m].mean()), 4),
+            "lumStd": round(float(L.std()), 4)}
+
+
 def save_rgba(name, rgb, alpha):
     p = os.path.join(OUT_DIR, name + ".png")
     a = np.clip(alpha, 0, 1)
@@ -183,40 +238,143 @@ def _vnoise(res, cells, seed):
             + c * (1 - ty) * tx + d * ty * tx)
 
 
-def bake_pool(res, warm, seed, squash=1.0, wob=0.13, core=0.34, amax=0.55):
+def _smooth(t):
+    t = np.clip(t, 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def bake_pool(res, stops, seed, squash=1.0, wob=0.20, core=0.22, amax=0.62,
+              tail=0.62, rough=0.42):
     """바닥에 까는 **빛 웅덩이** 데칼.
 
-    ★이게 이번 판의 핵심 장치다. 정점색만으로는 웜 풀의 밝기 폭을 못 만든다
-      (COLOR_0 이 1 에서 잘리므로 밝은 쪽이 어두운 쪽의 몇 배를 못 넘는다).
-      이미시브 데칼은 조명·정점색 계약 밖이라 밝기를 자유롭게 준다.
-    ★가장자리를 잡음으로 흔든다. 완전한 원이면 "조명"이 아니라 "스티커"로 읽힌다.
+    ★13차C 전면 재작. 오너 "불꽃 있으면 주변 밝아지는 효과는 왜 이리 이상하냐."
+      옛 판이 스티커로 읽힌 기계적 원인은 실측으로 셋이었다.
+
+        core90 0.375   알파가 최대의 90% 를 넘는 자리가 반경의 **37.5%**
+                       = 가운데가 통째로 평평한 **원반**이다. 빛은 중심에서
+                         바로 떨어지지 한동안 평평할 수가 없다
+        edgeMaxSlope 1.157  그 평평한 판이 한 자리에서 뚝 떨어진다 = **테두리**
+        NormalBlending + 알파 0.52  칠하는 순간 바닥돌의 52%가 **지워진다**
+                       (빛이 아니라 물감이다. 이 한 줄이 제일 컸다 -
+                        고치는 쪽은 web/level.js 의 가산 합성이다)
+
+      그래서 프로파일을 **점광원의 2차 감쇠**로 다시 깐다. 평평한 코어가 없다.
+
+          f = 1 / (1 + (r/core)^2)      점광원 그 자체(중심에서 바로 떨어진다)
+          w = 카드 끝에서 0 이 되는 창   (안 자르면 사각 모서리에 계단이 보인다)
+
+    ★가장자리는 **두 옥타브**로 흐트러뜨린다. 한 옥타브(옛 판)는 큰 물결이라
+      매끈한 타원이 그대로 남았다. 잔 옥타브를 겹쳐야 윤곽선이 사라진다.
+    ★꼬리만 갉는다. 중심까지 갉으면 심이 지저분해져서 '불'이 아니라 '얼룩'이 된다.
+
+    stops : (심 · 중간 · 끝) 세 색. **반경**으로 섞는다(알파로 섞으면 amax 를
+            건드리는 순간 전부 끝색이 된다 - 옛 판이 밟은 함정이다).
     """
     yy, xx = np.mgrid[0:res, 0:res].astype(np.float32) / (res - 1) * 2 - 1
-    ang = np.arctan2(yy, xx)
-    n = _vnoise(res, 6, seed)
+    n1 = _vnoise(res, 5, seed)
+    n2 = _vnoise(res, 13, seed + 37)
     r = np.sqrt(xx * xx + (yy * squash) ** 2)
-    r = r * (1.0 + wob * (n - 0.5) * 2.0)
-    # 중심 core 까지는 꽉 차고, 밖으로 부드럽게 사라진다
-    t = np.clip((1.0 - r) / max(1e-3, 1.0 - core), 0.0, 1.0)
-    a = t * t * (3 - 2 * t)
-    # ★★알파 상한이 이 판의 제일 중요한 손잡이다. 1.0 이면 데칼이 바닥돌을 **덮어서**
-    #   빛이 아니라 물감 웅덩이가 된다(첫 굽기에서 실제로 그랬다). 컨셉 실측으로
-    #   웜 풀 바닥은 #383f38 (V 25%) 밖에 안 된다 - 즉 빛은 돌 위에 **얇게** 얹힌다.
-    a0 = a ** 1.35                       # 0..1 (색을 섞는 기준)
-    a = a0 * amax                        # 실제 알파
-    # 색: 중심이 더 희고(심지 쪽) 가장자리로 갈수록 원색이 진해진다
-    # ★★함정: 색 섞는 기준을 **알파로** 쓰면 안 된다. amax 를 0.52 로 내린 순간
-    #   임계 0.55 를 아무 화소도 못 넘겨서 웅덩이 전체가 가장자리색(진한 주황)이 됐다.
-    #   화면에서 "빛 웅덩이"가 아니라 "빨간 안개"로 보인 원인이 정확히 이것이다.
-    #   기준은 amax 를 곱하기 **전** 값이어야 한다.
-    hot = np.array(warm[1], np.float32)
-    edge = np.array(warm[0], np.float32)
-    mix = np.clip((a0 - 0.45) / 0.55, 0.0, 1.0)[:, :, None]
-    rgb = edge[None, None, :] * (1 - mix) + hot[None, None, :] * mix
+    r = r * (1.0 + wob * (n1 - 0.5) * 2.0 + wob * 0.55 * (n2 - 0.5) * 2.0)
+    r = np.maximum(r, 0.0)
+
+    f = 1.0 / (1.0 + (r / max(1e-3, core)) ** 2) ** 1.10      # 2차 감쇠
+    w = _smooth((1.0 - r) / max(1e-3, tail))                  # 카드 끝을 0 으로
+    a0 = np.clip(f * w, 0.0, 1.0)
+    # 꼬리(밝기 하위)만 잡음으로 갉아 **소멸선을 없앤다**
+    tm = _smooth((0.42 - a0) / 0.42) ** 1.4
+    a0 = a0 * (1.0 - tm * rough * (1.0 - _vnoise(res, 9, seed + 71)))
+    a = np.clip(a0, 0, 1) * amax
+
+    hot = np.array(stops[0], np.float32)      # 심 - 황백
+    mid = np.array(stops[1], np.float32)      # 중간 - 주황
+    tip = np.array(stops[2], np.float32)      # 끝 - 붉게 죽는다
+    # ★색 램프는 **알파가 아직 보이는 구간 안에서** 다 돌아야 한다. 처음엔 램프를
+    #   core*2.4 에 걸었는데 거기는 이미 알파가 0.12 라, 눈에 보이는 웅덩이가 통째로
+    #   황백 한 색이 됐다(측정값 lumAtHalf 0.745 = 반밝기 자리가 아직 흰색).
+    #   반밝기 자리(r = core)에서 이미 주황이어야 "황백 -> 주황 -> 소멸"이 읽힌다.
+    t1 = _smooth(r / max(1e-3, core * 1.15))[:, :, None]
+    t2 = _smooth((r - core * 1.15) / 0.42)[:, :, None]
+    rgb = hot[None, None, :] * (1 - t1) + mid[None, None, :] * t1
+    rgb = rgb * (1 - t2) + tip[None, None, :] * t2
     # 아주 옅은 결(빛이 돌바닥을 훑는 얼룩)
-    rgb = np.clip(rgb * (0.90 + 0.20 * _vnoise(res, 9, seed + 71)[:, :, None]), 0, 1)
-    _ = ang
+    rgb = np.clip(rgb * (0.92 + 0.16 * _vnoise(res, 9, seed + 71)[:, :, None]), 0, 1)
     return rgb, a
+
+
+def bake_wall_glow(w, h, seed=8801):
+    """횃불이 **벽을 타고 오르는** 자국. 13차C 신설.
+
+    ★왜 정점색으로 못 하는가: 벽 상자는 seg 1.1m 로 잘려 있어서 정점 간격이 1m 다.
+      횃불의 뜨거운 심(반경 0.45m)이 그 격자에 안 잡힌다. 벽을 0.6m 로 다시 자르면
+      삼각형이 세 배가 되어 glb 예산(5MB)을 넘긴다. 그래서 **해상도를 텍스처가**
+      들고, 정점색은 넓은 스필만 맡는다(둘이 역할을 나눈다).
+    ★위로 길다. 불은 위로 올라가고 벽에 붙은 그을음·열도 위로 번진다. 좌우 대칭이지만
+      세로로는 비대칭(아래 짧게 · 위로 길게)이어야 '빛'으로 읽힌다.
+    """
+    yy = np.linspace(-1.0, 1.0, h, dtype=np.float32)[:, None]     # -1 아래 / +1 위
+    xx = np.linspace(-1.0, 1.0, w, dtype=np.float32)[None, :]
+    n = _vnoise(max(w, h), 7, seed)[:h, :w]
+    # 불꽃 자리는 카드의 아래쪽 1/3. 위로 갈수록 넓게 퍼지며 죽는다(연기 기둥 문법)
+    # ★★첫 판은 위로 너무 길었다(1/0.92). 화면에서 벽에 **손전등을 비춘 띠**로
+    #   읽혔다 - 컨셉의 벽 자국은 관솔을 감싸는 둥근 얼룩이고 위로 아주 조금만
+    #   끌린다. 세로 배율을 0.92 -> 0.56 으로 줄이고 감쇠를 세워 심을 붙였다.
+    y0 = -0.30
+    up = np.clip((yy - y0) / 1.30, -1, 1)
+    spread = 0.46 + 0.34 * np.clip(up, 0, 1) ** 0.80             # 위로 조금 벌어진다
+    d = np.sqrt((xx / spread) ** 2 + (np.maximum(0.0, y0 - yy) / 0.34) ** 2
+                + (np.maximum(0.0, yy - y0) / 0.56) ** 2)
+    d = d * (1.0 + 0.24 * (n - 0.5) * 2.0)
+    a = 1.0 / (1.0 + (d / 0.26) ** 2) ** 1.30
+    a = a * _smooth((1.0 - np.abs(xx)) / 0.34) * _smooth((1.0 - np.abs(yy)) / 0.30)
+    hot = np.array((1.00, 0.93, 0.76), np.float32)
+    mid = np.array((1.00, 0.60, 0.24), np.float32)
+    tip = np.array((0.86, 0.32, 0.10), np.float32)
+    t1 = _smooth(d / 0.34)[:, :, None]
+    t2 = _smooth((d - 0.34) / 0.55)[:, :, None]
+    rgb = hot[None, None, :] * (1 - t1) + mid[None, None, :] * t1
+    rgb = rgb * (1 - t2) + tip[None, None, :] * t2
+    return np.clip(rgb, 0, 1), np.clip(a, 0, 1)
+
+
+def bake_wear(res=256, seed=5501):
+    """바닥 **마모·이끼 데칼** 넉 장(2x2 아틀라스). 13차C 신설.
+
+    ★격자 리듬을 끊는 것은 명암 변주만으로는 모자란다. 되풀이 주기와 아무 상관 없는
+      자리에 **비반복 얼룩**이 놓여야 눈이 주기를 못 센다(초원에서 메달리온이 한 그
+      노릇이다). 넉 장인 이유: 한 장이면 그것 자체가 새 되풀이가 된다.
+
+        0 통행 마모(반들반들. 밝고 누렇다)   1 습윤(어둡고 푸르다)
+        2 이끼 침식(어둡고 초록)             3 마모 변주(작고 옅다)
+
+    색은 알베도다(조명·정점색을 그대로 탄다). 알파가 모양이다.
+    """
+    half = res // 2
+    yy, xx = np.mgrid[0:half, 0:half].astype(np.float32) / (half - 1) * 2 - 1
+    tiles = []
+    # (색, 알파상한, 덩어리 크기, 찌그러짐, 잡음 세기)
+    spec = [((0.86, 0.80, 0.66), 0.62, 0.78, 1.25, 0.42),
+            ((0.36, 0.40, 0.48), 0.55, 0.70, 0.85, 0.50),
+            ((0.30, 0.44, 0.24), 0.60, 0.66, 1.00, 0.58),
+            ((0.80, 0.76, 0.68), 0.42, 0.58, 0.80, 0.46)]
+    for i, (col, amax, size, sq, nz) in enumerate(spec):
+        n1 = _vnoise(half, 3, seed + i * 91)
+        n2 = _vnoise(half, 7, seed + i * 91 + 13)
+        n3 = _vnoise(half, 15, seed + i * 91 + 29)
+        r = np.sqrt(xx * xx + (yy * sq) ** 2)
+        # ★윤곽을 통째로 잡음으로 민다. 원형이 남으면 그게 또 스티커다
+        r = r * (1.0 + nz * (n1 - 0.5) * 2.0 + nz * 0.5 * (n2 - 0.5) * 2.0)
+        a = _smooth((size - r) / 0.62)
+        a = a * (0.55 + 0.45 * n3)                       # 속이 얼룩덜룩해야 '자국'이다
+        a = a * _smooth((1.0 - np.maximum(np.abs(xx), np.abs(yy))) / 0.22)
+        rgb = np.zeros((half, half, 3), np.float32)
+        for c in range(3):
+            rgb[:, :, c] = col[c] * (0.86 + 0.28 * n2)
+        tiles.append((np.clip(rgb, 0, 1), np.clip(a, 0, 1) * amax))
+    top = np.concatenate([tiles[0][0], tiles[1][0]], axis=1)
+    bot = np.concatenate([tiles[2][0], tiles[3][0]], axis=1)
+    at = np.concatenate([tiles[0][1], tiles[1][1]], axis=1)
+    ab = np.concatenate([tiles[2][1], tiles[3][1]], axis=1)
+    return np.concatenate([top, bot], axis=0), np.concatenate([at, ab], axis=0)
 
 
 def bake_shaft(w, h):
@@ -365,17 +523,35 @@ def main():
     meta = {"src": "incoming/codex_dungeon/tiles_dungeon.png", "res": RES,
             "lin": {}, "gain": {}, "seam": {}}
 
-    for key, name in (("floor", "dg_floor"), ("wall", "dg_wall"),
-                      ("floor_b", "dg_floor_b")):
+    # (원자재키, 이름, 줄눈 걷어내는 세기, 채도 빼는 세기)
+    # ★13차C. 바닥 둘은 세게 걷는다(발밑이고 되풀이가 제일 잘 보인다).
+    #   벽은 절반만 — 벽돌 단은 실루엣 정보라 다 지우면 벽이 종잇장이 된다.
+    for key, name, grout, chroma in (("floor", "dg_floor", 0.30, 0.44),
+                                     ("wall", "dg_wall", 0.55, 0.22),
+                                     ("floor_b", "dg_floor_b", 0.30, 0.44)):
         print("\n[%s]" % name)
         a = q[key]
         a = flatten_lowfreq(a, int(RES * 0.375), amount=0.80)
         a, seam = _tz.make_tileable(a, name)
         a = calm_fine(a, keep=0.72)
-        a, gain = normalize_mean(a)
+        # ★★순서 함정: 줄눈 걷기는 **밝기 정규화 뒤**에 해야 한다. cut(초록초과
+        #   문턱)이 절대값이라, 원본이 아직 어두운 채로 재면 문턱을 못 넘어서
+        #   손을 대도 절반밖에 안 걷힌다(첫 판이 48% 에서 멎었다). 정규화로
+        #   밝기를 올린 뒤에 걷고, 걷느라 밝기가 밀린 만큼 한 번 더 정규화한다.
+        a, _g0 = normalize_mean(a)
+        g0 = _grout_stat(a)
+        a = soften_grout(a, keep=grout)
+        a = pull_chroma(a, chroma)
+        g1 = _grout_stat(a)
+        a, _g1 = normalize_mean(a)
+        gain = _g0 * _g1
         meta["lin"][name] = save_rgb(name, a)
         meta["gain"][name] = round(float(gain), 4)
         meta["seam"][name] = seam["after"]
+        meta.setdefault("grout", {})[name] = {"before": g0, "after": g1}
+        print("   [줄눈] 초록초과 %.4f -> %.4f (%.0f%% 감) · 채도 %.3f -> %.3f"
+              % (g0["ge"], g1["ge"], (1 - g1["ge"] / max(1e-6, g0["ge"])) * 100,
+                 g0["chroma"], g1["chroma"]))
         print("   [밝기] 선형 x%.2f (곱수 계약용 여유)" % gain)
 
     # ── 메달리온: 데칼이라 이어붙일 필요가 없다. 대신 알파 비네트로 바닥에 녹인다 ──
@@ -398,19 +574,30 @@ def main():
 
     # ── 절차 텍스처 ──
     print("\n[절차]")
-    # 웜 풀: 알파 상한 0.52. 돌 무늬가 절반 넘게 살아야 "빛 든 돌"로 읽힌다
-    rgb, a = bake_pool(256, ((0.98, 0.58, 0.22), (1.00, 0.92, 0.70)), 311,
-                       squash=1.0, wob=0.16, core=0.24, amax=0.52)
+    # ★13차C. 웜 풀은 **가산 합성**(web/level.js)이 전제다. 알파는 이제 '돌을 얼마나
+    #   덮는가'가 아니라 '빛을 얼마나 더하는가'라서 조금 올려도 돌이 안 지워진다.
+    #   심 황백 -> 주황 -> 붉게 소멸. 세 색을 **반경**으로 섞는다.
+    rgb, a = bake_pool(256, ((1.00, 0.95, 0.80), (1.00, 0.62, 0.26), (0.90, 0.34, 0.11)),
+                       311, squash=1.0, wob=0.22, core=0.28, amax=0.72,
+                       tail=0.70, rough=0.44)
     save_rgba("dg_pool", rgb, a)
     # 달빛 웅덩이: 컨셉 실측이 #26578e (S .73 V .56) 로 **여기는 진짜 밝다**.
-    # 던전에서 제일 밝은 자리라 알파를 높게 준다.
-    rgb, a = bake_pool(256, ((0.18, 0.42, 0.92), (0.44, 0.72, 1.00)), 517,
-                       squash=0.74, wob=0.12, core=0.16, amax=0.78)
+    # 던전에서 제일 밝은 자리라 알파를 높게 준다(같은 2차 감쇠를 쓴다).
+    rgb, a = bake_pool(256, ((0.72, 0.88, 1.00), (0.30, 0.58, 1.00), (0.14, 0.32, 0.80)),
+                       517, squash=0.74, wob=0.16, core=0.44, amax=0.80,
+                       tail=0.66, rough=0.34)
     save_rgba("dg_pool_cold", rgb, a)
     rgb, a = bake_shaft(128, 512)
     save_rgba("dg_shaft", rgb, a * 0.36)
     rgb, a = bake_flame(128, 192)
     save_rgba("dg_flame", rgb, a)
+    # 벽을 타고 오르는 횃불 자국(13차C 신설). 세로로 길다
+    rgb, a = bake_wall_glow(128, 192)
+    save_rgba("dg_wglow", rgb, a)
+    # 바닥 마모·이끼 데칼 넉 장(13차C 신설). 격자 리듬을 끊는 비반복 얼룩
+    rgb, a = bake_wear(256)
+    save_rgba("dg_wear", rgb, a)
+    meta["lin"]["dg_wear"] = [float(x) for x in srgb_to_lin(rgb).reshape(-1, 3).mean(axis=0)]
     bake_flip_only()
 
     with open(META, "w") as f:

@@ -850,12 +850,29 @@ function patchWaterMaterial(mesh, mat, tex) {
 async function applyFlameLook(root, q) {
   let flame = null;
   let pool = null;
+  let halo = null;          // 13차C. 불꽃 뒤 후광
+  let wglow = null;         // 13차C. 벽을 타고 오르는 자국
+  let poolc = null;         // 달빛 웅덩이(맥동 없음. 합성만 가산으로)
   root.traverse(o => {
     if (!o.isMesh) return;
     if (o.name === 'FLOOR_FLAME') flame = o;
     else if (o.name === 'FLOOR_POOL') pool = o;
+    else if (o.name === 'FLOOR_HALO') halo = o;
+    else if (o.name === 'FLOOR_WGLOW') wglow = o;
+    else if (o.name === 'FLOOR_POOLC') poolc = o;
   });
   if (!flame) return 0;
+
+  // ★그리는 차례를 못 박는다(13차C). 바닥 위에 겹치는 판이 다섯 겹이나 되고
+  //   전부 depthWrite=false 라, 차례를 안 정하면 three 가 카메라 거리로 정렬한다 —
+  //   거의 같은 높이의 큰 판들이라 그 순서가 프레임마다 뒤집혀 깜빡인다.
+  //   돌(마모) -> 무늬(메달리온) -> 빛(웜 풀·후광·벽 자국) -> 불꽃. 물리 순서 그대로다.
+  const ORDER = { FLOOR_WEAR: 1, FLOOR_MEDAL: 2, FLOOR_POOL: 3, FLOOR_POOLC: 3,
+                  FLOOR_WGLOW: 4, FLOOR_HALO: 5, FLOOR_SHAFT: 5, FLOOR_DUST: 6,
+                  FLOOR_FLAME: 7 };
+  root.traverse(o => {
+    if (o.isMesh && ORDER[o.name] !== undefined) o.renderOrder = ORDER[o.name];
+  });
 
   // 플립북 스트립. 못 읽어도 게임은 그대로 돈다 - 칸 수를 1 로 떨어뜨리면 UV 는
   // 손대지 않은 것과 같아지고 흔들림·맥동만 남는다(정지 그림보다는 낫다).
@@ -901,26 +918,58 @@ async function applyFlameLook(root, q) {
   for (const mat of matList(flame)) if (patchFlameMaterial(flame, mat, tex, frames, uT)) n++;
   setCardAttr(flame.geometry, cards);
 
-  // 바닥 웜 풀. **불꽃과 같은 위상**이어야 한 불로 읽힌다.
-  // ★자리가 정확히 같지는 않다 - 벽 횃불은 불꽃이 벽에서 0.24m, 웅덩이가 1.0m 다
+  // 바닥 웜 풀 · 불꽃 후광 · 벽 자국. **불꽃과 같은 위상**이어야 한 불로 읽힌다.
+  // ★자리가 정확히 같지는 않다 - 벽 횃불은 불꽃이 벽에서 0.24m, 웅덩이가 0.34m 다
   //   (s40_dungeon1.py 참조). 그래서 좌표를 맞추지 않고 **가장 가까운 자루**를 찾는다.
-  if (pool) {
-    const pc = splitCards(pool.geometry);
-    if (pc) {
-      for (const c of pc) {
-        let best = 0, bd = Infinity;
-        for (const s of seats) {
-          const dx = s.x - c.x, dz = s.z - c.z;
-          const d = dx * dx + dz * dz;
-          if (d < bd) { bd = d; best = s.ph; }
-        }
-        c.ph = best;
+  for (const m of [pool, halo, wglow]) {
+    if (!m) continue;
+    const pc = splitCards(m.geometry);
+    if (!pc) continue;
+    for (const c of pc) {
+      let best = 0, bd = Infinity;
+      for (const s of seats) {
+        const dx = s.x - c.x, dz = s.z - c.z;
+        const d = dx * dx + dz * dz;
+        if (d < bd) { bd = d; best = s.ph; }
       }
-      for (const mat of matList(pool)) if (patchPoolMaterial(pool, mat, uT)) n++;
-      setCardAttr(pool.geometry, pc);
+      c.ph = best;
     }
+    for (const mat of matList(m)) if (patchPoolMaterial(m, mat, uT)) n++;
+    setCardAttr(m.geometry, pc);
   }
+  // 달빛 웅덩이는 **맥동을 안 건다**(달은 안 흔들린다). 합성만 가산으로 바꾼다.
+  if (poolc) for (const mat of matList(poolc)) if (makeAdditive(mat)) n++;
   return n;
+}
+
+// ---------------------------------------------------------------------------
+// 빛을 **더한다** (13차C. 오너 "주변 밝아지는 효과는 왜 이리 이상하냐")
+// ---------------------------------------------------------------------------
+// ★★이 게임에서 웜 풀이 스티커로 읽힌 진짜 원인은 모양이 아니라 **합성 방식**이었다.
+//   glTF 는 alphaMode 가 OPAQUE / MASK / BLEND 셋뿐이라 데칼이 BLEND 로 들어온다.
+//   BLEND 는 `결과 = 빛 x a + 바닥 x (1 - a)` 다 — 알파 0.52 짜리 웜 풀을 깔면
+//   **바닥돌의 52%가 지워진다.** 실제로 옛 화면에서 웅덩이 안쪽 판석 무늬가
+//   통째로 사라져 있었고, 그래서 빛이 아니라 물감 자국으로 보였다.
+//   빛은 더해지는 것이지 덮는 것이 아니다:  `결과 = 바닥 + 빛 x a`.
+// ★가산으로 바꾸면 알파는 '얼마나 가리는가'가 아니라 '얼마나 더하는가'가 된다.
+//   그래서 굽는 쪽(tools/dungeon_tex.py)에서 알파 상한을 올려도 돌이 안 지워진다.
+// ★depthWrite 는 이미 false 다(익스포터가 BLEND 에 그렇게 적는다). 가산에서는
+//   반드시 false 여야 한다 - 켜 두면 뒤에 그려질 웅덩이가 서로를 잘라낸다.
+// ★블룸 임계(1.02)는 s40 의 이미시브 세기가 지킨다(후광 0.63 · 벽 자국 0.26).
+//   여기서 세기를 올리면 안 된다.
+function makeAdditive(mat) {
+  if (!mat || mat.userData.dgAdd) return false;
+  mat.userData.dgAdd = true;
+  mat.blending = THREE.AdditiveBlending;
+  mat.transparent = true;
+  mat.depthWrite = false;
+  // ★가산이면 뒤에 있는 빛이 앞의 빛을 못 지운다 = 정렬이 필요 없다. 다만 바닥
+  //   데칼끼리 z-fighting 이 나면 깜빡이므로 polygonOffset 으로 확실히 띄운다.
+  mat.polygonOffset = true;
+  mat.polygonOffsetFactor = -2;
+  mat.polygonOffsetUnits = -2;
+  mat.needsUpdate = true;
+  return true;
 }
 
 function matList(mesh) {
@@ -1088,6 +1137,9 @@ function patchFlameMaterial(mesh, mat, tex, frames, uT) {
 function patchPoolMaterial(mesh, mat, uT) {
   if (!mat || mat.userData.flameLook) return false;
   mat.userData.flameLook = true;
+  // ★13차C. 맥동보다 **이게** 먼저다 - 합성이 알파 블렌딩인 한 어떤 모양을 구워도
+  //   빛이 바닥을 지운다(위 makeAdditive 주석에 이유가 다 적혀 있다).
+  makeAdditive(mat);
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uFT = uT;
     shader.uniforms.uFPulse = { value: POOL_PULSE };
@@ -1446,9 +1498,17 @@ export const debug = {
   // 돌려준다 - 연속 캡처와 대조하면 "옆 횃불과 위상이 다른가"를 눈이 아니라 수로 잰다.
   flame() {
     const out = { patched: FLAME_N_PATCHED, meshes: [], injected: 0, frames: 0,
-                  t: 0, seats: 0, cards: 0, phases: [], frameNow: [], pool: 0 };
+                  t: 0, seats: 0, cards: 0, phases: [], frameNow: [], pool: 0,
+                  halo: 0, wglow: 0, additive: 0 };
     if (!ROOT) return out;
     const seen = new Map();
+    // 가산으로 갈아탄 재질 수(13차C). 이게 0 이면 빛이 다시 바닥을 지우고 있다는 뜻이다
+    ROOT.traverse(o => {
+      if (!o.isMesh) return;
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+        if (m && m.blending === THREE.AdditiveBlending) out.additive++;
+      }
+    });
     ROOT.traverse(o => {
       if (!o.isMesh) return;
       const a = o.geometry.getAttribute('aFlame');
@@ -1463,7 +1523,11 @@ export const debug = {
         out.t = +sh.uniforms.uFT.value.toFixed(2);
         if (sh.uniforms.uFN) out.frames = sh.uniforms.uFN.value;
       }
+      // ★위상 표는 **불꽃 자루**를 세는 것이다. 웜 풀·후광·벽 자국은 그 위상을
+      //   물려받은 종속물이라 같이 세면 자루 수가 부풀어 검증이 거짓말을 한다.
       if (o.name === 'FLOOR_POOL') { out.pool = a.count; return; }
+      if (o.name === 'FLOOR_HALO') { out.halo = a.count; return; }
+      if (o.name === 'FLOOR_WGLOW') { out.wglow = a.count; return; }
       for (let i = 0; i < a.count; i++) {
         const p = +a.getX(i).toFixed(4);
         if (!seen.has(p)) seen.set(p, 0);
