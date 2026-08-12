@@ -1315,6 +1315,94 @@ buf_crack = Buf("FLOOR_CRACK", tile=True, glow=False)
 
 
 # ═════════════════════════════════════════════════════════════
+# 7b) ★★16차 — Meshy 구조물 장착 (16-소품장착)
+# ═════════════════════════════════════════════════════════════
+# 16-저폴리진단의 결론: 저폴리 티의 큰 축은 **면이 크고 그 경계에서 값이 세게
+# 튀는 것**이고, 폴리 밀도로 던전 기둥 19 tris/m² vs Meshy 소품 115 다. 그래서
+# 기둥·아치·제단·화로·잔해·갓돌·모서리돌을 `incoming/meshy_dgprops/` 의 3K 리메시판
+# 으로 갈아 끼운다.
+#
+# ★이 파일이 하는 일은 **자리를 적는 것**뿐이다. 메시는 `blender/s41_dgprops.py` 가
+#   web/props/dg_<종류>.glb 로 굽는다(level2.glb 에 안 합친다 - 예산 5.00MiB).
+#   자리를 여기서 적는 이유: 조명(LIGHTS)·레이아웃·팔레트가 전부 여기 있고,
+#   정점색을 그 조명으로 구워야 소품이 횃불 웅덩이 밖에서 혼자 밝게 뜨지 않는다.
+#
+# ★★절차 소품을 지우는 방법 — **함수는 그대로 부르고 버퍼만 되감는다.**
+#   호출을 지우면 그 줄의 `RND.uniform(...)` 이 같이 사라져서 난수 스트림이 밀리고,
+#   그러면 잔해 자리·마모 얼룩·nav 가 통째로 바뀐다 = **level2.json 이 달라진다.**
+#   (13차B 가 실제로 그렇게 nav 섬을 하나 만들었다.) 콜라이더·플랫폼·반환값도
+#   손대면 안 되므로, 지오메트리만 사후에 잘라낸다.
+DGP_ON = os.environ.get("DGP", "1") != "0"
+DGP = []                      # 배치 목록 -> blender/dgprops_build.json
+DGP_MUTED_TRIS = [0]          # 되감아 지운 삼각형 수(검증용)
+
+
+class Muted(object):
+    """블록 안에서 버퍼에 붙은 지오메트리를 **통째로 되감는다**.
+
+        with Muted(buf_cut, buf_iron):
+            add_column(...)        # RND·콜라이더·반환값은 그대로, 삼각형만 사라진다
+
+    ★DGP_ON 이 거짓이면 아무 일도 안 한다(= 옛 판 그대로 굽는다. A/B 용).
+    ★버퍼는 append 만 한다(중간에 끼워 넣는 코드가 없다). 그래서 길이만 되돌리면
+      정확히 그 블록이 만든 것만 사라진다 — 앞의 것은 인덱스가 안 밀린다."""
+
+    def __init__(self, *bufs):
+        self.bufs = bufs
+
+    def __enter__(self):
+        self.mark = [(len(b.v), len(b.f), len(b.c), len(b.uv)) for b in self.bufs]
+        return self
+
+    def __exit__(self, *a):
+        if not DGP_ON:
+            return False
+        for b, (nv, nf, nc, nu) in zip(self.bufs, self.mark):
+            DGP_MUTED_TRIS[0] += sum(len(f) - 2 for f in b.f[nf:])
+            del b.v[nv:]
+            del b.f[nf:]
+            del b.c[nc:]
+            del b.uv[nu:]
+        return False
+
+
+class _NoMute(object):
+    """`with Muted(...) if 조건 else _NOMUTE:` 로 쓰는 아무것도 안 하는 짝."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+_NOMUTE = _NoMute()
+
+
+def dgp(kind, gx, gz, y, yaw=0.0, scale=1.0, pre=(0.0, 0.0, 0.0), pitch=0.0,
+        albedo="cut", tag=""):
+    """Meshy 소품 한 자리. s41 이 이 값으로 메시를 놓고 정점색을 굽는다.
+
+    좌표는 **게임(three.js) 좌표**다. 소품은 s41 이 미리 "긴 축 기준 1단위 · 바닥 y=0 ·
+    xz 중심 0" 으로 정규화해 두므로 여기서는 (자리, 크기, 방향)만 적는다.
+      scale : 정규화 메시에 곱하는 배수(등방). 원자재가 긴 축 1.90 이라 s41 은
+              **원자재 단위 그대로** 두고 여기 값을 그대로 곱한다 - 로그의 치수표와
+              같은 자로 읽으라고(예: 기둥 높이 1.90 x 1.868 = 3.55m).
+      pre   : 회전 전에 로컬로 밀어 두는 양(스케일 뒤). 눕히는 부재에 쓴다
+      pitch : X 축 회전(라디안). 90도면 세로 부재가 눕는다
+      yaw   : Y 축 회전. three.js 관례대로 0 이 +Z 를 본다
+      albedo: 화면색을 어느 재질에 맞출 것인가(cut/altar/rubble/trim)
+    """
+    if not DGP_ON:
+        return
+    DGP.append({
+        "kind": kind, "x": round(gx, 4), "z": round(gz, 4), "y": round(y, 4),
+        "yaw": round(yaw, 5), "pitch": round(pitch, 5), "scale": round(scale, 5),
+        "pre": [round(v, 4) for v in pre], "albedo": albedo, "tag": tag,
+    })
+
+
+# ═════════════════════════════════════════════════════════════
 # 8) 콜라이더 · 낮은 단
 # ═════════════════════════════════════════════════════════════
 COLLIDERS = []
@@ -1867,6 +1955,36 @@ for _kid in CORR_BOX:
     door_frame(_kid)
 
 
+# ── ★16차 신설 — Meshy 아치 게이트(히어로 피스) ──
+# ★★어귀의 절차 아치를 **대체하지 않는다.** 원자재를 재 보고 내린 결론이다:
+#   arch_gate 는 겉폭 1.57 에 **안쪽 개구부가 0.81** 이다(다리가 두껍다). 우리 통로는
+#   폭 4.0m 라, 개구부를 4.0 에 맞추면 겉폭 7.8m·높이 9.4m 가 된다(벽이 3.6m 다).
+#   반대로 겉폭을 4.44m 에 맞추면 다리가 걸어다니는 통로를 한쪽 1.07m 씩 먹는다 =
+#   요괴가 돌을 뚫고 지나간다. 통로 폭·nav 는 계약이라 못 건드린다.
+#   그래서 **벽에 파묻은 눈먼 아치(blind arch)와 계단 앞 문**으로 쓴다. 벽 콜라이더
+#   안쪽(인셋 0.22)에만 나오므로 발자국 계약을 한 톨도 안 건드린다.
+# 높이 1.90 x 1.684 = 3.20m (뒷벽 3.60 아래). 겉폭 2.64 · 두께 0.64
+ARCHG_S = 1.684
+ARCHG_D = 0.38 * ARCHG_S            # 0.64 — 두께
+# (x, z, yaw, 파묻을 것인가, 뜻)  yaw 0 = 남(+Z)을 본다
+DG_ARCHES = [
+    (-7.0,  14.0,  0.0,          True,  "낙하방 북벽. 스폰 첫 화면의 배경"),
+    (0.0,  -24.0,  0.0,          True,  "제단 뒤 북벽. 제단 클로즈업의 초점"),
+    (-6.0,  -3.0,  math.pi / 2,  True,  "중앙 회랑 서벽"),
+    (6.0,    5.0, -math.pi / 2,  True,  "중앙 회랑 동벽"),
+    (18.0,  20.6,  0.0,          False, "탈출 계단 앞 門. 층의 목표"),
+]
+for (_ax, _az, _ay, _emb, _why) in DG_ARCHES:
+    # 파묻는 아치는 벽면에서 **0.22m 만** 나온다(벽 콜라이더 인셋과 같은 값).
+    _bx, _bz = _ax, _az
+    if _emb:
+        _push = ARCHG_D * 0.5 - 0.22
+        _bx -= math.sin(_ay) * _push
+        _bz -= math.cos(_ay) * _push
+    dgp("arch_gate", _bx, _bz, FLOOR_Y, yaw=_ay, scale=ARCHG_S,
+        albedo="trim", tag="arch")
+
+
 # ═════════════════════════════════════════════════════════════
 # 11) 방 소품
 # ═════════════════════════════════════════════════════════════
@@ -2172,9 +2290,21 @@ for _i in range(4):
         PILLARS.append((px, pz))
         _idx = _i * 2 + _k
         _bk = 0.42 if _idx in _BROKEN_PILLAR else 0.0
-        _h = add_column(buf_cut, px, pz, 3.55, r=0.46,
-                        broken=_bk, phase=math.pi / COL_SIDES)
+        # ★16차. 절차 기둥을 Meshy 기둥으로 갈아 끼운다(7b절). 콜라이더 반경 0.60 ·
+        #   높이 3.55 는 그대로다 — 자리는 안 옮기고 **그림만** 바꾼다.
+        with Muted(buf_cut):
+            _h = add_column(buf_cut, px, pz, 3.55, r=0.46,
+                            broken=_bk, phase=math.pi / COL_SIDES)
         push_col_circle(px, pz, 0.60, _h, "pillar")
+        # 성한 기둥: 높이 1.90 x 1.8684 = **3.55m** (절차판과 같은 마루 높이).
+        #   폭 0.72 x 1.8684 = 1.345m 라 밑동(주춧돌)이 콜라이더 반경 0.60 을
+        #   **0.07m 넘는다.** 플레이어가 이미 벽에 0.22m 파묻히는 맵이라 그 3분의 1이고,
+        #   기둥 몸통은 반경 0.5 안이라 서 있는 자리에서는 안 겹친다.
+        # 부러진 기둥: 1.90 x 1.25 = 2.375m (절차판 1.72 보다 조금 높다 - 컨셉의
+        #   부러진 오벨리스크가 사람 키의 갑절이다). 폭 1.075 = 반경 0.54 < 0.60 ✓
+        dgp("pillar_broken" if _bk else "pillar_intact", px, pz, FLOOR_Y,
+            yaw=(_idx * 53 % 17) / 17.0 * 6.2832,
+            scale=1.25 if _bk else 1.8684, albedo="cut", tag="hall_pillar")
 
 # ── 세워 두는 화로 (자리는 4절 FREE_BRAZIERS 에 있다) ──
 # ★15차. 처방전 E-2 — 화로도 **무작위 회전과 크기 ±15%**. 여덟이 똑같이 서 있으면
@@ -2182,15 +2312,25 @@ for _i in range(4):
 for (_bi, (_bx, _bz)) in enumerate(FREE_BRAZIERS):
     _bs = 0.86 + ((_bi * 37 + 11) % 7) / 7.0 * 0.30        # 크기 0.86~1.16
     _br = ((_bi * 53 + 17) % 11) / 11.0 * 0.62             # yaw
-    add_box(buf_cut, _bx, _bz, FLOOR_Y, FLOOR_Y + 0.16 * _bs, 0.34 * _bs, 0.34 * _bs,
-            rot=_br, seg=0.9, top_boost=TOP_BONUS)
-    add_fluted(buf_cut, _bx, _bz, FLOOR_Y + 0.16 * _bs, 1.04 * _bs, 0.23 * _bs,
-               0.17 * _bs, n=10, vseg=3, cap=False, phase=_br)
-    add_prism(buf_iron, _bx, _bz, 1.04 * _bs, 1.28 * _bs, 0.19 * _bs, 0.36 * _bs,
-              n=10, phase=_br, smooth=True)
-    add_flame(_bx, _bz, 1.28 * _bs, w=0.46 * _bs, h=0.72 * _bs,
+    # ★16차. 돌 부분(받침+기둥+대야)만 Meshy 화로로 바꾼다. 불꽃·후광·웜 풀은
+    #   **빛**이라 그대로 둔다(광원 목록도 안 건드린다).
+    with Muted(buf_cut, buf_iron):
+        add_box(buf_cut, _bx, _bz, FLOOR_Y, FLOOR_Y + 0.16 * _bs, 0.34 * _bs, 0.34 * _bs,
+                rot=_br, seg=0.9, top_boost=TOP_BONUS)
+        add_fluted(buf_cut, _bx, _bz, FLOOR_Y + 0.16 * _bs, 1.04 * _bs, 0.23 * _bs,
+                   0.17 * _bs, n=10, vseg=3, cap=False, phase=_br)
+        add_prism(buf_iron, _bx, _bz, 1.04 * _bs, 1.28 * _bs, 0.19 * _bs, 0.36 * _bs,
+                  n=10, phase=_br, smooth=True)
+    # 높이 1.82 x 0.60 = 1.09m·_bs (절차판 대야 마루 1.28 보다 낮다). 왜 낮추는가:
+    #   Meshy 화로는 **대야가 제일 넓은** 물건이라 마루를 1.28 에 맞추면 폭이
+    #   1.34m 가 되어 콜라이더(반경 0.38)를 0.29m 넘는다. 0.60 이면 폭 1.14m
+    #   = 넘는 몫이 0.19m 이고, 그것도 가슴 높이의 대야 테두리라 발치는 안 걸린다.
+    _bh = 1.09 * _bs
+    add_flame(_bx, _bz, _bh - 0.04 * _bs, w=0.54 * _bs, h=0.72 * _bs,
               seed=RND.uniform(0, 1.0), tilt=(_br - 0.31) * 0.35)
-    add_halo(_bx, _bz, 1.34 * _bs, r=0.70 * _bs)
+    add_halo(_bx, _bz, _bh + 0.06 * _bs, r=0.70 * _bs)
+    dgp("brazier", _bx, _bz, FLOOR_Y, yaw=_br, scale=0.60 * _bs,
+        albedo="cut", tag="free_brazier")
     add_pool(_bx, _bz, 3.25 * _bs)
     push_col_circle(_bx, _bz, 0.38, 1.3, "brazier")
 
@@ -2201,9 +2341,16 @@ add_box(buf_altar, ALTAR_X, ALTAR_Z, FLOOR_Y, FLOOR_Y + ALTAR_TOP, ALT_HX, ALT_H
         seg=1.0, top_boost=TOP_BONUS + 0.06)
 push_plat_box(ALTAR_X, ALTAR_Z, ALT_HX, ALT_HZ, FLOOR_Y + ALTAR_TOP, "altar")
 # 제단석. 증표가 이 위에 뜬다(높이는 web/level2.js 가 groundY + 0.9 로 잡는다)
-add_box(buf_altar, ALTAR_X, ALTAR_Z, FLOOR_Y + ALTAR_TOP, FLOOR_Y + ALTAR_TOP + 0.78,
-        0.86, 0.60, seg=0.8, top_boost=TOP_BONUS + 0.10)
+# ★16차. 단(올라서는 낮은 계단)은 그대로 두고 **그 위의 돌만** Meshy 제단으로 바꾼다.
+#   원자재는 1.89 x 0.77 x 1.55 이라 콜라이더(1.72 x 1.20)에 맞추려면 0.82 배다
+#   -> 1.55 x 0.63 x 1.27. 깊이가 0.035m 씩 넘지만 단 위라 몸이 안 닿는다.
+#   높이가 0.78 -> 0.63 으로 낮아져 증표가 0.30m 위에 뜬다(전엔 0.12m).
+with Muted(buf_altar):
+    add_box(buf_altar, ALTAR_X, ALTAR_Z, FLOOR_Y + ALTAR_TOP, FLOOR_Y + ALTAR_TOP + 0.78,
+            0.86, 0.60, seg=0.8, top_boost=TOP_BONUS + 0.10)
 push_col_box(ALTAR_X, ALTAR_Z, 0.86, 0.60, 1.08, "altar")
+dgp("altar", ALTAR_X, ALTAR_Z, FLOOR_Y + ALTAR_TOP, yaw=0.0, scale=0.82,
+    albedo="altar", tag="altar_stone")
 # ★제단 바닥의 메달리온 데칼(컨셉 시트 우하). 룬만 스스로 파랗게 빛난다.
 #   제단 단 **앞**에 깐다 - 단 위에 깔면 증표에 가려 안 보인다.
 MEDAL_R = 3.05
@@ -2212,12 +2359,16 @@ add_ground_card(buf_medal, ALTAR_X, ALTAR_Z + 3.5, FLOOR_Y + 0.010,
 # 화로 둘. 광원은 위에서 이미 등록했다
 for _dx in (-2.4, 2.4):
     _bx, _bz = ALTAR_X + _dx, ALTAR_Z + 0.2
-    add_fluted(buf_cut, _bx, _bz, FLOOR_Y, 0.86, 0.18, 0.14, n=10, vseg=3,
-               cap=False)
-    add_prism(buf_iron, _bx, _bz, 0.86, 1.10, 0.22, 0.44, n=10)
-    add_flame(_bx, _bz, 1.10, w=0.62, h=0.94, seed=RND.uniform(0, 1.0))
-    add_halo(_bx, _bz, 1.18, r=0.86)
+    # ★16차. 위 세워 두는 화로와 같은 이유·같은 배수(0.60)로 Meshy 화로를 놓는다
+    with Muted(buf_cut, buf_iron):
+        add_fluted(buf_cut, _bx, _bz, FLOOR_Y, 0.86, 0.18, 0.14, n=10, vseg=3,
+                   cap=False)
+        add_prism(buf_iron, _bx, _bz, 0.86, 1.10, 0.22, 0.44, n=10)
+    add_flame(_bx, _bz, 1.05, w=0.62, h=0.94, seed=RND.uniform(0, 1.0))
+    add_halo(_bx, _bz, 1.15, r=0.86)
     push_col_circle(_bx, _bz, 0.46, 1.6, "brazier")
+    dgp("brazier", _bx, _bz, FLOOR_Y, yaw=1.1 + _dx * 0.12, scale=0.60,
+        albedo="cut", tag="altar_brazier")
 
 # ── 계단 (탈출구) ──
 # 북으로 오르는 다섯 단 + 그 위의 문틀(門).
@@ -2349,6 +2500,7 @@ for (rid, c0, r0, c1, r1) in ROOMS:
 # ★★공용 RND 를 **안 쓴다.** 여기서 난수를 뽑으면 그만큼 스트림이 밀려서
 #   아래 잔해 배치가 통째로 바뀐다(실제로 그래서 nav 섬이 한 칸 생겼다).
 _cope = 0
+_dgcope_n = [0]
 for _r in range(GRID):
     for _c in range(GRID):
         if not blocked(_c, _r):
@@ -2364,17 +2516,74 @@ for _r in range(GRID):
             continue
         _wh = WALL_H_OF[_cl]
         _cx, _cz = gx_of(_c), gz_of(_r)
-        # 세워 얹은 돌 둘. 폭이 좁고 세로로 길다 = 아래 단과 90도 다른 방향
-        for _q in range(2):
-            if _h1(10 + _q) < 0.38:            # 그중 또 일부는 빠진다
+        # ★16차. 열 칸에 한 칸은 절차 갓돌 대신 **Meshy 갓돌 뭉치**를 얹는다.
+        #   전부 바꾸지 않는 이유는 예산이다 — 갓돌은 223장이고 한 장에 600삼각형을
+        #   물리면 그것만으로 13만 삼각형이다. 카메라가 늘 보는 자리(남쪽이 트인
+        #   뒷벽 마루)에만 넣어 실루엣 윗선을 크게 끊는다.
+        _dgcope = (_cl == H_BACK and _r + 1 < GRID and walk[_r + 1][_c]
+                   and (_c * 17 + _r * 11) % 2 == 0)
+        with Muted(buf_trim) if _dgcope else _NOMUTE:
+            # 세워 얹은 돌 둘. 폭이 좁고 세로로 길다 = 아래 단과 90도 다른 방향
+            for _q in range(2):
+                if _h1(10 + _q) < 0.38:            # 그중 또 일부는 빠진다
+                    continue
+                _off = (-0.46 + _q * 0.92) + (_h1(20 + _q) - 0.5) * 0.28
+                _hgt = 0.16 + _h1(30 + _q) * 0.26
+                add_box(buf_trim, _cx + _off, _cz + (_h1(40 + _q) - 0.5) * 0.5,
+                        _wh - 0.05, _wh - 0.05 + _hgt,
+                        0.20 + _h1(50 + _q) * 0.10, 0.34 + _h1(60 + _q) * 0.20,
+                        rot=(_h1(70 + _q) - 0.5) * 0.34, seg=1.2, top_boost=TOP_BONUS)
+                _cope += 1
+        if _dgcope:
+            # 1.90 x 0.52 = 0.99m 길이 · 0.64m 높이 · 0.21m 두께. 남쪽 면 쪽으로
+            # 밀어 얹는다(마루 한가운데 두면 쿼터뷰에서 실루엣을 안 끊는다).
+            dgp("coping_chunk", _cx + (_h1(80) - 0.5) * 0.5,
+                _cz + CELL * 0.5 - 0.34, _wh - 0.05,
+                yaw=(_h1(81) - 0.5) * 0.22, scale=0.52,
+                albedo="trim", tag="coping")
+            _dgcope_n[0] += 1
+
+# ── ★16차 신설 — 모서리 돌(quoin) ──
+# 16-저폴리진단이 "예산(4.83/5.00MiB)이 없어 못 넣었다"고 남긴 바로 그 부재다.
+# 이번엔 level2.glb 가 아니라 web/props/dg_quoin_corner.glb 로 나가므로 예산이 다르다.
+# ★방의 **바깥 모서리**(직각인 두 면이 트인 벽 칸)에만 세운다. 벽 면에서 0.22m 만
+#   나오게 파묻어서(= 벽 인셋과 같은 값) 발자국 계약을 안 건드린다.
+# ★어귀 옆은 건너뛴다 — 문설주(JAMB_HALF 0.20)가 이미 그 자리에 나와 있다.
+DGQ_S = 1.274         # 폭 1.13 x 1.274 = 1.44m · 높이 1.90 x 1.274 = 2.42m
+# ★모서리를 **방 쪽에서** 찾는다. 벽 칸에서 "직각인 두 면이 트인 칸"을 찾으면
+#   하나도 안 나온다 — 직사각형 방의 벽은 모서리를 **감싸고** 돌기 때문이다
+#   (그런 벽 칸은 트인 면이 0~1개다). 걸을 수 있는 칸에서 서쪽·북쪽이 둘 다
+#   막혔으면 그 칸의 북서 꼭짓점이 우리가 찾는 그 모서리다.
+_quoin = 0
+_qcand = 0
+for _r in range(1, GRID - 1):
+    for _c in range(1, GRID - 1):
+        if not walk[_r][_c] or ROOM_OF.get((_c, _r), "").startswith("K"):
+            continue
+        for (_dc, _dr) in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+            if not (blocked(_c + _dc, _r) and blocked(_c, _r + _dr)
+                    and blocked(_c + _dc, _r + _dr)):
                 continue
-            _off = (-0.46 + _q * 0.92) + (_h1(20 + _q) - 0.5) * 0.28
-            _hgt = 0.16 + _h1(30 + _q) * 0.26
-            add_box(buf_trim, _cx + _off, _cz + (_h1(40 + _q) - 0.5) * 0.5,
-                    _wh - 0.05, _wh - 0.05 + _hgt,
-                    0.20 + _h1(50 + _q) * 0.10, 0.34 + _h1(60 + _q) * 0.20,
-                    rot=(_h1(70 + _q) - 0.5) * 0.34, seg=1.2, top_boost=TOP_BONUS)
-            _cope += 1
+            # 낮은 앞벽(1.45m)에 2.42m 짜리를 세우면 벽 위로 솟는다. 뒷벽만.
+            if min(WALL_H_OF[wall_class(_c + _dc, _r)],
+                   WALL_H_OF[wall_class(_c, _r + _dr)]) < 2.6:
+                continue
+            # 어귀 옆은 건너뛴다 — 문설주(0.20)가 이미 그 자리에 나와 있다
+            if any(ROOM_OF.get((_c + _dc * k, _r), "").startswith("K")
+                   or ROOM_OF.get((_c, _r + _dr * k), "").startswith("K")
+                   for k in (1, 2)):
+                continue
+            _qcand += 1
+            # ★후보가 16곳뿐이라(방 여덟의 모서리에서 어귀 옆을 뺀 수) 전부 넣는다.
+            #   삼각형 14.4k · 0.6MB 로 예산 안이다.
+            # 꼭짓점에서 **벽 안쪽으로 0.50m**. 그러면 두 벽면에서 0.22m 씩 나온다
+            # (0.72 = 발자국 반폭, 0.72 - 0.22 = 0.50). 벽 인셋과 같은 값이다.
+            dgp("quoin_corner",
+                gx_of(_c) + _dc * (CELL * 0.5 + 0.50),
+                gz_of(_r) + _dr * (CELL * 0.5 + 0.50), FLOOR_Y,
+                yaw=math.atan2(_dc, _dr), scale=DGQ_S, albedo="trim", tag="quoin")
+            _quoin += 1
+
 
 # ── ★15차 신설 — 벽 밑동의 잔해와 흙더미 (처방전 C-2-8) ──
 # "벽 밑동을 따라 잔해와 흙더미. 지금 벽은 바닥 판 위에 상자가 그냥 앉아 있다.
@@ -2454,9 +2663,17 @@ for (rid, c0, r0, c1, r1) in ROOMS:
         #   정강이 높이는 되게 올린다.
         h = (RND.uniform(1.05, 1.45) if big else RND.uniform(0.46, 0.72))
         RUBBLE.append((gx, gz, rad))
-        add_prism(buf_rubble, gx, gz, FLOOR_Y, FLOOR_Y + h,
-                  rad, rad * RND.uniform(0.42, 0.68), n=RND.choice((5, 6, 7)),
-                  phase=RND.uniform(0, 2), top_boost=TOP_BONUS)
+        # ★16차. 방 잔해를 Meshy 돌무더기로 갈아 끼운다.
+        #   **높이로** 배수를 잡는다(폭으로 잡으면 절차판보다 키가 커진다).
+        #   원자재 높이 large 1.61 · small 1.34 -> 그 결과 폭이 콜라이더(rad*0.92)
+        #   안쪽으로 들어온다: h 1.25 짜리 큰 돌은 폭 1.46m(반경 0.73) < 0.79.
+        with Muted(buf_rubble):
+            add_prism(buf_rubble, gx, gz, FLOOR_Y, FLOOR_Y + h,
+                      rad, rad * RND.uniform(0.42, 0.68), n=RND.choice((5, 6, 7)),
+                      phase=RND.uniform(0, 2), top_boost=TOP_BONUS)
+        dgp("rubble_large" if big else "rubble_small", gx, gz, FLOOR_Y,
+            yaw=((got * 71 + tries * 29) % 23) / 23.0 * 6.2832,
+            scale=h / (1.61 if big else 1.34), albedo="rubble", tag="room_rubble")
         if big:
             push_col_circle(gx, gz, rad * 0.92, h, "rubble")
         got += 1
@@ -3308,6 +3525,70 @@ with open(TMP_JSON, "w") as f:
 # ★원자적으로 갈아끼운다. 게임이 반쪽짜리를 읽으면 좌표와 그림이 어긋난다.
 os.replace(TMP_GLB, OUT_GLB)
 os.replace(TMP_JSON, OUT_JSON)
+
+
+# ═════════════════════════════════════════════════════════════
+# 19) ★16차 — Meshy 소품 배치표 (blender/s41_dgprops.py 가 읽는다)
+# ═════════════════════════════════════════════════════════════
+# ★level2.json 이 아니라 **따로** 나간다. level2.json 은 콜라이더 계약이라
+#   한 바이트도 안 움직인다(위 md5 검사가 지킨다).
+# ★s41 은 이 표만 보고 굽는다. 그래서 조명 모델의 **모든 상수**와 자기검증
+#   표본을 여기 같이 싣는다 — s41 의 lum() 이 이 파일에서 한 톨이라도 어긋나면
+#   s41 이 스스로 멈춘다(복사본 두 벌이 조용히 갈라지는 것을 막는 유일한 방법).
+if DGP_ON:
+    _kinds = {}
+    for _p in DGP:
+        _kinds[_p["kind"]] = _kinds.get(_p["kind"], 0) + 1
+    _matlog = {m[0]: {"hex": m[1], "k": list(m[2]), "shade": list(m[3]),
+                      "tile": list(m[4])} for m in MAT_LOG}
+    # lum() 자기검증 표본. 맵 곳곳을 결정적으로 훑는다(법선 있는 것/없는 것 둘 다)
+    _chk = []
+    for _i in range(160):
+        _sx = -HALF + ((_i * 7919) % 1000) / 1000.0 * SIZE
+        _sz = -HALF + ((_i * 6271) % 1000) / 1000.0 * SIZE
+        _sy = ((_i * 4243) % 1000) / 1000.0 * 4.2
+        _n = None
+        if _i % 2:
+            _a = ((_i * 3319) % 1000) / 1000.0 * 6.2832
+            _n = (math.cos(_a), 0.35, math.sin(_a))
+            _ln = math.sqrt(sum(v * v for v in _n))
+            _n = tuple(v / _ln for v in _n)
+        _c3 = lum(_sx, _sz, _sy, nrm=_n)
+        _chk.append({"p": [round(_sx, 4), round(_sz, 4), round(_sy, 4)],
+                     "n": None if _n is None else [round(v, 6) for v in _n],
+                     "c": [round(float(v), 8) for v in _c3]})
+    _dgdata = {
+        "generatedBy": "blender/s40_dungeon1.py",
+        "note": ("던전 Meshy 소품(16-소품장착)의 배치표 + 조명 모델. "
+                 "blender/s41_dgprops.py 가 읽어 web/props/dg_*.glb 를 굽는다. "
+                 "좌표는 level2.json 과 같은 three.js 좌표다."),
+        "floorY": FLOOR_Y, "cell": CELL, "grid": GRID, "half": HALF,
+        "amb": [float(v) for v in AMB], "ambMin": AMB_MIN,
+        "torchRange": TORCH_RANGE, "nlFloor": NL_FLOOR,
+        "near": {"r": NEAR_R, "p": NEAR_P, "range": NEAR_RANGE, "nl": NEAR_NL},
+        "hfall": {"y0": HFALL_Y0, "span": HFALL_SPAN, "min": HFALL_MIN},
+        "contact": {"ao": CONTACT_AO, "r": CONTACT_R,
+                    "ao2": CONTACT_AO2, "r2": CONTACT_R2},
+        "hueKeep": HUE_KEEP,
+        "lights": [[round(float(v), 6) for v in (lx, lz, ly, rad, power,
+                                                 rgb[0], rgb[1], rgb[2], near)]
+                   for (lx, lz, ly, rad, power, rgb, near) in LIGHTS],
+        "lightFields": "x, z, y, rad, power, r, g, b, near",
+        "blocked": ["".join("#" if not walk[_r][_c] else "." for _c in range(GRID))
+                    for _r in range(GRID)],
+        "pal": {k: v for k, v in PAL.items()},
+        "materials": _matlog,
+        "albedoMat": {"cut": "MAT_DG_CUT", "trim": "MAT_DG_TRIM",
+                      "altar": "MAT_DG_ALTAR", "rubble": "MAT_DG_RUBBLE"},
+        "lumCheck": _chk,
+        "counts": _kinds,
+        "props": DGP,
+    }
+    with open(os.path.join(ROOT, "blender", "dgprops_build.json"), "w") as _f:
+        json.dump(_dgdata, _f, ensure_ascii=False, indent=1)
+    NOTE.append("Meshy 소품 %d자리 %s · 되감은 절차 삼각형 %d개"
+                % (len(DGP), " ".join("%s%d" % (k, v) for k, v in
+                                      sorted(_kinds.items())), DGP_MUTED_TRIS[0]))
 
 print("\n[검증]")
 for n in NOTE:

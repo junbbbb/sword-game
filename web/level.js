@@ -457,7 +457,87 @@ export async function loadLevel(scene, search) {
       PROPS = null;
     }
   }
+  // 던전 Meshy 구조물(기둥·아치·제단·화로·잔해·갓돌·모서리돌). 초원에는 안 붙는다.
+  DGPROP_N = await applyDungeonProps(ROOT, q, base);
   return LV;
+}
+
+// ---------------------------------------------------------------------------
+// 던전 Meshy 구조물 (16차 파도 16-소품장착)
+// ---------------------------------------------------------------------------
+// 16-저폴리진단의 결론: 저폴리 티의 큰 축은 **면이 크고 그 경계에서 값이 세게 튀는
+// 것**이고, 폴리 밀도가 던전 절차 기둥 19 tris/m² vs Meshy 소품 115 였다. 그래서
+// 기둥·아치·제단·화로·잔해·갓돌·모서리돌을 Meshy 3K 판으로 갈아 끼웠다.
+//
+// 이 함수가 하는 일은 **거의 없다.** 굽는 쪽(blender/s41_dgprops.py)이 자리마다
+// 월드 좌표로 눕혀 놓고 정점색(COLOR_0)에 횃불 조명까지 구워서 종류별 한 덩어리로
+// 합쳐 두기 때문이다. 여기서는 받아서 ROOT 에 붙이고 손잡이 셋만 만진다.
+//   ① castShadow — 목록의 `cast`.
+//      ★던전에서 그림자는 위험한 손잡이다. 해가 없어 방향광이 거의 누워 있고,
+//        키 큰 물건이 던지면 바닥에 대각선 슬래브가 눕는다(15차: 아치 그림자가
+//        캐릭터 휘도를 15분의 1로 만들었다 - 그래서 벽·트림은 castShadow=false 다).
+//        발치의 것(기둥·잔해·화로·제단)만 던지고, 벽에 붙거나 벽 위에 얹힌 것
+//        (아치·모서리돌·갓돌)은 안 던진다.
+//   ② receiveShadow=false — 16차에서 던전은 **바닥만** 그림자를 받는다(자기그림자
+//      아크네가 돌 표면에 사선 직물 무늬를 그린다. probe_hatch 참조).
+//   ③ color x gain — glTF baseColorFactor 는 [0,1] 이라 못 싣는 몫이다.
+//      Meshy 텍스처는 그림자까지 구워진 어두운 원자재(선형평균 0.026~0.053)라
+//      던전 석재의 팔레트 계약에 앉히려면 곱수가 3~8 이어야 한다. **안 곱하면
+//      소품이 계약값보다 그만큼 어둡게 떠서 검은 실루엣이 된다.**
+//      (텍스처 화소를 밝히지 않는 이유는 오너 원칙 "소품 색은 원본 충실·재칠 금지".)
+//   ④ 비등방필터 8 — GLTFLoader 는 1 로 둔다. pitch 0.86 쿼터뷰라 그냥 두면
+//      mip 이 돌에 그려 넣은 것을 통째로 뭉갠다(16차 던전 바닥과 같은 처방).
+//
+// ★실패해도 게임은 그대로 돈다. 목록이 없으면 예전 그림(절차 소품이 빠진 상태)이
+//   뜨므로 조용히 넘어가지 말고 경고는 남긴다.
+let DGPROP_N = 0;
+
+async function applyDungeonProps(root, q, base) {
+  if (base !== 'level2') return 0;
+  let man = null;
+  try {
+    const res = await fetch('./props/dg_manifest.json' + q);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    man = await res.json();
+  } catch (e) {
+    console.warn('[level] 던전 소품 목록(props/dg_manifest.json)을 못 읽었다', e);
+    return 0;
+  }
+  const items = (man && man.items) || [];
+  const loader = new GLTFLoader();
+  const loaded = await Promise.all(items.map(it => new Promise(ok => {
+    loader.load(glbUrl('./props/' + it.file, q), g => ok([it, g]), undefined,
+                e => { console.warn('[level] 던전 소품 ' + it.file, e); ok(null); });
+  })));
+  let n = 0;
+  for (const pair of loaded) {
+    if (!pair) continue;
+    const [it, gltf] = pair;
+    const gain = it.gain || [1, 1, 1];
+    gltf.scene.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = !!it.cast;
+      o.receiveShadow = false;
+      const ms = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of ms) {
+        if (!m || m.userData.__dgGained) continue;
+        // ★색은 **작업 색공간(선형)** 값이다. setRGB 로 다시 넣으면 색공간을
+        //   한 번 더 지나므로 곱만 한다(GLTFLoader 도 여기에 선형으로 써 넣는다).
+        m.color.r *= gain[0];
+        m.color.g *= gain[1];
+        m.color.b *= gain[2];
+        m.userData.__dgGained = true;
+        if (m.map && m.map.anisotropy !== 8) {
+          m.map.anisotropy = 8;
+          m.map.needsUpdate = true;
+        }
+      }
+      n++;
+    });
+    root.add(gltf.scene);
+  }
+  if (!n) console.warn('[level] 던전 소품을 한 덩어리도 못 붙였다');
+  return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -1504,6 +1584,24 @@ export const debug = {
   groundY,
   blocked,
   props: () => (PROPS ? PROPS.debug : null),
+  // 던전 Meshy 구조물이 붙었는가. 덩어리 수 · 삼각형 · 게인까지 본다
+  dgprops() {
+    const out = { meshes: DGPROP_N, tris: 0, items: [] };
+    if (!ROOT) return out;
+    ROOT.traverse(o => {
+      if (!o.isMesh || !/_DGP_/.test(o.name || '')) return;
+      const g = o.geometry;
+      const t = g.index ? g.index.count / 3 : g.attributes.position.count / 3;
+      out.tris += t;
+      out.items.push({
+        name: o.name, tris: t, cast: o.castShadow,
+        vcol: !!g.attributes.color,
+        color: [+o.material.color.r.toFixed(3), +o.material.color.g.toFixed(3),
+                +o.material.color.b.toFixed(3)],
+      });
+    });
+    return out;
+  },
   // 지면 결이 실제로 붙었는지. 붙은 재질 수와 셰이더에 문구가 박혔는지 본다
   detail() {
     const out = { patched: DETAIL_N, meshes: [], injected: 0, tex: null,

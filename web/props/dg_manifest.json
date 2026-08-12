@@ -1,0 +1,123 @@
+{
+ "note": "던전(level2) 전용 Meshy 구조물. web/level.js 가 이 목록을 읽어 월드 좌표 그대로 씬에 얹는다. 정점색(COLOR_0)에 s40 의 횃불 조명이 이미 구워져 있으므로 런타임 조명 계산이 없다. cast=false 는 그림자를 안 던진다(벽·트림과 같은 이유). gain 은 material.color 에 **곱하는** 값이다 - glTF baseColorFactor 가 [0,1] 이라 못 실은 몫이고, 안 곱하면 소품이 계약값보다 3~8배 어둡게 뜬다.",
+ "generatedBy": "blender/s41_dgprops.py",
+ "items": [
+  {
+   "kind": "altar",
+   "file": "dg_altar.glb",
+   "n": 1,
+   "cast": true,
+   "tris": 2762,
+   "mesh": "COL_DGP_ALTAR",
+   "gain": [
+    3.49828,
+    3.67198,
+    3.7046
+   ]
+  },
+  {
+   "kind": "arch_gate",
+   "file": "dg_arch_gate.glb",
+   "n": 5,
+   "cast": false,
+   "tris": 15410,
+   "mesh": "DECO_DGP_ARCH_GATE",
+   "gain": [
+    3.93136,
+    4.10536,
+    4.0722
+   ]
+  },
+  {
+   "kind": "brazier",
+   "file": "dg_brazier.glb",
+   "n": 10,
+   "cast": true,
+   "tris": 8990,
+   "mesh": "COL_DGP_BRAZIER",
+   "gain": [
+    2.96917,
+    3.10109,
+    3.18208
+   ]
+  },
+  {
+   "kind": "coping_chunk",
+   "file": "dg_coping_chunk.glb",
+   "n": 20,
+   "cast": false,
+   "tris": 7600,
+   "mesh": "DECO_DGP_COPING_CHUNK",
+   "gain": [
+    8.45538,
+    8.80789,
+    8.59163
+   ]
+  },
+  {
+   "kind": "pillar_broken",
+   "file": "dg_pillar_broken.glb",
+   "n": 2,
+   "cast": true,
+   "tris": 5992,
+   "mesh": "COL_DGP_PILLAR_BROKEN",
+   "gain": [
+    2.56015,
+    2.66573,
+    2.67161
+   ]
+  },
+  {
+   "kind": "pillar_intact",
+   "file": "dg_pillar_intact.glb",
+   "n": 6,
+   "cast": true,
+   "tris": 17580,
+   "mesh": "COL_DGP_PILLAR_INTACT",
+   "gain": [
+    2.93513,
+    3.05002,
+    3.03911
+   ]
+  },
+  {
+   "kind": "quoin_corner",
+   "file": "dg_quoin_corner.glb",
+   "n": 16,
+   "cast": false,
+   "tris": 14400,
+   "mesh": "DECO_DGP_QUOIN_CORNER",
+   "gain": [
+    6.44241,
+    6.70163,
+    6.53091
+   ]
+  },
+  {
+   "kind": "rubble_large",
+   "file": "dg_rubble_large.glb",
+   "n": 9,
+   "cast": true,
+   "tris": 9900,
+   "mesh": "COL_DGP_RUBBLE_LARGE",
+   "gain": [
+    6.94555,
+    7.16074,
+    7.03562
+   ]
+  },
+  {
+   "kind": "rubble_small",
+   "file": "dg_rubble_small.glb",
+   "n": 33,
+   "cast": true,
+   "tris": 13860,
+   "mesh": "COL_DGP_RUBBLE_SMALL",
+   "gain": [
+    7.30784,
+    7.57511,
+    7.32891
+   ]
+  }
+ ]
+}
