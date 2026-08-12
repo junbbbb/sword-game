@@ -6,7 +6,8 @@
 
 전체 공정 **여섯 줄**(이 순서대로 다시 돌리면 언제든 재현된다. 2026-08-11 실행 기록.
 1~4 는 2026-08-11 재실행에서 **바이트 단위로 같은 파일**이 다시 나왔다.
-2026-08-12 에는 여섯 줄 전부가 committed basic2.glb 와 md5 까지 같았다)
+2026-08-12 에는 여섯 줄 전부가 committed basic2.glb 와 md5 까지 같았다.
+같은 날 13-걷기팔에서도 **손대기 전 md5 7ae7066d… 재현 확인 후** 고쳤다)
 ★★6번(s34)을 빼먹으면 1번 칼이 옛 카타나로 남아 md5 가 안 맞는다. 여기 다섯 줄만
   적혀 있어서 실제로 한 번 헛돌았다. 6번은 blender/s34_sword1_swap.py 헤더에 있다.
 
@@ -23,12 +24,24 @@
     SRC_GLB=web/slayer.glb DST_GLB=web/basic2_body.glb OUT_GLB=web/basic2_moves.glb \
       DST_SWORD=SW_baekah.001 SWORD_FIT=0 GRIP_K=1.0 KEEP_ORIG=1 \
       OUTDIR=renders/history/v97_wave11/char_basic2/moveset blender -b -P blender/s24_moveset.py
-    # 3) 걷기·달리기만 basic2 네이티브로 교체(+오른팔 감쇠·팔 들기·손목 보정)
+    # 3) 걷기·달리기만 basic2 네이티브로 교체(+오른팔 감쇠·팔 들기·스윙 자연화·손목 보정)
     #    ★SW_NAME/TIP_K/ARM_LIFT/TIP_ELEV 는 2026-08-12 에 붙었다. 빼면 칼끝이
     #      지면 아래로 내려간다(6번이 1번 칼을 1.78배로 키우는데 3번은 그걸 못 본다).
     #      TIP_K 는 6번 로그의 pmax 비(131.531/73.868)를 그대로 적은 값이다.
+    #    ★LIFT_MODE=abd / SWING_* / TIP_FLAT 은 같은 날 오너 지시 4차
+    #      **"걸을 때 팔을 너무 뒤로 뺀다"** 로 붙었다. 셋을 다 빼면(=LIFT_MODE=lean
+    #      ARM_LIFT=16, SWING_R/SWING_L 빈 값, TIP_FLAT=0) 옛 판 md5 가 그대로 나온다.
+    #        LIFT_MODE=abd  드는 축을 '몸 옆으로 벌리기'로 바꾼다. 옛 lean 축은 팔이
+    #                       기운 쪽으로 더 밀어 올리는 방식이라 팔을 더 뒤로 뺐다
+    #        ARM_LIFT=28    벌림각(옛 16도는 lean 축 기준이라 숫자를 그대로 못 옮긴다)
+    #        SWING_R=2      오른팔 중립 스윙을 수직 아래 +2도(앞)로. 상수 회전 하나라
+    #                       칼 방향호는 한 도도 안 변한다
+    #        SWING_L=-2 + GF/GB  왼팔은 앞 이득 0.80 / 뒤 이득 0.58 (걷기만)
+    #        TIP_FLAT=0.02  손목 보정 후보를 고를 때 칼끝 고도 **진폭**도 본다
     DST_GLB=web/basic2_moves.glb OUT_GLB=web/basic2.glb CLIPS=Walk,Run \
-      SW_NAME=SW_nokseun TIP_K=1.7806 ARM_LIFT=16 TIP_ELEV=-24 \
+      SW_NAME=SW_nokseun TIP_K=1.7806 TIP_ELEV=-24 TIP_FLAT=0.02 \
+      LIFT_MODE=abd ARM_LIFT=28 \
+      SWING_R=2 SWING_L=-2 SWING_GF=0.80 SWING_GB=0.58 SWING_L_CLIPS=Walk \
       NAT_DIR=incoming/meshy4/Meshy_AI_game_character_8k_biped \
       NAT_STEM=Meshy_AI_game_character_8k_biped \
       OUTDIR=renders/history/v97_wave11/char_basic2/native blender -b -P blender/s27_kensa_native.py

@@ -98,8 +98,21 @@
   NAT_IDLE   Idle 파일의 번호 부분  기본 Idle_14
   ARM_DAMP   오른팔 감쇠            기본 0.25 (1=원본 그대로, 0=평균에 고정)
   ARM_LIFT   오른팔 들기(도)        기본 0 (양수면 손이 올라간다. 칼끝을 지면 위로)
+  LIFT_MODE  드는 축                기본 lean(옛 판) / **abd**(순수 벌림)
+  LIFT_CLIPS 들기를 걸 클립         기본 = CLIPS (달리기는 빼는 게 낫다. 아래 참조)
+             ★lean 은 팔이 기운 쪽으로 더 밀어 손을 올린다 = 뒤로 기운 클립에서는
+               팔을 더 뒤로 뺀다. abd 는 몸 옆으로만 벌려 앞뒤 스윙과 독립이다.
+  SWING_R    오른팔 목표 중립 스윙각(도)  빈 값(기본)=안 건드림. 0=수직 아래, +=앞
+  SWING_L    왼팔 목표 중립 스윙각(도)    빈 값(기본)=안 건드림
+  SWING_GF   왼팔 앞 스윙 이득       기본 1.0 (1=원본 진폭)
+  SWING_GB   왼팔 뒤 스윙 이득       기본 1.0 (뒤로 덜 빼려면 0.6 처럼)
+  SWING_H    두 이득이 갈리는 폭(도) 기본 12
+  SWING_R_CLIPS / SWING_L_CLIPS  스윙 보정을 걸 클립  기본 = CLIPS
   WRIST_FIX  1(기본) 칼 간섭 보정 / 0 측정만 하고 안 고침
   TIP_ELEV   칼끝 평균 목표 고도(도) 기본 -35 (수평 아래로 내린다)
+  TIP_FLAT   칼끝 고도 **진폭** 벌점(도당) 기본 0 (옛 판 = 평균만 본다)
+             ★같은 평균이라도 후보에 따라 칼끝이 사이클 안에서 출렁이는 폭이 두 배씩
+               다르다. 출렁이면 제일 낮은 프레임이 바닥여유를 다 먹는다.
   SW_NAME    측정 기준 칼           기본 SW_baekah (게임 기본 장착 칼)
   TIP_K      하류 칼끝 배율         기본 1.0 (s34 에서 커질 칼을 미리 넣는다)
   NCAND      비싼 검사를 돌릴 후보 수 기본 26
@@ -191,8 +204,31 @@ KEEP = [c for c in ("Idle", "Attack", "Heavy", "Wide", "Jump") if c not in NATIV
 ARM_DAMP = float(os.environ.get("ARM_DAMP", "0.30"))
 # 감쇠한 팔을 어깨에서 들어 올리는 각도(도). 0 이면 안 건드린다. 아래 [오른팔 들기] 참조.
 ARM_LIFT = float(os.environ.get("ARM_LIFT", "0"))
+# ★2026-08-12 오너 지시("걸을 때 팔을 너무 뒤로 뺀다") — 드는 **축**을 고른다.
+#   lean 은 옛 판이다: 축 = (사이클 평균 팔방향) x 위. 팔이 이미 기울어 있는 쪽으로
+#   더 밀어야 손이 올라가므로, 팔이 뒤로 기운 클립에서는 **팔을 더 뒤로 뺀다**
+#   (실측: 걷기 오른팔 중립 스윙 -10.4도 -> -23.1도). 그게 오너가 본 그림이다.
+#   abd 는 축 = 가슴 앞축이다. **순수 벌림**(몸 옆으로 벌리기)이라 앞뒤 스윙을
+#   한 도도 안 건드리면서 손을 올린다. 그래서 아래 [팔 스윙] 과 서로 독립이다.
+LIFT_MODE = os.environ.get("LIFT_MODE", "lean").strip().lower()
+# 들기를 걸 클립(기본 = CLIPS 전부). 달리기는 팔이 이미 굽어 손목이 높아서 안 들어도
+# 칼끝이 뜬다. 거기까지 들면 칼이 위를 보고 그만큼 손목 보정이 커져 손목만 꺾인다.
+LIFT_CLIPS = [c.strip() for c in os.environ.get(
+    "LIFT_CLIPS", ",".join(CLIPS)).split(",") if c.strip()]
 DAMP_BONES = ["Bip001 R Clavicle", "Bip001 R UpperArm",
               "Bip001 R Forearm", "Bip001 R Hand"]
+
+# ★팔 스윙 자연화 (2026-08-12 오너 지시). 아래 [팔 스윙] 절 참조.
+#   빈 값이면 그 팔을 안 건드린다(옛 판 재현 스위치).
+SWING_R = os.environ.get("SWING_R", "").strip()      # 오른팔 목표 중립 스윙각(도)
+SWING_L = os.environ.get("SWING_L", "").strip()      # 왼팔 목표 중립 스윙각(도)
+SWING_GF = float(os.environ.get("SWING_GF", "1.0"))  # 왼팔 앞 스윙 이득
+SWING_GB = float(os.environ.get("SWING_GB", "1.0"))  # 왼팔 뒤 스윙 이득
+SWING_H = float(os.environ.get("SWING_H", "12"))     # 두 이득이 갈리는 폭(도)
+SWING_R_CLIPS = [c.strip() for c in os.environ.get(
+    "SWING_R_CLIPS", ",".join(CLIPS)).split(",") if c.strip()]
+SWING_L_CLIPS = [c.strip() for c in os.environ.get(
+    "SWING_L_CLIPS", ",".join(CLIPS)).split(",") if c.strip()]
 
 # Meshy 원명 -> 우리 규칙(s13/s24 와 **같은 표**. 순서 중요, 긴 것부터)
 RENAME = [
@@ -766,32 +802,55 @@ if ARM_DAMP < 1.0:
 #       basis' = P^-1 @ R_world @ P @ basis     (P = 이 프레임의 '기저 앞' 월드회전)
 #   팔뚝·손·칼은 FK 자식이라 강체로 따라온다.
 UPPER_R = "Bip001 R UpperArm"
+UPPER_L = "Bip001 L UpperArm"
+HAND_L = "Bip001 L Hand"
+TORSO, NECK = "Bip001 Spine", "Bip001 Neck"       # ★Meshy 리그는 척추 이름이 뒤집혀
+CLAV_L, CLAV_R = "Bip001 L Clavicle", "Bip001 R Clavicle"   #  있다. 쇄골이 달린
+#   윗마디가 'Bip001 Spine' 이다(실측 계층 Pelvis->Chest2->Chest->Spine->Clavicle).
+#   이름만 보고 Chest2 를 잡으면 배꼽에 좌표계를 매다는 셈이다.
 
 
-def lift_arm(act, deg):
-    """오른 위팔 키 전부를 '손이 올라가는 방향'으로 deg 만큼 돌린다."""
-    fcs = quat_fcurves(act, UPPER_R)
+def bwpos(bn):
+    return (armK.matrix_world @ armK.pose.bones[bn].matrix).translation.copy()
+
+
+def key_frames(act, bone):
+    fcs = quat_fcurves(act, bone)
     if len(fcs) != 4:
-        raise SystemExit("오른 위팔 회전 채널이 4개가 아니다(%d)" % len(fcs))
+        raise SystemExit("%s 회전 채널이 4개가 아니다(%d)" % (bone, len(fcs)))
+    return fcs, [int(round(k.co.x)) for k in fcs[0].keyframe_points]
+
+
+def chest_axes(act):
+    """이 클립 **사이클 평균**의 가슴 좌표계 (왼쪽 / 위 / 앞). 월드 상수 셋이다.
+    프레임마다 다시 잡으면 회전이 프레임마다 달라져 칼 방향호가 벌어진다."""
     use(armK, act)
-    pb = armK.pose.bones[UPPER_R]
-    n = len(fcs[0].keyframe_points)
-    frames = [int(round(fcs[0].keyframe_points[i].co.x)) for i in range(n)]
-    # 1차: 사이클 평균 팔 방향으로 축을 정한다
-    acc = Vector((0, 0, 0))
+    _, frames = key_frames(act, UPPER_R)
+    au, al = Vector((0, 0, 0)), Vector((0, 0, 0))
     for f in frames:
         sc.frame_set(f)
         bpy.context.view_layer.update()
-        S = (armK.matrix_world @ pb.matrix).translation
-        W = (armK.matrix_world @ armK.pose.bones[HAND_R].matrix).translation
-        acc += (W - S).normalized()
-    ax = acc.normalized().cross(Vector((0, 0, 1)))
-    if ax.length < 1e-4:
-        raise SystemExit("팔이 정확히 수직이라 드는 축을 못 잡는다")
-    Rw = Matrix.Rotation(math.radians(deg), 3, ax.normalized())
-    # 2차: 프레임마다 로컬 델타로 환산해서 모아 둔다(★먼저 다 읽고 나중에 쓴다)
+        up = (bwpos(NECK) - bwpos(TORSO)).normalized()
+        lat = bwpos(CLAV_L) - bwpos(CLAV_R)
+        au += up
+        al += (lat - up * lat.dot(up)).normalized()
+    up = au.normalized()
+    lat = (al - up * al.dot(up)).normalized()
+    return lat, up, lat.cross(up)
+
+
+def apply_world_rot(act, bone, Rs):
+    """위팔 키 전부에 **월드 회전**을 먹인다(프레임 i 에 Rs[i]).
+        basis' = P^-1 @ R_world @ P @ basis     (P = 이 프레임의 '기저 앞' 월드회전)
+    회전축이 뼈 머리(어깨)를 지나므로 팔뚝·손·칼은 FK 자식으로 **강체**로 따라온다.
+    ★Rs 가 전부 같은 회전이면 칼 방향호는 한 도도 안 변한다(등거리 사상)."""
+    fcs, frames = key_frames(act, bone)
+    use(armK, act)
+    pb = armK.pose.bones[bone]
+    n = len(frames)
+    # 프레임마다 로컬 델타로 환산해서 모아 둔다(★먼저 다 읽고 나중에 쓴다)
     out = []
-    for f in frames:
+    for i, f in enumerate(frames):
         sc.frame_set(f)
         bpy.context.view_layer.update()
         Mw = (armK.matrix_world @ pb.matrix).to_3x3()
@@ -799,7 +858,7 @@ def lift_arm(act, deg):
         B = pb.matrix_basis.to_3x3()
         B.normalize()
         P = Mw @ B.inverted()                   # 기저 앞 월드 회전
-        out.append((P.inverted() @ Rw @ P @ B).to_quaternion().normalized())
+        out.append((P.inverted() @ Rs[i] @ P @ B).to_quaternion().normalized())
     prev = None
     for i, q in enumerate(out):
         if prev is not None and q.dot(prev) < 0:   # 쿼터니언 부호 연속성
@@ -810,12 +869,49 @@ def lift_arm(act, deg):
             kp.co.y = kp.handle_left.y = kp.handle_right.y = q[c]
     for c in range(4):
         fcs[c].update()
+    return n
+
+
+def lift_arm(act, deg):
+    """오른 위팔 키 전부를 '손이 올라가는 방향'으로 deg 만큼 돌린다."""
+    use(armK, act)
+    pb = armK.pose.bones[UPPER_R]
+    _, frames = key_frames(act, UPPER_R)
+    # 1차: 사이클 평균 팔 방향으로 축을 정한다
+    acc = Vector((0, 0, 0))
+    for f in frames:
+        sc.frame_set(f)
+        bpy.context.view_layer.update()
+        S = (armK.matrix_world @ pb.matrix).translation
+        W = (armK.matrix_world @ armK.pose.bones[HAND_R].matrix).translation
+        acc += (W - S).normalized()
+    if LIFT_MODE == "abd":
+        # ★순수 벌림: 축 = 가슴 앞축. 앞뒤 스윙을 안 건드리고 몸 옆으로만 든다.
+        #   부호는 '팔이 몸에서 멀어지는 쪽'을 실측으로 고른다(리그 좌우 무관).
+        lat, _up, fwd = chest_axes(act)
+        d = acc.normalized()
+        out0 = -d.dot(lat)                      # 오른팔은 왼쪽축의 반대가 바깥
+        ax = fwd.normalized()
+        if -(Matrix.Rotation(math.radians(1), 3, ax) @ d).dot(lat) < out0:
+            ax = -ax
+    else:
+        # lean(옛 판): 축 = 평균 팔방향 x 위. 팔이 기운 쪽으로 더 밀어 손을 올린다
+        #   -> 뒤로 기운 클립에서는 팔을 더 뒤로 뺀다(오너 지적의 절반이 이것이다)
+        ax = acc.normalized().cross(Vector((0, 0, 1)))
+    if ax.length < 1e-4:
+        raise SystemExit("팔이 정확히 수직이라 드는 축을 못 잡는다")
+    Rw = Matrix.Rotation(math.radians(deg), 3, ax.normalized())
+    n = apply_world_rot(act, UPPER_R, [Rw] * len(frames))
     return n, ax.normalized()
 
 
 if ARM_LIFT:
-    print("\n[오른팔 들기] %+.1f 도 (어깨에서. 손·칼은 강체로 따라온다)" % ARM_LIFT)
+    print("\n[오른팔 들기] %+.1f 도 (어깨에서. 손·칼은 강체로 따라온다) 축=%s"
+          % (ARM_LIFT, LIFT_MODE))
     for nm in NATIVE:
+        if nm not in LIFT_CLIPS:
+            print("  %-5s 건너뜀(LIFT_CLIPS 밖)" % nm)
+            continue
         n, ax = lift_arm(new[nm], ARM_LIFT)
         print("  %-5s 위팔 키 %d개 / 축 (%+.3f,%+.3f,%+.3f)"
               % (nm, n, ax.x, ax.y, ax.z))
@@ -824,6 +920,92 @@ if ARM_LIFT:
         blade_arc(new[nm], "LFT " + nm)
     print("\n[칼 간섭 실측] 팔 들기 후")
     M_RAW = {nm: measure(new[nm], "LFT " + nm, 2) for nm in NATIVE}
+
+# ---------------------------------------------------------------- 팔 스윙 자연화
+# ★2026-08-12 오너 지시: **"걸을 때 팔을 너무 뒤로 뺀다."** 실측으로 원인이 둘이었다
+#   (가슴 좌표계 스윙각. 0=수직 아래, 양수=앞. 걷기):
+#
+#                          앞최대   뒤최대   중립    앞/뒤
+#       네이티브 왼팔      +26.6    -45.4   -9.4    0.59   <- 원본이 원래 뒤로 크게 뺀다
+#       네이티브 오른팔    +19.2    -40.0  -10.4    0.48
+#       우리 오른팔(전)    -15.4    -30.8  -23.1     -     <- 한 사이클 내내 몸 뒤에 있다
+#
+#   사람 걷기는 앞 스윙(어깨 굴곡 20~25도)이 뒤 스윙(신전 10~20도)보다 크거나 비슷하다.
+#   원본이 이미 뒤로 치우쳐 있었고, 거기에 우리 ARM_LIFT(lean 축)가 오른팔을 12.7도
+#   **더 뒤로** 밀었다. 그래서 둘을 다 푼다.
+#
+# ★리프트와 스윙을 **다른 축으로 갈라 놓는 것**이 이 절의 핵심이다.
+#   칼끝이 지면 아래로 안 내려가게 하는 것은 손목 높이인데(손목 높이 = 팔이 수직에서
+#   얼마나 벗어났나), 옛 lean 축은 그 '벗어남'을 뒤쪽으로만 벌 수 있었다.
+#   LIFT_MODE=abd 로 **옆으로 벌려** 높이를 벌면, 앞뒤 스윙은 공짜로 자유로워진다.
+#
+# ★오른팔은 **상수 회전 하나**만 쓴다(중립점 이동). 프레임마다 다른 각을 먹이면
+#   그 차이가 그대로 칼 방향호가 된다(위 [오른팔 들기] 함정). 감쇠 뒤 오른팔 진폭은
+#   걷기 15도라 뒤 스윙 상한을 따로 걸 필요도 없다.
+# ★왼팔은 칼이 없으니 프레임별로 모양을 바꿔도 된다. 앞/뒤 이득을 갈라 준다:
+#       s' = mid + a * (gm + gd*tanh(a/h)),  a = s - mid0, gm=(gf+gb)/2, gd=(gf-gb)/2
+#   tanh 라 이득이 갈리는 지점에 꺾임이 없다(C-무한). 계단식으로 자르면 중립을
+#   지나는 순간 팔 속도가 툭 튄다.
+
+
+def swing_arm(act, bone, hand, target_mid, gf, gb, h, axes):
+    """팔의 앞뒤 스윙을 다시 그린다. 반환 (전 (앞,뒤,중립), 후 (앞,뒤,중립), 상수냐)."""
+    lat, up, fwd = axes
+    ax = -lat                                   # 이 축으로 +각 = 팔이 **앞으로**
+    use(armK, act)
+    _, frames = key_frames(act, bone)
+    pb = armK.pose.bones[bone]
+
+    def swings():
+        out = []
+        for f in frames:
+            sc.frame_set(f)
+            bpy.context.view_layer.update()
+            d = ((armK.matrix_world @ armK.pose.bones[hand].matrix).translation
+                 - (armK.matrix_world @ pb.matrix).translation)
+            out.append(math.degrees(math.atan2(d.dot(fwd), -d.dot(up))))
+        return out
+
+    s0 = swings()
+    mid0 = (max(s0) + min(s0)) / 2.0
+    gm, gd = (gf + gb) / 2.0, (gf - gb) / 2.0
+    const = abs(gf - 1.0) < 1e-9 and abs(gb - 1.0) < 1e-9
+    degs = []
+    for s in s0:
+        a = s - mid0
+        g = gm + gd * math.tanh(a / h) if not const else 1.0
+        degs.append(target_mid + a * g - s)
+    apply_world_rot(act, bone, [Matrix.Rotation(math.radians(d), 3, ax)
+                                for d in degs])
+    s1 = swings()
+    return ((max(s0), min(s0), mid0), (max(s1), min(s1),
+            (max(s1) + min(s1)) / 2.0), const)
+
+
+if SWING_R or SWING_L:
+    print("\n[팔 스윙 자연화] 목표 중립  오른 %s / 왼 %s   왼팔 이득 앞 %.2f 뒤 %.2f "
+          "(전환폭 %.0f도)" % (SWING_R or "-", SWING_L or "-", SWING_GF, SWING_GB,
+                            SWING_H))
+    print("  %-5s %-4s | %-24s | %-24s | %s"
+          % ("클립", "팔", "전 앞/뒤/중립", "후 앞/뒤/중립", "회전"))
+    for nm in NATIVE:
+        axes = chest_axes(new[nm])
+        for tgt, bone, hand, clips, gf, gb in (
+                (SWING_R, UPPER_R, HAND_R, SWING_R_CLIPS, 1.0, 1.0),
+                (SWING_L, UPPER_L, HAND_L, SWING_L_CLIPS, SWING_GF, SWING_GB)):
+            if not tgt or nm not in clips:
+                continue
+            b4, af, const = swing_arm(new[nm], bone, hand, float(tgt),
+                                      gf, gb, SWING_H, axes)
+            print("  %-5s %-4s | %+7.1f %+7.1f %+7.1f | %+7.1f %+7.1f %+7.1f | %s"
+                  % (nm, "오른" if bone == UPPER_R else "왼",
+                     b4[0], b4[1], b4[2], af[0], af[1], af[2],
+                     "상수 %+.1f도" % (af[2] - b4[2]) if const else "프레임별"))
+    print("\n[칼 흔들림] 스윙 자연화 후")
+    for nm in NATIVE:
+        blade_arc(new[nm], "SWG " + nm)
+    print("\n[칼 간섭 실측] 스윙 자연화 후")
+    M_RAW = {nm: measure(new[nm], "SWG " + nm, 2) for nm in NATIVE}
 
 # ---------------------------------------------------------------- 손목 보정
 # ★목표를 '기준 통과'가 아니라 **칼을 든 각도**로 준다.
@@ -837,6 +1019,11 @@ if ARM_LIFT:
 #   비싼 검사(바닥·관통)는 고도 조건을 통과한 상위 몇 개에만 돌린다.
 TIP_ELEV = float(os.environ.get("TIP_ELEV", "-35"))
 NCAND = int(os.environ.get("NCAND", "26"))   # 비싼 검사를 돌릴 후보 수
+# ★칼끝 고도 **진폭**에 주는 벌점(도당). 기본 0 = 옛 판(평균만 본다).
+#   같은 평균 고도라도 후보에 따라 사이클 안에서 칼끝이 위아래로 출렁이는 폭이
+#   두 배씩 다르다. 출렁이면 (1) 눈에 칼이 펄럭이고 (2) **제일 낮은 프레임**이
+#   바닥여유를 결정하므로 평균을 더 내릴 여지도 사라진다. 그래서 진폭을 같이 본다.
+TIP_FLAT = float(os.environ.get("TIP_FLAT", "0"))
 
 
 def hand_mats(act):
@@ -857,6 +1044,15 @@ def mean_elev(mats, delta):
         acc += (m @ (delta.to_matrix() @ TIP_L)).normalized()
     d = acc.normalized()
     return math.degrees(math.asin(max(-1, min(1, d.z))))
+
+
+def elev_span(mats, delta):
+    """delta 를 걸었을 때 칼끝 고도가 사이클 안에서 벌어지는 폭(도)."""
+    es = []
+    for m in mats:
+        d = (m @ (delta.to_matrix() @ TIP_L)).normalized()
+        es.append(math.degrees(math.asin(max(-1, min(1, d.z)))))
+    return max(es) - min(es)
 
 
 def cand_deltas():
@@ -895,25 +1091,28 @@ if WRIST_FIX:
         best = None
         for err, mag, lab, q in near[:NCAND]:
             c, p = probe_wrist(new[nm], q)
+            span = elev_span(mats, q)
             cost = (100 * max(0.0, p - PEN_MAX) + 100 * max(0.0, CLEAR_MIN - c)
-                    + 0.02 * err + 0.004 * mag)
+                    + 0.02 * err + 0.004 * mag + TIP_FLAT * span)
             print("       후보 %-12s 고도오차 %4.1f도 회전 %2.0f도 -> 여유 %+.3f "
-                  "관통 %.3f 점수 %.3f" % (lab, err, mag, c, p, cost))
+                  "관통 %.3f 고도폭 %4.1f도 점수 %.3f"
+                  % (lab, err, mag, c, p, span, cost))
             if best is None or cost < best[0]:
                 best = (cost, lab, q, c, p, mag, err)
         base_cost = (100 * max(0.0, M_RAW[nm]["pen"] - PEN_MAX)
                      + 100 * max(0.0, CLEAR_MIN - M_RAW[nm]["clear"])
-                     + 0.02 * abs(e0 - TIP_ELEV))
+                     + 0.02 * abs(e0 - TIP_ELEV)
+                     + TIP_FLAT * elev_span(mats, Quaternion()))
         if best is None or best[0] >= base_cost:
             print("       -> 보정 안 함(보정 전 점수 %.3f 가 더 낫다)" % base_cost)
             WRIST_USED[nm] = None
             continue
         apply_wrist(new[nm], best[2])
         WRIST_USED[nm] = (best[1], best[5], best[3], best[4])
-        print("       -> 채택 %s (회전 %.0f도, 여유 %+.3f 관통 %.3f, 고도 %+.1f도, "
-              "점수 %.3f < 보정전 %.3f)"
+        print("       -> 채택 %s (회전 %.0f도, 여유 %+.3f 관통 %.3f, 고도 %+.1f도"
+              "(폭 %.1f도), 점수 %.3f < 보정전 %.3f)"
               % (best[1], best[5], best[3], best[4], mean_elev(mats, best[2]),
-                 best[0], base_cost))
+                 elev_span(mats, best[2]), best[0], base_cost))
 
     print("\n[칼 흔들림] 손목 보정 후")
     for nm in NATIVE:
