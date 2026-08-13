@@ -3,29 +3,29 @@
  "res": 1024,
  "lin": {
   "dg_floor": [
-   0.3337761270359522,
-   0.28603025327661974,
-   0.22072535286508202
+   0.3236258043905626,
+   0.280845287937658,
+   0.23400523485718866
   ],
   "dg_floor_b": [
-   0.3518021485163136,
-   0.2859740691431592,
-   0.20568460054976762
+   0.3457460845109163,
+   0.2828778944244123,
+   0.21227157199006136
   ],
   "dg_wall": [
-   0.638125920199907,
-   0.5929577420812858,
-   0.5146893620529305
+   0.6326862545823847,
+   0.5884160514549587,
+   0.5138490423737253
   ],
   "dg_block": [
-   0.7128487423256441,
-   0.6964366417595326,
-   0.6466873351353264
+   0.6873266591897568,
+   0.6716751247679354,
+   0.6307797157758689
   ],
   "dg_medallion": [
-   0.1840783032560619,
-   0.213793502536438,
-   0.18705426712978
+   0.2148268983857035,
+   0.25638432090956353,
+   0.22533728005009296
   ],
   "dg_crack": [
    0.039666270791267506,
@@ -39,69 +39,69 @@
   ]
  },
  "gain": {
-  "dg_floor": 1.3458,
-  "dg_floor_b": 1.3713,
-  "dg_wall": 2.7609,
-  "dg_block": 2.5308,
+  "dg_floor": 1.407,
+  "dg_floor_b": 1.4474,
+  "dg_wall": 2.6925,
+  "dg_block": 2.3012,
   "dg_medallion": 1.0
  },
  "seam": {
   "dg_floor": {
    "tag": "dg_floor",
-   "seam_v": 1.9,
-   "seam_h": 0.97
+   "seam_v": 0.97,
+   "seam_h": 1.13
   },
   "dg_floor_b": {
    "tag": "dg_floor_b",
-   "seam_v": 2.32,
-   "seam_h": 1.13
+   "seam_v": 0.97,
+   "seam_h": 1.18
   },
   "dg_wall": {
    "tag": "dg_wall",
-   "seam_v": 0.36,
-   "seam_h": 31.34
+   "seam_v": 0.38,
+   "seam_h": 37.81
   }
  },
  "stat": {
   "dg_floor": {
    "tag": "dg_floor",
-   "S_med": 0.1553,
-   "lum_mean": 0.5725,
-   "rel_macro": 0.0794,
-   "rel_meso": 0.0993,
-   "rel_fine": 0.0894,
-   "macro_over_meso": 0.8,
-   "stones": 28,
-   "stones_planned": 34
+   "S_med": 0.0904,
+   "lum_mean": 0.5686,
+   "rel_macro": 0.0645,
+   "rel_meso": 0.0861,
+   "rel_fine": 0.0835,
+   "macro_over_meso": 0.749,
+   "stones": 30,
+   "stones_planned": 40
   },
   "dg_floor_b": {
    "tag": "dg_floor_b",
-   "S_med": 0.2953,
-   "lum_mean": 0.5749,
-   "rel_macro": 0.0786,
-   "rel_meso": 0.0884,
-   "rel_fine": 0.0792,
-   "macro_over_meso": 0.889,
-   "stones": 16,
-   "stones_planned": 34
+   "S_med": 0.2947,
+   "lum_mean": 0.5728,
+   "rel_macro": 0.056,
+   "rel_meso": 0.0756,
+   "rel_fine": 0.0756,
+   "macro_over_meso": 0.74,
+   "stones": 18,
+   "stones_planned": 40
   },
   "dg_wall": {
    "tag": "dg_wall",
-   "S_med": 0.0972,
-   "lum_mean": 0.7895,
-   "rel_macro": 0.0752,
-   "rel_meso": 0.1334,
-   "rel_fine": 0.1203,
-   "macro_over_meso": 0.564
+   "S_med": 0.0973,
+   "lum_mean": 0.789,
+   "rel_macro": 0.0724,
+   "rel_meso": 0.1165,
+   "rel_fine": 0.0836,
+   "macro_over_meso": 0.622
   },
   "dg_block": {
    "tag": "dg_block",
-   "S_med": 0.0495,
-   "lum_mean": 0.8355,
-   "rel_macro": 0.0567,
-   "rel_meso": 0.1639,
-   "rel_fine": 0.2066,
-   "macro_over_meso": 0.346
+   "S_med": 0.0496,
+   "lum_mean": 0.8348,
+   "rel_macro": 0.0658,
+   "rel_meso": 0.1176,
+   "rel_fine": 0.0891,
+   "macro_over_meso": 0.56
   }
  }
 }

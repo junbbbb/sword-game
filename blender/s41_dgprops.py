@@ -91,6 +91,7 @@ NL_FLOOR = B["nlFloor"]
 NEAR_R, NEAR_P = B["near"]["r"], B["near"]["p"]
 NEAR_RANGE, NEAR_NL = B["near"]["range"], B["near"]["nl"]
 HFALL_Y0, HFALL_SPAN, HFALL_MIN = B["hfall"]["y0"], B["hfall"]["span"], B["hfall"]["min"]
+HFALL_TINT = np.array(B["hfall"].get("tint", [1.0, 1.0, 1.0]), np.float64)
 CONTACT_AO, CONTACT_R = B["contact"]["ao"], B["contact"]["r"]
 CONTACT_AO2, CONTACT_R2 = B["contact"]["ao2"], B["contact"]["r2"]
 CELL, GRID, HALF = B["cell"], B["grid"], B["half"]
@@ -98,7 +99,12 @@ FLOOR_Y = B["floorY"]
 HUE_KEEP = B["hueKeep"]
 # ★TOP_MUL 은 배치표에 없다(s40 의 Buf.wallfam 쪽 상수다). 값이 갈리면 곧바로
 #   윗면이 밝아져 눈에 띄므로 여기 적고 아래 [곱수] 줄이 결과를 찍는다.
-TOP_MUL = 0.46
+# ★★★17차. s40 과 **같이** 내렸다(0.46 -> 0.29) + 색상 회전(TOP_TINT) 신설.
+#   비평 ① "회랑에서 화면 2/3 가 민짜 벽 윗면". 갓돌·모서리돌·잔해가 전부
+#   그 마루에 앉아 있으므로 s40 만 고치면 소품만 혼자 밝은 판으로 남는다.
+#   ★두 파일의 값이 갈리면 갓돌이 벽 마루에서 떠 보인다. 늘 같이 고칠 것.
+TOP_MUL = 0.29
+TOP_TINT = np.array((0.66, 0.80, 1.42), np.float64)
 WALLFAM = {"cut", "trim", "rubble"}      # 수직면 조도로 푼 재질 = 윗면을 눌러야 한다
 
 LIGHTS = [(l[0], l[1], l[2], l[3], l[4], np.array(l[5:8], np.float64), l[8])
@@ -107,11 +113,14 @@ BLOCKED = [row for row in B["blocked"]]
 
 
 def height_fall(y):
+    # ★★★17차. s40 과 **한 글자도 다르면 안 된다**(아래 lumCheck 가 잡는다).
+    #   스칼라 -> RGB. 올라갈수록 어두워지고 동시에 남보라로 돈다(비평 ④).
     if y <= HFALL_Y0:
-        return 1.0
+        return np.ones(3, np.float64)
     t = min(1.0, (y - HFALL_Y0) / HFALL_SPAN)
     t = t * t * (3.0 - 2.0 * t)
-    return 1.0 - (1.0 - HFALL_MIN) * t
+    k = 1.0 - (1.0 - HFALL_MIN) * t
+    return (np.ones(3, np.float64) + (HFALL_TINT - 1.0) * t) * k
 
 
 def lum(gx, gz, y, moss=0.0, nrm=None):
@@ -482,7 +491,7 @@ for kind, places in sorted(PROPS.items()):
             n = (nn[i][0], nn[i][2], -nn[i][1])      # 블렌더 -> 게임 좌표 법선
             c = lum(gx, gz, gy, nrm=n)
             if wallfam and abs(n[1]) > 0.70:
-                c = c * TOP_MUL
+                c = c * TOP_MUL * TOP_TINT
             c = c * ao_k[i] * contact_ao(gx, gz) * fv
             if wallfam:
                 c = c * np.array((fw, 1.0, 2.0 - fw))

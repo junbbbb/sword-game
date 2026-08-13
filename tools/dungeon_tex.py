@@ -92,9 +92,19 @@ NMOD = int(round(FLOOR_M / MOD))          # 20 x 20 모듈
 #   **0.8~1.4m** 다. 처방전 표대로 구운 1차는 화면에서 판석이 아니라 **자갈밭**으로
 #   읽혔다. 배합비 15/50/35 와 "가운데 크기가 절반"은 그대로 지킨다.
 #   장수는 5m 타일에 약 35장(덮임 0.70 기준) — 폴리카운트 하한 16 위다.
-STONE_MIX = [(4, 4, 8), (4, 3, 5), (3, 4, 5),         # 1.00 계열 (35%)
-             (3, 3, 17), (3, 2, 5), (2, 3, 5),        # 0.75 계열 (50%)
-             (2, 2, 11)]                              # 0.50 계열 (15%)
+# ★★★17차 — 블라인드 맵 비평 ③ "바닥 돌마다 같은 주름 스탬프 = 모눈종이".
+#   16차 배합은 0.50 ~ 1.00m 뿐이라 **크기 폭이 2배**였다. 자기상관 뾰족함이
+#   62(롤 레퍼런스 11~19)로 나온 직접 원인이다. 위아래로 한 칸씩 늘려
+#   **0.25 ~ 1.25m = 5배**로 벌린다(처방전 B-1 "최대/최소비가 롤 실측 5~6배").
+#   비중은 여전히 15/50/35 의 뜻을 지킨다 — **가운데 크기가 절반**이고,
+#   큰 것부터 놓고 남는 틈을 작은 것이 메운다(plan_stones 가 그 순서다).
+#   ★큰 돌 요청 수는 **적게** 잡는다. 큰 것부터 놓는 탐욕 배치라 요청을 넉넉히
+#     주면 20x20 모듈 격자를 큰 돌이 다 먹어 버린다(1차 조정에서 1.0m 이상이
+#     35장 중 14장을 차지했다 = "가운데 크기가 절반"의 정반대).
+STONE_MIX = [(5, 5, 2), (5, 4, 2), (4, 5, 2),         # 1.25 계열 (큰 돌 먼저)
+             (4, 4, 3), (4, 3, 2), (3, 4, 2),         # 1.00 계열
+             (3, 3, 12), (3, 2, 6), (2, 3, 6),        # 0.75 계열 (★가운데가 절반)
+             (2, 2, 8), (2, 1, 6), (1, 2, 6)]         # 0.50 · 0.25 낱개 조각
 MAX_JOINT_RUN = 12            # 줄눈이 직선으로 이어질 수 있는 최대 모듈 수(3.0m)
 JOINT_PX = 3.0                # 줄눈 폭(px). 0.5m 판 기준 1.5%  (실물 규격 10~12mm)
 COVER_DENSE = 0.72            # 방·제단 둘레 덮임률
@@ -109,18 +119,28 @@ COVER_SPARSE = 0.42           # 통로·방 한복판 덮임률
 #   판석은 파랑이 아니라 **따뜻한 무채**(#2a2924 = H48 S0.13)고 흙과 색상이 15도밖에
 #   안 벌어져 있다. 갈라놓는 것은 **채도**(0.46 vs 0.13)지 색상이 아니다.
 #   14차의 "보라 줄눈 vs 크림 판석"과 같은 실수를 색만 바꿔 되풀이할 뻔했다.
+# ★★★17차 — 블라인드 맵 비평 ④ "화면 전체가 330~30도 색상 쐐기 안. 차가운 색 0".
+#   같은 자로 재면 우리 바닥 화소의 **78~85%가 그 쐐기 안**이고(롤 레퍼런스 4~50%)
+#   채도 0.10 이상인 화소가 **97~99%** 다. 즉 화면에 무채도 냉색도 없다.
+#   ★알베도로 주황을 칠하지 않는다는 15차 원칙은 그대로다 — 여기서 하는 일은
+#     **찬 변주의 색상을 실제로 차게 하고 그 몫을 늘리는 것**이다(채도는 안 올린다).
+#     찬 변주 회녹(H100 S0.03) -> **청보라(H222 S0.11)**. 눈이 "다른 돌"로 읽는다.
 ALB_DIRT = (0x96, 0x83, 0x69)        # 흙 (H32 S0.30 V0.59)  따뜻하다
 ALB_DIRT2 = (0x86, 0x75, 0x5e)       # 흙 어두운 쪽
 ALB_STONE = (0x83, 0x7f, 0x77)       # 판석 (H41 S0.08 V0.545) ★따뜻한 무채
-ALB_STONE_C = (0x7b, 0x7e, 0x7a)     # 판석 찬 변주(청록이 아니라 **회녹**)
+ALB_STONE_C = (0x79, 0x7c, 0x83)     # 판석 찬 변주 ★17차. 회녹 -> **옅은 청회**
 ALB_STONE_W = (0x8c, 0x84, 0x76)     # 판석 따뜻 변주
 ALB_JOINT = (0x63, 0x59, 0x49)       # 줄눈(흙의 어두운 값. ★보색이 아니다)
-ALB_PEBBLE = (0x7d, 0x77, 0x6c)      # 흙에 박힌 자갈
+ALB_PEBBLE = (0x7a, 0x77, 0x71)      # 흙에 박힌 자갈 ★17차. 따뜻함을 절반만 뺀다
 ALB_MOSS = (0x5c, 0x6b, 0x3e)        # 이끼 (줄눈·구석에만)
 ALB_WALL = (0x8b, 0x86, 0x7d)        # 벽 몸통 막돌 (H45 S0.09) ★따뜻한 무채
-ALB_WALL_C = (0x7e, 0x82, 0x86)      # 벽 찬 변주(회청. 아주 옅게)
+ALB_WALL_C = (0x79, 0x7e, 0x88)      # 벽 찬 변주 ★17차. 회청을 한 걸음 더 차게(S0.08)
 ALB_WALL_W = (0x92, 0x8b, 0x7e)      # 벽 따뜻 변주
-ALB_WGROUT = (0x72, 0x6e, 0x67)      # 벽 줄눈 ★같은 색의 어두운 값(휘도 0.62배)
+# ★★★17차 — 오너 직접 지적 "통나무나 벽에 그 무늬를 구분하는 선이 너무 진한 느낌".
+#   처방전 B-5 계약은 **줄눈 = 판석과 같은 색의 어두운 값, 선형 휘도 0.55~0.70배**다.
+#   실측하니 dg_wall 0.527 · **dg_block 0.200**(!)로 둘 다 계약 밖이었다.
+#   아래 값과 bake_wall 의 잡음 폭·함몰 세기를 같이 고쳐 계약 안으로 되돌린다.
+ALB_WGROUT = (0x78, 0x74, 0x6d)      # 벽 줄눈 ★17차. 0x72 -> 0x78 (휘도 0.70배)
 ALB_CUT = (0x9d, 0x9b, 0x95)         # 다듬은 돌(기둥·아치·트림)
 ALB_GOLD = (0xc8, 0xa2, 0x58)        # 황동(횃불 받침·금테)
 ALB_TEAL_HI = (0x5f, 0xb0, 0xb4)     # 메달리온 청록
@@ -401,6 +421,9 @@ def stone_polys(stones, seed=1502):
         #   0.75~0.95. 진폭이 아니라 **형태**가 없었다 = 그게 "판때기" 다.
         #   아래 넷은 전부 잡음이 아니라 **그림**이다(방향·자리·개수가 있다).
         gr_on = rs.rand() < 0.62
+        # ★★★17차. 스탬프 장수를 **먼저** 뽑는다(제비를 뒤에 뽑으면 종·회전이
+        #   장수와 얽혀 한 판이 바뀔 때 뒤 판이 통째로 밀린다).
+        n_stamp = 1 + (1 if gr_on else 0) + (1 if rs.rand() < 0.30 else 0)
         out.append({"c": (cx, cy), "pts": pts, "hw": hw, "hh": hh,
                     "grade": grade, "chip": int(rs.randint(0, 4)),
                     "chipk": 0.16 + rs.rand() * 0.20,
@@ -411,35 +434,46 @@ def stone_polys(stones, seed=1502):
                     "tilt": (rs.rand() - 0.5) * 2.0,       # 기울어 앉음
                     "split": rs.rand() * math.pi,
                     "wsel": rs.rand(),
-                    # ① 결(층리) — ★주기 함수가 아니라 **낱개 선**이다.
-                    #   사인·tanh 로 그으면 골판지가 된다(16차 1차 굽기가 그랬다).
-                    #   돌의 결은 몇 줄뿐이고 간격도 길이도 제각각이다.
-                    "lines": [
-                        (rs.rand() * math.pi if i == 0 else None,   # 방향(첫 줄이 기준)
-                         (rs.rand() - 0.5) * 1.5,                   # 판 안 위치(-0.75~0.75)
-                         0.28 + rs.rand() * 0.46,                   # 길이(판 반지름 배수)
-                         2.4 + rs.rand() * 3.0,                     # 굵기(px)
-                         #  ★화면은 64px/m 인데 텍스처는 205px/m 다 = **3.2배 축소**다.
-                         #    2px 선은 화면에서 0.6px 라 사라지거나 지글거린다.
-                         #    선은 최소 2.4px(화면 0.75px)부터 그린다
-                         0.050 + rs.rand() * 0.052,                 # 어두운 정도
-                         (rs.rand() - 0.5) * 1.1)                   # 휨
-                        for i in range((1 if gr_on else 0) + int(rs.rand() * 3.0))],
-                    "line_a": rs.rand() * math.pi,                  # 결의 기준 방향
+                    # ①★★★17차 — **스탬프 여덟 종**(비평 ③ "돌마다 같은 V자 주름").
+                    #   16차는 종이 하나뿐이었다: 포물선으로 휘는 낱개 선.
+                    #   `lb`(휨)가 ±0.55 라 거의 모든 판에 같은 **V 자 주름**이 앉았고,
+                    #   그게 화면에서 "같은 도장을 스물다섯 번 찍은 모눈종이"로 읽혔다.
+                    #   이제 여덟 종에서 **1~2종을 뽑고, 회전과 좌우 뒤집기를 무작위로**
+                    #   준다. 종·회전·미러가 갈리면 같은 종이라도 같은 그림이 아니다.
+                    #   ★"휨"을 아예 없앤다 — 곡선 주름은 그 한 종(stain)만 갖는다.
+                    "stamps": [
+                        (STAMP_KINDS[int(rs.rand() * len(STAMP_KINDS))],
+                         rs.rand() * math.pi * 2.0,                 # 회전
+                         1.0 if rs.rand() < 0.5 else -1.0,          # 좌우 뒤집기
+                         (rs.rand() - 0.5) * 1.1,                   # 자리 u
+                         (rs.rand() - 0.5) * 1.1,                   # 자리 v
+                         0.72 + rs.rand() * 0.62,                   # 크기 배수
+                         0.80 + rs.rand() * 0.55,                   # 세기 배수
+                         rs.rand())                                 # 종별 씨앗
+                        for _ in range(n_stamp)],
                     # ② 풍화 얼룩 — 판마다 서너 덩이. 0.07~0.18m
                     #   ★반경이 판 크기에 가까우면 판 전체가 한 단계 밝아질 뿐이라
                     #     **면 안의 변화**가 안 생긴다(16차 2차 굽기의 실패).
+                    #   ★★★17차. 진폭 0.175 -> 0.130. 이 넓은 얼룩이 모든 판에
+                    #   깔린 **공통 바탕**이라, 세면 스탬프(정보)를 덮어 판끼리
+                    #   비슷해진다(자기유사도 측정에서 확인). 스탬프에 자리를 내준다.
                     "blob": [(rs.rand() * 1.5 - 0.75, rs.rand() * 1.5 - 0.75,
                               0.14 + rs.rand() * 0.17, 0.14 + rs.rand() * 0.17,
-                              (rs.rand() - 0.45) * 0.175)
+                              (rs.rand() - 0.45) * 0.130)
                              for _ in range(3 + int(rs.rand() * 2))],
                     # ②' 깨진 자국 — 떨어져 나가 속살이 드러난 밝은 자리(가장자리 쪽)
                     "scar": [(rs.rand() * 6.2832, 0.52 + rs.rand() * 0.42,
                               7.0 + rs.rand() * 9.0, 0.048 + rs.rand() * 0.048)
                              for _ in range(int(rs.rand() * 2.4))],
                     # ③ 닳은 모서리 — 한쪽 귀퉁이만 밝다(전부면 또 균일해진다)
-                    "worn": (rs.rand() * 6.2832, 0.055 + rs.rand() * 0.055,
-                             rs.rand() < 0.55),
+                    #   ★★★17차. **판의 55%에만** 넣는다. 전 판에 같은 방향 기울기가
+                    #   깔려 있으면 그것이 곧 "모든 돌이 같아 보이는" 밑바탕이 된다
+                    #   (측정: 스탬프를 여덟 종으로 갈았는데 자기유사도가 0.531 ->
+                    #   0.594 로 **올랐다**. 범인이 이 줄이었다. 문턱·폭도 흩는다).
+                    "worn": (rs.rand() * 6.2832,
+                             (0.055 + rs.rand() * 0.075) * (1.0 if rs.rand() < 0.55 else 0.0),
+                             rs.rand() < 0.55, 0.30 + rs.rand() * 0.26,
+                             0.24 + rs.rand() * 0.28),
                     # ⑤ 윤곽 결손 — 변에서 한 입 베어 문다(직선 변을 깬다).
                     #   ★원이 아니라 **마름모**다. 원으로 깎으면 팩맨 입이 된다
                     "notch": [(rs.rand() * 6.2832, 10.0 + rs.rand() * 13.0,
@@ -450,8 +484,105 @@ def stone_polys(stones, seed=1502):
 
 
 # ═════════════════════════════════════════════════════════════
-# ★16차 — 면 **안에** 형태를 그린다
+# ★★★17차 — 판석 **속그림 스탬프 여덟 종**
 # ═════════════════════════════════════════════════════════════
+# 비평 ③: "바닥 돌마다 같은 V 자 주름 스탬프가 반복 = 모눈종이".
+# 16차의 속그림은 종이 하나(포물선으로 휘는 낱개 선)뿐이었고 그 휨 계수가
+# ±0.55 라 거의 모든 판에 같은 V 가 앉았다. 여기서 종을 여덟으로 늘리고
+# **회전 · 좌우 뒤집기 · 자리 · 크기 · 세기**를 판마다 따로 뽑는다.
+#
+# ★규칙 (전부 처방전 2-3 · B-13)
+#   · 전부 **0.11m(23px) 이상**의 형상. 그 아래는 화면에서 지글거림만 남는다
+#   · 선은 최소 2.4px(화면 0.75px). 텍스처 205px/m -> 화면 64px/m 는 3.2배 축소다
+#   · 흰색 금지. 밝은 쪽도 **판석 제 색의 밝은 값**이라 배수로만 건드린다
+#   · 어두운 값 폭은 판석 밑값의 ±8% 안(오너 지적 "구분선이 너무 진하다")
+STAMP_KINDS = ("bed", "flake", "chisel", "vein", "spall", "pit", "stain", "hair")
+
+
+STAMP_GAIN = 1.40      # ★17차 2차 조정. 아래 amp 값 전체에 곱한다(측정 근거는 함수 주석)
+
+
+def _stamp_field(u, v, r, kind, sd, sc, amp):
+    """스탬프 하나. 이미 **회전·미러가 끝난** 국소 좌표 (u, v) 를 받는다.
+
+    r 은 판의 반지름(px). 돌려주는 것은 1.0 근처의 배수 필드.
+    """
+    sh = 1.0
+    amp = amp * STAMP_GAIN
+    R = max(r * sc, 6.0)
+    if kind == "bed":
+        # 층리 — **직선** 낱개 선 두셋. 서로 평행하되 길이·굵기·자리가 다르다
+        for i in range(2 + int(sd * 2.4)):
+            off = (((sd * 7.3 + i * 0.41) % 1.0) - 0.5) * 1.25 * r
+            L = (0.30 + ((sd * 3.1 + i * 0.27) % 1.0) * 0.45) * R
+            w = 2.4 + ((sd * 5.7 + i * 0.63) % 1.0) * 2.2
+            a = (0.030 + ((sd * 2.9 + i * 0.19) % 1.0) * 0.035) * amp
+            d = np.hypot(v - off, np.clip(np.abs(u) - L, 0.0, None))
+            sh = sh * (1.0 - a * _smooth((w - d) / (w * 0.9)))
+            sh = sh * (1.0 + a * 0.40 * _smooth((w * 1.5 - np.abs(d - w * 1.9))
+                                                / (w * 1.2)))
+    elif kind == "flake":
+        # 박리 — 껍질이 벗겨져 한쪽 면이 얕게 낮아졌다. 경계 하나 + 면 하나
+        n = (u * 0.82 + v * 0.57) / max(r, 1e-3) - (sd - 0.5) * 0.55
+        face = _smooth(n / 0.46)     # ★17차. 0.30 은 접힌 종이처럼 각졌다
+        sh = sh * (1.0 - 0.038 * amp * face)                 # 벗겨진 면이 낮다
+        sh = sh * (1.0 - 0.045 * amp * _smooth((0.10 - np.abs(n)) / 0.09))
+        sh = sh * (1.0 + 0.035 * amp * _smooth((0.22 - np.abs(n + 0.16)) / 0.10))
+    elif kind == "chisel":
+        # 정 자국 — 짧은 평행 획 다섯 남짓이 한 띠 안에 모여 있다
+        for i in range(4 + int(sd * 3.0)):
+            off = (i - 2.5) * (0.16 * R) + (sd - 0.5) * 0.3 * R
+            L = (0.16 + ((sd * 4.7 + i * 0.31) % 1.0) * 0.16) * R
+            w = 2.4 + ((sd * 6.1 + i * 0.53) % 1.0) * 1.2
+            a = 0.026 * amp
+            uu = u - ((sd * 9.1 + i * 0.71) % 1.0 - 0.5) * 0.35 * R
+            d = np.hypot(v - off, np.clip(np.abs(uu) - L, 0.0, None))
+            sh = sh * (1.0 - a * _smooth((w - d) / (w * 0.9)))
+    elif kind == "vein":
+        # 광맥 — 판을 가로지르는 **밝은** 한 줄(꺾여 간다. 곡선이 아니다)
+        k = (sd - 0.5) * 0.9
+        n = v - k * u
+        w = 3.0 + sd * 2.4
+        d = np.abs(n) / math.sqrt(1.0 + k * k)
+        sh = sh * (1.0 + 0.052 * amp * _smooth((w - d) / (w * 0.85)))
+        sh = sh * (1.0 - 0.022 * amp * _smooth((w * 2.6 - np.abs(d - w * 2.2))
+                                               / (w * 1.4)))
+    elif kind == "spall":
+        # 박락 — 모서리 하나가 각지게 떨어져 나가 **속살(밝은 면)** 이 드러났다
+        du = np.abs(u - 0.62 * r) + np.abs(v - 0.30 * r)
+        m = _smooth((0.52 * R - du) / (0.30 * R))
+        sh = sh * (1.0 + 0.070 * amp * m)
+        sh = sh * (1.0 - 0.040 * amp * _smooth((0.10 * R
+                                                - np.abs(du - 0.52 * R)) / (0.09 * R)))
+    elif kind == "pit":
+        # 구멍 — 작고 둥근 함몰 서넛(테두리만 살짝 밝다)
+        for i in range(3 + int(sd * 2.4)):
+            px = ((sd * 11.7 + i * 0.37) % 1.0 - 0.5) * 1.3 * r
+            py = ((sd * 13.1 + i * 0.61) % 1.0 - 0.5) * 1.3 * r
+            rr = (0.055 + ((sd * 3.7 + i * 0.29) % 1.0) * 0.055) * R * 1.6
+            rr = max(rr, 6.0)
+            d = np.hypot(u - px, v - py)
+            sh = sh * (1.0 - 0.055 * amp * _smooth((rr - d) / (rr * 0.8)))
+            sh = sh * (1.0 + 0.028 * amp * _smooth((rr * 0.42
+                                                    - np.abs(d - rr * 1.15)) / (rr * 0.5)))
+    elif kind == "stain":
+        # 물 자국 — 위에서 아래로 번진 넓고 부드러운 얼룩. **유일한 곡선 종**이다
+        t = (v + r) / max(2 * r, 1e-3)
+        band = np.exp(-0.5 * ((u - (sd - 0.5) * 0.7 * r) / max(0.34 * R, 6.0)) ** 2)
+        sh = sh * (1.0 - 0.058 * amp * band * np.clip(t, 0, 1))
+    else:  # hair
+        # 실금 — 한 점에서 갈라져 나가는 가는 금 세 가닥
+        for i in range(3):
+            th = sd * 6.2832 + i * 2.09
+            ca, sa = math.cos(th), math.sin(th)
+            t = u * ca + v * sa
+            n = -u * sa + v * ca
+            L = (0.45 + ((sd * 5.3 + i * 0.43) % 1.0) * 0.40) * R
+            d = np.hypot(n, np.clip(np.abs(t - L * 0.5) - L * 0.5, 0.0, None))
+            sh = sh * (1.0 - 0.030 * amp * _smooth((2.4 - d) / 2.2))
+    return sh
+
+
 def stone_grain(lx, ly, hw, hh, p):
     """판석 하나의 **속그림**. 배수 필드(1.0 근처)를 돌려준다.
 
@@ -478,28 +609,22 @@ def stone_grain(lx, ly, hw, hh, p):
         du = np.abs(lx - sx) + np.abs(ly - sy)             # 마름모(각진 깨짐)
         sh = sh * (1.0 + samp * _smooth((srad - du) / (srad * 1.25)))
 
-    # ③ 닳은 모서리. 한 방향만 밝게(또는 어둡게)
-    (wa, wamp, wpos) = p["worn"]
-    pr = (lx * math.cos(wa) + ly * math.sin(wa)) / max(r, 1e-3)
-    w = _smooth((pr - 0.42) / 0.38)
-    sh = sh * (1.0 + (wamp if wpos else -wamp) * w)
+    # ③ 닳은 모서리. 한 방향만 밝게(또는 어둡게). ★17차 — 판의 55%에만, 문턱·폭도 흩는다
+    (wa, wamp, wpos, wthr, wsp) = p["worn"]
+    if wamp > 1e-6:
+        pr = (lx * math.cos(wa) + ly * math.sin(wa)) / max(r, 1e-3)
+        w = _smooth((pr - wthr) / wsp)
+        sh = sh * (1.0 + (wamp if wpos else -wamp) * w)
 
-    # ① 결 · 실금 — **낱개 선**이다. 판을 다 안 가로지르고, 길이도 굵기도 다르다.
-    #   틈은 어둡고 그 위 가장자리는 밝다
-    #   (처방전 2-3 Charré: "increasing the dark inside and highlighting the borders")
-    base_a = p["line_a"]
-    for (la, lo, ll, lw, ld, lb) in p["lines"]:
-        a = base_a + (0.0 if la is None else 0.0) + (lo * 0.18)   # 줄끼리 살짝 벌어진다
-        ca, sa = math.cos(a), math.sin(a)
-        t = lx * ca + ly * sa
-        n = -lx * sa + ly * ca - lo * r * 0.55
-        L = ll * r
-        n = n - lb * (t / max(L, 1e-3)) ** 2 * L * 0.22           # 살짝 휜다
-        seg = np.clip(np.abs(t) - L, 0.0, None)
-        d = np.hypot(n, seg)
-        sh = sh * (1.0 - ld * _smooth((lw - d) / (lw * 0.9)))
-        sh = sh * (1.0 + ld * 0.24 * _smooth((lw * 1.6 - np.abs(d - lw * 2.0))
-                                             / (lw * 1.3)))
+    # ①★★★17차 — 스탬프. 종 · 회전 · 좌우 뒤집기 · 자리 · 크기 · 세기가 판마다 다르다.
+    #   16차의 "휘는 낱개 선" 한 종을 여기서 통째로 갈아 냈다(비평 ③).
+    for (kind, ang, mir, su, sv, sc, samp, sd) in p["stamps"]:
+        ca, sa = math.cos(ang), math.sin(ang)
+        ox = lx - su * hw * 0.55
+        oy = ly - sv * hh * 0.55
+        u = (ox * ca + oy * sa) * mir          # ★미러 = 같은 종도 다른 그림이 된다
+        v = -ox * sa + oy * ca
+        sh = sh * _stamp_field(u, v, r, kind, sd, sc, samp)
     return sh
 
 
@@ -680,10 +805,13 @@ def bake_ground(coverage, seed=1501, keep_field=None, tag=""):
         if inside.max() <= 0.02:
             continue
         # 판별 색: 밑값 ±6% · 색상 ±4° · **채도는 안 흔든다**(처방전 2-3)
+        # ★★★17차. 찬 변주의 몫을 0.28 -> **0.40** 으로 늘렸다(비평 ④ "차가운 색 0").
+        #   따뜻한 변주는 0.28 -> 0.22 로 줄인다. 세 색의 비가 22 : 38 : 40
+        #   (따뜻 : 중립 : 찬)이 되어 바닥 색상 히스토그램이 두 봉우리로 갈린다.
         base = c8(ALB_STONE)
-        if p["wsel"] > 0.72:
+        if p["wsel"] > 0.78:
             base = c8(ALB_STONE_W)
-        elif p["wsel"] < 0.28:
+        elif p["wsel"] < 0.40:
             base = c8(ALB_STONE_C)
         col = _hsv_shift(base, dh_deg=p["hjit"] * 5.0, dv=1.0 + p["vjit"] * 0.105)
         # 판 안의 작은 기울기: 위가 밝고 아래가 어둡다(베개 음영 금지)
@@ -715,9 +843,12 @@ def bake_ground(coverage, seed=1501, keep_field=None, tag=""):
     # ── ⑤ 함몰 그림자 ────────────────────────────────────
     # ★"위에서 내리쬐는 빛에서 돌을 서로 떼어 놓는 것이 바로 이 함몰"(처방전 B-6).
     #   판 **바깥** 3~4px 을 어둡게 한다. 판 안은 안 건드린다(테두리 어둠 = 베개다).
+    # ★★★17차. 0.50 -> **0.36**. 오너 지적("구분선이 너무 진하다")은 벽만이 아니라
+    #   바닥 줄눈에도 걸린다. 함몰은 판을 떼어 놓는 장치지 **선을 그리는 장치가 아니다**.
+    #   실측 줄눈/판 휘도비 0.561 은 계약(0.55~0.70) 하단이라 위쪽으로 올린다.
     blur = _tz.wrap_blur(stone_mask[:, :, None].astype(np.float32), 4, passes=2)[:, :, 0]
     ao = np.clip(blur - stone_mask, 0, 1)
-    img = img * (1.0 - 0.50 * ao)[:, :, None]
+    img = img * (1.0 - 0.36 * ao)[:, :, None]
     wide = _tz.wrap_blur(stone_mask[:, :, None].astype(np.float32), 13, passes=2)[:, :, 0]
 
     # ── ②' 자갈 — ★포장 **가장자리**에 몰린다 ────────────
@@ -770,7 +901,12 @@ def bake_ground(coverage, seed=1501, keep_field=None, tag=""):
     img = img * (1 - mm[:, :, None]) + moss[None, None, :] * mm[:, :, None]
 
     # ── ⑦ 균열 — 판석 경계를 무시하고 지나간다 ────────────
-    img = draw_cracks(img, rs, n=2, seed=seed + 91, mask=stone_mask)
+    # ★★★17차. 두 줄기 -> **네 줄기**(비평 ③ "균열이 여러 돌을 가로지르게").
+    #   그리고 판석 마스크에 **가두지 않는다**: 판석 위는 진하게(0.34), 흙 위는
+    #   옅게(0.13) 이어 그려서 균열 하나가 **판 - 흙 - 판**을 관통해 보이게 한다.
+    #   이게 "격자 안에서만 노는 무늬"와 "지반이 갈라진 그림"을 가르는 한 수다.
+    img = draw_cracks(img, rs, n=3, seed=seed + 91, dark=0.34, mask=stone_mask)
+    img = draw_cracks(img, rs, n=1, seed=seed + 97, width=2.0, dark=0.13, mask=None)
 
     img = np.clip(img, 0, 1).astype(np.float32)
     return img, kept, len(polys)
@@ -833,7 +969,17 @@ def draw_cracks(img, rs, n=2, seed=0, width=2.4, dark=0.42, mask=None):
 #   가로 띠를 어디에 그려도 벽마다 다른 자리에 걸린다. 그래서 **띠는 지오메트리로**
 #   두르고(s40 의 주춧돌·띠돌·갓돌) 이 텍스처는 처방전대로 **몸통 타일**만 맡는다.
 #   그게 처방전 C 의 분업 원칙 그대로다 — "트림은 벽을 대체하지 않는다."
-WALL_JOINT = 3.0          # 줄눈 폭(px). 4.6m/1024 = 222px/m -> 13.5mm
+# ★★★17차 — 오너 직접 지적: "벽에 그 무늬를 구분하는 선이 너무 진한 느낌".
+#   처방전 B-5 계약(줄눈 = 판석 선형 휘도의 0.55~0.70배 · 화면 줄눈 면적 4% 이하)을
+#   같은 자로 재니 **dg_wall 0.527 면적 6.0% · dg_block 0.200 면적 8.8%** 였다.
+#   진하게 만든 범인은 색이 아니라 **두 배수**다:
+#     ① 줄눈 바탕 잡음 (0.72 + 0.36 gn) 은 평균 0.90 = 선형 0.78배로 통째로 어둡히고
+#     ② 줄눈 함몰 그림자 0.30 이 그 위에 또 곱해진다
+#   색(ALB_WGROUT)만 만지면 잡음이 도로 끌어내린다. 세 손잡이를 같이 올린다.
+WALL_JOINT = 2.6          # 줄눈 폭(px) ★17차 3.0 -> 2.6. 0.6m 블록의 1.9%
+WALL_GROUT_LO = 0.88      # 줄눈 바탕 잡음 하한 ★17차 0.72 -> 0.88
+WALL_GROUT_SP = 0.18      # 그 폭      ★17차 0.36 -> 0.18 (평균 0.97 = 선형 0.93배)
+WALL_AO_A = 0.15          # 줄눈 함몰 세기 ★17차 0.30 -> 0.15
 WALL_HI_FRAC = 0.60       # ★하이라이트를 받는 블록 비율. 전부 주면 도장 자국이 된다
 WALL_HI_A = 0.115         # 그 세기(가산). ±20% 로 흩는다
 WALL_LO_A = 0.115         # 밑동 그늘
@@ -854,7 +1000,8 @@ def bake_wall(res=RES, seed=1601, base=ALB_WALL, cool=ALB_WALL_C, warm=ALB_WALL_
     img = np.zeros((res, res, 3), np.float64)
     gcol = c8(grout)
     gn = _vnoise(res, 19, seed + 5)
-    img[:] = gcol[None, None, :] * (0.72 + 0.36 * gn[:, :, None])
+    img[:] = gcol[None, None, :] * (WALL_GROUT_LO
+                                    + WALL_GROUT_SP * gn[:, :, None])
 
     ppm = res / m_per_tile
     if courses is None:
@@ -951,7 +1098,7 @@ def bake_wall(res=RES, seed=1601, base=ALB_WALL, cool=ALB_WALL_C, warm=ALB_WALL_
     # 줄눈 함몰 그림자 — 블록 둘레 바깥만
     blk = _smooth((img.mean(axis=2) - 0.16) / 0.07)
     aoo = _tz.wrap_blur(blk[:, :, None].astype(np.float32), 5, passes=2)[:, :, 0]
-    img = img * (1.0 - 0.30 * np.clip(aoo - blk, 0, 1))[:, :, None]
+    img = img * (1.0 - WALL_AO_A * np.clip(aoo - blk, 0, 1))[:, :, None]
     # ★벽 밑동 오염(오버워치 관례: "walls usually have some dirt on top and bottom").
     #   v_blender 0 = 세계 높이 0 이라 **이미지 맨 아랫줄이 바닥면**이다.
     hgt = np.linspace(0, 1, res)[:, None]
@@ -969,7 +1116,15 @@ def bake_wall(res=RES, seed=1601, base=ALB_WALL, cool=ALB_WALL_C, warm=ALB_WALL_
 # 제단 메달리온
 # ═════════════════════════════════════════════════════════════
 def bake_medallion(res=256):
-    """제단 바닥의 팔각 문양. 청록 + 황동."""
+    """제단 바닥의 팔각 문양. 청록 + 황동.
+
+    ★★★17차 — 블라인드 맵 비평 ⑤ "아레나 링이 **평면 벡터 스티커**".
+      진단은 셋이었다: ① 면이 통째로 한 값의 순색이라 재질이 없다
+      ② 테두리가 수학적으로 완벽한 팔각이라 잘라 붙인 종이로 읽힌다
+      ③ 바닥 판석과 아무 관계가 없다(위에 얹혀 있다).
+      셋을 각각 친다 — **돌 결·마모를 깔고**, **테두리를 깨뜨리고**,
+      **알파를 얼룩지게** 해서 바닥돌이 비쳐 올라오게 한다. 형태(팔각·룬)는 그대로다.
+    """
     yy, xx = np.mgrid[0:res, 0:res].astype(np.float32) / (res - 1) * 2 - 1
     r = np.sqrt(xx * xx + yy * yy)
     ang = np.arctan2(yy, xx)
@@ -1000,9 +1155,33 @@ def bake_medallion(res=256):
     grid = np.minimum(np.abs(((xx * 3.0 + 9) % 1.0) - 0.5), np.abs(((yy * 3.0 + 9) % 1.0) - 0.5))
     gm = _smooth((0.045 - grid) / 0.03) * _smooth((r * oct_r - R_OUT + 0.10) / 0.06)
     rgb = rgb * (1 - gm[:, :, None] * 0.32) + dark[None, None, :] * (gm[:, :, None] * 0.32)
-    rgb = np.clip(rgb * (0.94 + 0.12 * _vnoise(res, 11, 771)[:, :, None]), 0, 1)
-    a = _smooth((R_OUT + 0.02 - r * oct_r) / 0.035)
-    return rgb, a
+    # ── ★★★17차 ① 재질: 돌 결 · 마모 · 실금 ──────────────────
+    #   순색 면 위에 값의 그림을 얹는다. 채도는 안 올린다(처방전 2-3).
+    rsm = np.random.RandomState(7711)
+    grain = (0.90 + 0.20 * _vnoise(res, 9, 771)) \
+        * (0.955 + 0.09 * _fbm(res, 23, 773, 2)) \
+        * (0.975 + 0.05 * _vnoise(res, 47, 775))
+    # 사람이 밟고 지나간 자리 — 가운데를 지나는 넓고 낮은 마모 띠 둘
+    for (wa, wo, ww, wd) in ((0.55, -0.18, 0.40, 0.10), (2.05, 0.22, 0.30, 0.07)):
+        n = -xx * math.sin(wa) + yy * math.cos(wa) - wo
+        grain = grain * (1.0 + wd * np.exp(-0.5 * (n / ww) ** 2))
+    rgb = np.clip(rgb * grain[:, :, None], 0, 1)
+    # 실금 — 문양 경계를 무시하고 지나간다(바닥 균열과 같은 문법)
+    rgb = draw_cracks(rgb, rsm, n=2, seed=7717, width=1.5, dark=0.20)
+    # ── ★★★17차 ② 테두리를 깨뜨린다 ────────────────────────
+    #   완벽한 팔각을 저주파 흔들림으로 밀고, 가장자리에서 몇 조각을 베어 문다
+    wob = (_vnoise(res, 7, 779) - 0.5) * 0.055 + (_vnoise(res, 17, 781) - 0.5) * 0.028
+    edge = r * oct_r + wob
+    a = _smooth((R_OUT + 0.02 - edge) / 0.035)
+    for _ in range(7):
+        na = rsm.rand() * 6.2832
+        nr = 0.10 + rsm.rand() * 0.16
+        nx, ny = math.cos(na) * (R_OUT + 0.03), math.sin(na) * (R_OUT + 0.03)
+        a = a * (1.0 - _smooth((nr - (np.abs(xx - nx) + np.abs(yy - ny))) / (nr * 0.9)))
+    # ── ★★★17차 ③ 알파를 얼룩지게 — 바닥돌이 비쳐 올라온다 ──
+    worn = _smooth((_vnoise(res, 6, 783) - 0.46) / 0.24)
+    a = np.clip(a * (0.62 + 0.38 * worn), 0, 1)
+    return np.clip(rgb, 0, 1), a
 
 
 # ═════════════════════════════════════════════════════════════
@@ -1289,9 +1468,13 @@ def main():
     print("   [화풍] %s" % meta["stat"]["dg_wall"])
 
     print("\n[dg_block]  절차 — 다듬은 돌(기둥·아치·제단·트림)")
-    b = bake_wall(seed=2207, base=ALB_CUT, cool=(0x90, 0x98, 0xa0),
-                  warm=(0xa2, 0x9e, 0x94), grout=(0x4a, 0x4c, 0x52),
-                  quiet=0.55, jitter=0.038, moss=False, m_per_tile=2.6,
+    # ★★★17차. grout 0x4a4c52 -> **0x82848c**. 실측 줄눈/판 휘도비가 **0.200** 이었다
+    #   (계약 0.55~0.70). 기둥·아치·트림·계단이 전부 이 타일이라, 오너가 말한
+    #   "구분하는 선이 너무 진하다"의 가장 큰 몫이 여기였다. 색상(청보라)은 유지한다.
+    #   ★찬 변주도 실제로 차게(0x9098a0 -> 0x8c94a4). 비평 ④의 냉색 예산이 여기서도 온다.
+    b = bake_wall(seed=2207, base=ALB_CUT, cool=(0x92, 0x97, 0xa2),
+                  warm=(0xa2, 0x9e, 0x94), grout=(0x82, 0x84, 0x8c),
+                  quiet=0.55, jitter=0.058, moss=False, m_per_tile=2.6,
                   tool="dressed", grain=1.25)
     b, bgain = normalize_mean(b, TARGET_BLOCK)
     meta["lin"]["dg_block"] = save_rgb("dg_block", b)

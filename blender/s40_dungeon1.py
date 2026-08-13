@@ -216,7 +216,20 @@ TORCH_RANGE = 2.45    # 사거리 = R 의 몇 배까지 빛이 닿는가
 #   풀었으므로 같은 재질의 윗면이 2.4배 밝게 뜬다 = 쿼터뷰에서 **밝은 회색 판**이
 #   화면 위쪽에 눕는다(1차 굽기의 그 인상). 보너스를 빼고 **벌점**으로 바꾼다.
 TOP_BONUS = 0.0       # (옛 손잡이. 지금은 아래 TOP_MUL 이 대신한다)
-TOP_MUL = 0.46        # 벽·트림의 수평면 정점색 배수. E_top/E_wall = 2.4 를 되돌린다
+# ★★★17차 — 블라인드 맵 비평 ① "회랑에서 화면 2/3 가 민짜 벽 윗면"
+#   (증거 25_corridor_walltop_dominant_WORST.jpg) + ④ "차가운 색 0".
+#   쿼터뷰라 벽 마루의 화면 면적이 바닥보다 크다. 그 큰 면이 바닥과 **같은 밝기·
+#   같은 색상**이면 화면은 "무늬 있는 벽지 두 장"이 된다. 15차의 0.46 은 그 면을
+#   바닥과 나란히 세워 둔 값이었다.
+#   ★두 손잡이를 같이 쓴다 — **더 어둡게(값)** 그리고 **차게(색상 회전)**.
+#     처방전 2-3 "빛은 명도와 색상으로 그린다. 채도로는 안 그린다" 의 역방향 적용:
+#     빛이 안 닿는 면은 명도를 낮추고 색상을 반대쪽(남보라)으로 돌린다.
+#   ★알베도로 안 한다. 벽 옆면과 마루는 **같은 텍스처**를 쓰므로 색을 갈라놓을 수
+#     있는 자리는 정점색뿐이다.
+TOP_MUL = 0.29        # 벽·트림의 수평면 정점색 배수 ★17차 0.46 -> 0.29
+# 수평면 색상 회전. 휘도 기여는 0.2126*0.66+0.7152*0.80+0.0722*1.42 = 0.815 이라
+# 실효 배수는 0.29 x 0.815 = **0.236**(15차 대비 0.51배 = 절반 어둡다).
+TOP_TINT = np.array((0.66, 0.80, 1.42), np.float32)
 
 # ★★높이 감쇠 — 쿼터뷰에서 벽 상단을 어둠에 녹이는 장치.
 # ★14차. HFALL_MIN 0.42 -> 0.78. 컨셉의 벽 꼭대기는 **어둠에 안 녹는다** — 갓돌이
@@ -228,6 +241,12 @@ TOP_MUL = 0.46        # 벽·트림의 수평면 정점색 배수. E_top/E_wall 
 HFALL_Y0 = 2.30       # 여기까지는 안 건드린다
 HFALL_SPAN = 3.40     # 이만큼 올라가는 동안
 HFALL_MIN = 0.52      # 여기까지 어두워진다(테두리 벽 7.5m 꼭대기가 이 값)
+# ★★★17차 — 비평 ④ "화면 전체가 330~30도 색상 쐐기 안. 차가운 색 0".
+#   높이 감쇠는 지금까지 **값만** 내렸다(스칼라). 그래서 벽 상부는 "어두운 주황"이고
+#   화면에 냉색이 한 화소도 없었다(실측: 바닥 화소의 78~85%가 그 쐐기 안).
+#   처방전 2-3 의 규칙("빛은 명도와 색상으로 그린다")을 그대로 뒤집어 쓴다:
+#   **빛에서 멀어질수록 어두워지고 동시에 남보라로 돈다.** 채도는 안 올린다.
+HFALL_TINT = np.array((0.78, 0.90, 1.26), np.float32)   # 감쇠 끝에서의 색상 회전
 
 # 횃불 불꽃이 걸리는 높이. 앞벽(1.45)보다 확실히 높아야 벽 위로 떠 보이지 않는다
 # = 횃불은 **뒷벽에만** 단다(아래 자기 검증이 확인한다).
@@ -508,8 +527,19 @@ ALTAR_C, ALTAR_R = 13, 3          # 제단 칸(방 R_ALTAR 안. 북쪽에 붙인
 ALTAR_X, ALTAR_Z = gxf(ALTAR_C + 1.0), gz_of(ALTAR_R)   # 제단 중심(칸 경계에 걸친다)
 ALTAR_TOP = 0.30                  # 제단 단 높이(platforms[] 로 나간다)
 # 제단 화로 둘. 던전에서 가장 밝은 자리가 목표다
-add_light(ALTAR_X - 2.4, ALTAR_Z + 0.2, 1.15, 7.0, 0.95, TORCH_RGB, near=1.0)
-add_light(ALTAR_X + 2.4, ALTAR_Z + 0.2, 1.15, 7.0, 0.95, TORCH_RGB, near=1.0)
+# ★★★17차 — 비평 부가 "화로가 좌우 대칭으로 똑같이 반복". 광원 · 지오메트리 ·
+#   웜 풀 · 불꽃이 **이 한 표를 같이 본다**(넷이 어긋나면 불꽃과 웅덩이가 따로 노는
+#   두 물건이 된다 — 13차C 의 그 함정).
+#   ★★자리(dx, dz)는 **못 흩는다**. 제단 화로에는 `push_col_circle` 콜라이더가
+#     달려 있고 이 파도의 계약이 **level2.json 바이트 불변**이다. 그래서 대칭을
+#     깨는 일은 **크기 · yaw · 불꽃 씨앗 · 웅덩이 반경**이 한다(콜라이더 밖의 값들).
+#   ★값은 상수다. RND 를 당기면 스트림이 밀려 잔해·nav 가 통째로 바뀐다(13차B 전례).
+#   (dx, dz, 크기, yaw, 웜풀반경, 불꽃크기, 불꽃기울기)
+ALT_BRAZ = ((-2.4, 0.0, 0.63, 0.35, 4.05, 1.10, 0.16),
+            (2.4, 0.0, 0.57, 2.31, 3.42, 0.90, -0.11))
+for (_ax, _az, _as, _ay, _apr, _afs, _aft) in ALT_BRAZ:
+    add_light(ALTAR_X + _ax, ALTAR_Z + 0.2 + _az, 1.15, 7.0, 0.95,
+              TORCH_RGB, near=1.0)
 
 CAMP_X, CAMP_Z = gx_of(23), gz_of(5)      # 북동 취사장 모닥불
 add_light(CAMP_X, CAMP_Z, 0.55, 6.2, 0.85, TORCH_RGB, near=1.0)
@@ -544,16 +574,29 @@ STAIR_Z = gz_of(STAIR_R0 + 1)
 # ★13차D. 6.4 -> 3.6 (위 샤프트와 같은 이유. 국소여야 '출구'로 읽힌다)
 add_light(STAIR_X, gz_of(STAIR_R0) - 0.6, 1.9, 3.6, 0.92, COLD_RGB)
 
+# ★★★17차 — 제단만 **찬 빛**을 준다(비평 ⑤ "제단이 민무늬 상자").
+#   16차에 Meshy 제단석을 얹었는데도 판정 컷에서 상자로 읽혔다. 원인은 조각이
+#   아니라 **빛**이다 — 제단 좌우 화로가 둘 다 웜이라 제단이 방의 다른 돌과
+#   똑같은 주황을 뒤집어쓰고 배경에 잠긴다. 목표물이 배경과 같은 색이면 안 보인다.
+#   층에서 냉광은 이제 **제단(목표)과 탈출 계단(출구)** 둘뿐이다 = 색이 곧 길잡이다.
+#   ★★광원은 반드시 여기(정점색을 굽기 **전**)에 등록해야 한다. 지오메트리 사이에
+#     끼워 넣으면 그 줄 앞에 만들어진 면은 이 빛을 못 받아 방 절반만 밝아진다.
+add_light(ALTAR_X, ALTAR_Z + 0.10, 1.30, 3.00, 0.50, COLD_RGB)
+
 WELL_X, WELL_Z = gx_of(4), gz_of(5)       # 북서 우물
 
 
 def height_fall(y):
-    """높이 감쇠. 벽 상단이 어둠으로 사라진다(쿼터뷰 던전의 천장 노릇)."""
+    """높이 감쇠. 벽 상단이 어둠으로 사라진다(쿼터뷰 던전의 천장 노릇).
+
+    ★★★17차부터 **RGB 를 돌려준다**. 값만 내리면 "어두운 주황"이 되고, 그게
+      비평 ④("차가운 색 0")의 절반이었다. 올라갈수록 남보라로 돈다."""
     if y <= HFALL_Y0:
-        return 1.0
+        return np.ones(3, np.float32)
     t = min(1.0, (y - HFALL_Y0) / HFALL_SPAN)
     t = t * t * (3.0 - 2.0 * t)                   # smoothstep. 급하면 띠가 보인다
-    return 1.0 - (1.0 - HFALL_MIN) * t
+    k = 1.0 - (1.0 - HFALL_MIN) * t
+    return (np.ones(3, np.float32) + (HFALL_TINT - 1.0) * t) * k
 
 
 # ★★면이 광원을 보고 있는가(N·L). 13차B 에서 제일 크게 그림을 바꾼 한 줄이다.
@@ -1115,7 +1158,8 @@ def add_quad(buf, p0, p1, p2, p3, boost=0.0, moss=0.0, nrm=None, vnrms=None):
     if nrm is None:
         nrm = face_normal((p0, p1, p2, p3))
     # ★수직면 조도로 푼 재질의 **수평면**은 눌러 준다(위 Buf.wallfam 주석)
-    tm = TOP_MUL if (buf.wallfam and abs(nrm[1]) > 0.70) else 1.0
+    is_top = buf.wallfam and abs(nrm[1]) > 0.70
+    tm = TOP_MUL if is_top else 1.0
     # ★★처방전 D-2. **면 단위 색 변주** — 같은 텍스처를 쓰는 벽면·기둥마다
     #   밝기 ±5% · 색온도 ±3%. 이게 없으면 같은 재질의 큰 면이 통째로 한 값이라
     #   "도장한 판"으로 읽힌다(아르네: "Equally lit minor shapes flattens the painting").
@@ -1136,6 +1180,10 @@ def add_quad(buf, p0, p1, p2, p3, boost=0.0, moss=0.0, nrm=None, vnrms=None):
         col = lum(gx, gz, y, moss, vn) * tm * fv
         if buf.wallfam:
             col = col * np.array((fw, 1.0, 2.0 - fw), np.float32)
+        # ★★★17차. 벽 마루는 값만 낮추는 게 아니라 **색상까지 남보라로 돌린다**
+        #   (비평 ①④). 이 한 줄이 "어둠에 잠긴 회랑"이라는 카피를 그림으로 만든다.
+        if is_top:
+            col = np.clip(col * TOP_TINT, 0.0, 1.0)
         if boost:
             col = np.clip(col + boost, 0.0, 1.0)
         buf.c.append((float(col[0]), float(col[1]), float(col[2])))
@@ -1286,7 +1334,11 @@ ALTAR_UV_SCALE = 2.6       # 제단
 RUBBLE_UV_SCALE = 1.45     # 잔해. 조각이 0.3~0.9m 라 한 조각에 돌이 한둘 걸린다
 buf_cut = Buf("COL_CUT", tile=True, uv_scale=CUT_UV_SCALE, wallfam=True)   # 기둥·아치·문설주
 buf_altar = Buf("COL_ALTAR", tile=True, uv_scale=ALTAR_UV_SCALE)
-buf_stair = Buf("DECO_STAIR", tile=True, uv_scale=CUT_UV_SCALE, wallfam=True)
+# ★★★17차. 계단만 UV 를 따로 준다. 단 하나가 폭 4.0 x 깊이 0.72 x 높이 0.20m 라
+#   2.6m UV 로는 챌면(0.20m)에 텍스처의 8%만 올라간다 = 그 면은 통째로 민짜다.
+#   1.55m 로 받으면 디딤면에 돌이 두세 장, 챌면에 한 단이 걸린다(비평 ②).
+STAIR_UV_SCALE = 1.55
+buf_stair = Buf("DECO_STAIR", tile=True, uv_scale=STAIR_UV_SCALE, wallfam=True)
 buf_iron = Buf("DECO_IRON")
 buf_banner = Buf("DECO_BANNER")
 buf_rubble = Buf("COL_RUBBLE", tile=True, uv_scale=RUBBLE_UV_SCALE, wallfam=True)
@@ -1528,12 +1580,15 @@ def _cap(buf, ring, y, gx, gz, boost=0.0):
     """고리 위를 덮는다(부채꼴). 벽 마루는 쿼터뷰에서 면적이 크다."""
     b = len(buf.v)
     tm = TOP_MUL if buf.wallfam else 1.0
+    # ★★★17차. 원기둥·프리즘의 **윗뚜껑도 벽 마루다**. add_quad 와 같은 색상 회전을
+    #   여기에도 건다(안 걸면 기둥 머리만 혼자 따뜻한 판으로 남는다).
+    tt = TOP_TINT if buf.wallfam else np.ones(3, np.float32)
     buf.v.append(bpos(gx, gz, y))
-    col = np.clip(lum(gx, gz, y, 0.0, (0.0, 1.0, 0.0)) * tm + boost, 0.0, 1.0)
+    col = np.clip(lum(gx, gz, y, 0.0, (0.0, 1.0, 0.0)) * tm * tt + boost, 0.0, 1.0)
     buf.c.append((float(col[0]), float(col[1]), float(col[2])))
     for (px, pz, _py) in ring:
         buf.v.append(bpos(px, pz, y))
-        cc2 = np.clip(lum(px, pz, y, 0.0, (0.0, 1.0, 0.0)) * tm + boost, 0.0, 1.0)
+        cc2 = np.clip(lum(px, pz, y, 0.0, (0.0, 1.0, 0.0)) * tm * tt + boost, 0.0, 1.0)
         buf.c.append((float(cc2[0]), float(cc2[1]), float(cc2[2])))
     n = len(ring)
     for i in range(n):
@@ -2356,18 +2411,29 @@ dgp("altar", ALTAR_X, ALTAR_Z, FLOOR_Y + ALTAR_TOP, yaw=0.0, scale=0.82,
 MEDAL_R = 3.05
 add_ground_card(buf_medal, ALTAR_X, ALTAR_Z + 3.5, FLOOR_Y + 0.010,
                 MEDAL_R, MEDAL_R)
-# 화로 둘. 광원은 위에서 이미 등록했다
-for _dx in (-2.4, 2.4):
-    _bx, _bz = ALTAR_X + _dx, ALTAR_Z + 0.2
+# ★★★17차 — 비평 ⑤ 의 나머지 절반. 위에서 등록한 제단 냉광의 **웅덩이**와
+#   윗면 명문. 콜라이더·발판을 한 톨도 안 더한다(전부 데칼이다).
+# ★단 **위**에 깐다. 바닥 높이(POOL_Y2)에 두면 단 속에 파묻혀 한 화소도 안 보인다.
+add_pool(ALTAR_X, ALTAR_Z, 2.30, cold=True, squash=0.74,
+         y=FLOOR_Y + ALTAR_TOP + 0.016)
+# 단 위에 깔리는 작은 룬 원판(메달리온을 재활용한다. 텍스처 0장 추가).
+# emit 0.12 라 밝은 청록 룬만 스스로 빛난다 = 제단 윗면에 **명문**이 생긴다.
+add_ground_card(buf_medal, ALTAR_X, ALTAR_Z, FLOOR_Y + ALTAR_TOP + 0.008,
+                1.28, 0.98)
+# 화로 둘. 광원·웜 풀은 위에서 같은 표(ALT_BRAZ)로 이미 등록했다
+for (_dx, _dzj, _bs, _byaw, _bpr, _bfs, _bft) in ALT_BRAZ:
+    _bx, _bz = ALTAR_X + _dx, ALTAR_Z + 0.2 + _dzj
     # ★16차. 위 세워 두는 화로와 같은 이유·같은 배수(0.60)로 Meshy 화로를 놓는다
     with Muted(buf_cut, buf_iron):
         add_fluted(buf_cut, _bx, _bz, FLOOR_Y, 0.86, 0.18, 0.14, n=10, vseg=3,
                    cap=False)
         add_prism(buf_iron, _bx, _bz, 0.86, 1.10, 0.22, 0.44, n=10)
-    add_flame(_bx, _bz, 1.05, w=0.62, h=0.94, seed=RND.uniform(0, 1.0))
-    add_halo(_bx, _bz, 1.15, r=0.86)
+    # ★17차. 불꽃 크기·기울기·씨앗까지 좌우를 갈라 놓는다(대칭을 깨는 진짜 손잡이)
+    add_flame(_bx, _bz, 1.05, w=0.62 * _bfs, h=0.94 * _bfs,
+              seed=RND.uniform(0, 1.0), tilt=_bft)
+    add_halo(_bx, _bz, 1.15, r=0.86 * _bfs)
     push_col_circle(_bx, _bz, 0.46, 1.6, "brazier")
-    dgp("brazier", _bx, _bz, FLOOR_Y, yaw=1.1 + _dx * 0.12, scale=0.60,
+    dgp("brazier", _bx, _bz, FLOOR_Y, yaw=_byaw, scale=_bs,
         albedo="cut", tag="altar_brazier")
 
 # ── 계단 (탈출구) ──
@@ -2378,12 +2444,30 @@ for _dx in (-2.4, 2.4):
 STAIR_N = 5
 STAIR_HX = 2.0
 STAIR_Z0 = gz_of(STAIR_R0 + 2)          # = 19.0
+# ★★★17차 — 블라인드 맵 비평 ② "탈출 계단이 **무텍스처 단색** + z파이팅 띠 +
+#   뒤로 검은 공간"(증거 18_ZOOM_stairs_untextured.png). 층의 **보상 장면**인데
+#   화면에서 제일 싼 자리였다. 셋을 각각 친다.
+#
+#   (가) z파이팅 — 단 깊이 0.72m 인데 상자 반깊이가 0.36 이라 **앞뒤 면이 정확히
+#        같은 평면**에 있었다(단 i 의 뒷면 z = 단 i+1 의 앞면 z). 시각 상자만
+#        0.405 로 겹치게 만든다. ★`push_plat_box` 는 0.36 그대로 —
+#        발판 계약(level2.json)은 한 바이트도 안 건드린다.
+STAIR_VIS_HZ = 0.405                    # 시각 상자 반깊이(겹친다). 콜라이더는 0.36
 for _i in range(STAIR_N):
     _top = FLOOR_Y + 0.20 * (_i + 1)
     _z = STAIR_Z0 - _i * 0.72
-    add_box(buf_stair, STAIR_X, _z, FLOOR_Y, _top, STAIR_HX, 0.36, seg=1.0,
+    add_box(buf_stair, STAIR_X, _z, FLOOR_Y, _top, STAIR_HX, STAIR_VIS_HZ, seg=0.62,
             top_boost=TOP_BONUS + 0.10)
+    # (나) **계단 코**(nosing) — 디딤면 앞 모서리에 얇은 띠를 덧댄다. 처방전 C 의
+    #      트림 시트 목록에 "계단 코"가 있는데 우리 계단에만 없었다. 쿼터뷰에서
+    #      단의 앞선이 이 띠로 살아나 "다섯 단"이 실제로 세어진다. 콜라이더 없음.
+    add_box(buf_trim, STAIR_X, _z + STAIR_VIS_HZ - 0.05, _top - 0.075, _top + 0.012,
+            STAIR_HX + 0.035, 0.075, seg=0.5, top_boost=TOP_BONUS + 0.04)
     push_plat_box(STAIR_X, _z, STAIR_HX, 0.36, _top, "stair")
+# (다) 옆 난간 — 계단이 바닥 위에 놓인 판이 아니라 **파고든 구조**로 읽히게 한다
+for _sx in (-STAIR_HX - 0.16, STAIR_HX + 0.16):
+    add_box(buf_trim, STAIR_X + _sx, STAIR_Z0 - 1.44, FLOOR_Y,
+            FLOOR_Y + 0.62, 0.16, 1.80, seg=0.7, top_boost=TOP_BONUS + 0.03)
 # 문틀(門). 인방석이 굵어서 어디가 출구인지 멀리서도 읽힌다
 _dz = STAIR_Z0 - (STAIR_N - 1) * 0.72 - 0.85
 for _dx in (-STAIR_HX - 0.32, STAIR_HX + 0.32):
@@ -2391,10 +2475,68 @@ for _dx in (-STAIR_HX - 0.32, STAIR_HX + 0.32):
             top_boost=TOP_BONUS)
 add_box(buf_cut, STAIR_X, _dz, 2.42, 3.10, STAIR_HX + 0.66, 0.34, seg=1.1,
         top_boost=TOP_BONUS)
-# 문틀 너머의 어둠. 계단이 **어디론가 올라간다**는 말을 그림으로 만든다
-# (실제로 뚫린 구멍이 아니라 벽에 붙인 검은 판이다. 콜라이더 없음)
-add_box(buf_iron, STAIR_X, _dz - 0.9, FLOOR_Y + 1.02, 3.02, STAIR_HX + 0.10, 0.06)
+# ★★★17차 — 문틀 너머. 16차까지 여기는 `buf_iron`(황동 PAL "iron" = 5a5131)에
+#   붙인 얇은 판이었다. 이름은 "검은 판"인데 재질이 **황동**이라 횃불을 받아
+#   화면에서 **밝은 분홍 띠**로 떴다(증거 13_exit_stairs_far.jpg 의 그 띠).
+#   비평 ②의 "뒤로 검은 공간"과 "z파이팅 띠"가 사실은 같은 이 한 장이었다.
+#   이제 **막벽**으로 바꾼다 — 벽과 같은 석재(buf_wall)로 문 뒤를 메우고,
+#   그 앞에 찬 빛만 걸어 "여기서 위로 이어진다"를 빛으로 말한다.
+#   ★콜라이더 없음(문틀 안쪽이라 벽 인셋 안이다). level2.json 불변.
+add_box(buf_wall, STAIR_X, _dz - 0.62, FLOOR_Y, 3.06, STAIR_HX + 0.30, 0.30,
+        seg=0.9)
+# 그 앞을 가로지르는 찬 빛의 띠 — 문 너머가 검은 구멍이 아니라 **빛이 새는 곳**이다
+add_card(buf_shaft,
+         (STAIR_X - STAIR_HX * 0.86, _dz - 0.30, FLOOR_Y + 0.06),
+         (STAIR_X + STAIR_HX * 0.86, _dz - 0.30, FLOOR_Y + 0.06),
+         (STAIR_X + STAIR_HX * 0.86, _dz - 0.30, FLOOR_Y + 2.52),
+         (STAIR_X - STAIR_HX * 0.86, _dz - 0.30, FLOOR_Y + 2.52))
 EXIT_X, EXIT_Z = STAIR_X, STAIR_Z0 - 1.4
+
+# ═════════════════════════════════════════════════════════════
+# ★★★17차 — 빈 방 세트 드레싱 (비평 부가 "NW 방 등이 텅 비었다")
+# ═════════════════════════════════════════════════════════════
+# 처방전 C-2 ⑧: "벽 밑동을 따라 잔해와 흙더미. 지금 벽은 바닥 판 위에 상자가
+# 그냥 앉아 있다. 이 한 줄이 '큐브가 판에 얹힌' 인상을 제일 크게 죽인다."
+# 잔해는 **벽 밑동에 몰린다**(물리다. 무너진 것은 벽에서 떨어져 나온 것이다).
+#
+# ★★두 계약을 지킨다.
+#   ① `push_col_*` 를 한 번도 안 부른다  -> level2.json 바이트 불변
+#   ② `RND` 를 한 번도 안 당긴다(좌표가 전부 상수) -> 난수 스트림 불변
+#      = 잔해·횃불·nav 배치가 통째로 그대로다(13차B 의 그 사고를 안 되풀이한다)
+#   ③ 스폰 정면 통로(SPAWN_LANE)와 방 한복판 동선은 비운다 — 벽에서 1.6m 안쪽까지만
+DRESS = [
+    # (종류, x, z, yaw, 크기, 알베도)
+    # R_NW 북서 우물방 — 판정 컷 09_nw_room 이 "텅 빈 방"의 대표였다
+    ("rubble_small",  -22.0, -21.6, 0.42, 0.62, "rubble"),
+    ("rubble_large",  -21.4, -15.2, 2.31, 0.78, "rubble"),
+    ("coping_chunk",  -16.2, -22.3, 1.14, 0.70, "trim"),
+    ("rubble_small",  -15.6, -14.4, 4.02, 0.55, "rubble"),
+    # R_WEST 서쪽 창고
+    ("rubble_large",  -21.8,   7.6, 0.85, 0.72, "rubble"),
+    ("coping_chunk",  -15.8,  -0.2, 3.30, 0.66, "trim"),
+    ("rubble_small",  -16.0,   8.5, 5.10, 0.58, "rubble"),
+    # R_EAST 동쪽 감옥
+    ("rubble_small",   21.8,  -0.4, 1.72, 0.60, "rubble"),
+    ("coping_chunk",   15.2,   7.4, 0.28, 0.74, "trim"),
+    ("rubble_large",   22.2,   7.2, 3.95, 0.70, "rubble"),
+    # R_NE 북동 취사장
+    ("rubble_small",   21.6, -22.2, 2.65, 0.56, "rubble"),
+    ("coping_chunk",   22.4, -14.6, 4.55, 0.68, "trim"),
+    # R_STAIR 계단방 — 보상 장면의 좌우를 채운다(계단 자체는 안 건드린다)
+    ("rubble_large",   14.6,  16.4, 1.05, 0.76, "rubble"),
+    ("rubble_small",   22.6,  16.8, 3.42, 0.60, "rubble"),
+    ("coping_chunk",   14.2,  21.8, 2.05, 0.72, "trim"),
+]
+_dress_bad = []
+for (_dk, _dx2, _dz2, _dy2, _ds2, _da2) in DRESS:
+    # ★손으로 적은 좌표는 반드시 검사한다. 벽 속에 놓으면 화면에서 통째로 사라지고
+    #   (13차 문틀이 그랬다) 걷는 길 한복판에 놓으면 콜라이더 없는 유령이 된다.
+    if blocked(*cell_of(_dx2, _dz2)):
+        _dress_bad.append((_dk, _dx2, _dz2))
+        continue
+    dgp(_dk, _dx2, _dz2, FLOOR_Y, yaw=_dy2, scale=_ds2, albedo=_da2, tag="dress17")
+# ★NOTE / FAIL 은 14절에서 만든다. 여기서는 결과만 들고 있다가 거기서 싣는다.
+DRESS_BAD = _dress_bad
 
 # ── 북서 우물 ──
 add_prism(buf_cut, WELL_X, WELL_Z, FLOOR_Y, FLOOR_Y + 0.72, 1.28, 1.22, n=10, smooth=True,
@@ -2743,8 +2885,9 @@ for _ti, (gx, gz, gy, dx, dz, ped) in enumerate(TORCH_PROPS):
         add_wall_glow(gx, gz, dx, dz, gy, back=0.0)
 
 # ── 제단 화로 · 모닥불의 웜 풀 ──
-add_pool(ALTAR_X - 2.4, ALTAR_Z + 0.2, 3.75)
-add_pool(ALTAR_X + 2.4, ALTAR_Z + 0.2, 3.75)
+# ★17차. 화로 자리표(ALT_BRAZ)를 그대로 본다. 웅덩이 반경도 좌우가 다르다
+for (_ax, _az, _as, _ay, _apr, _afs, _aft) in ALT_BRAZ:
+    add_pool(ALTAR_X + _ax, ALTAR_Z + 0.2 + _az, _apr)
 add_pool(CAMP_X, CAMP_Z, 3.50)
 
 # ═════════════════════════════════════════════════════════════
@@ -2896,6 +3039,13 @@ ALTAR_JSON = {
 FAIL = []
 NOTE = []
 
+# ★★★17차 세트드레싱 검사(위 DRESS 표). 벽 속이면 화면에서 사라지고, 콜라이더
+#   위에 겹치면 돌 두 개가 한 자리에서 싸운다. 둘 다 여기서 잡는다.
+if DRESS_BAD:
+    FAIL.append("세트드레싱이 벽 속이다: %s" % (DRESS_BAD,))
+NOTE.append("빈 방 세트드레싱 %d개(벽 속 %d개 버림)"
+            % (len(DRESS) - len(DRESS_BAD), len(DRESS_BAD)))
+
 
 def _col_hits(gx, gz, rad):
     for co in COLLIDERS:
@@ -2908,6 +3058,12 @@ def _col_hits(gx, gz, rad):
                 return True
     return False
 
+
+# ★세트드레싱이 기존 콜라이더(잔해·기둥·화로)와 겹치면 돌 두 개가 한 자리를 다툰다
+_dress_ov = [(k, x, z) for (k, x, z, _y, _s, _a) in DRESS
+             if not blocked(*cell_of(x, z)) and _col_hits(x, z, 0.45)]
+if _dress_ov:
+    FAIL.append("세트드레싱이 콜라이더와 겹친다: %s" % (_dress_ov,))
 
 # 1) nav 흉내: 1.6m 격자 x 반경 0.55 로 실제 통과 가능한 칸을 뽑는다
 NAV_CELL, NAV_R = 1.6, 0.55
@@ -3114,8 +3270,12 @@ buf_trim.mat = mat_tex("MAT_DG_TRIM", PAL["trim"], IMG_BLOCK, BLOCK_LIN,
                        shade=buf_trim.shade, hue_keep=0.75)
 buf_altar.mat = mat_tex("MAT_DG_ALTAR", PAL["altar"], IMG_BLOCK, BLOCK_LIN,
                         shade=buf_altar.shade, hue_keep=0.70)
+# ★★★17차. hue_keep 0.45 -> **0.70**. 0.45 는 목표색(찬 회녹) 쪽으로 세게 끌어당겨
+#   블록 타일의 값 구조를 씻어 냈다 = 비평 ②의 "무텍스처 단색"이 바로 이 한 줄이었다.
+#   "유일하게 안 따뜻한 돌"이라는 뜻은 PAL["stair"] 가 계속 지키고, 표면의 그림은
+#   되살린다(같이 UV 도 2.6 -> 1.55m 로 잘게 받는다 — 아래 STAIR_UV_SCALE).
 buf_stair.mat = mat_tex("MAT_DG_STAIR", PAL["stair"], IMG_BLOCK, BLOCK_LIN,
-                        shade=buf_stair.shade, hue_keep=0.45)
+                        shade=buf_stair.shade, hue_keep=0.70)
 # 잔해도 다듬은 돌이다(컨셉의 바닥에 굴러다니는 것은 무너진 아치·기둥 조각이다).
 buf_rubble.mat = mat_tex("MAT_DG_RUBBLE", PAL["rubble"], IMG_BLOCK, BLOCK_LIN,
                          shade=buf_rubble.shade, hue_keep=0.60)
@@ -3566,7 +3726,8 @@ if DGP_ON:
         "amb": [float(v) for v in AMB], "ambMin": AMB_MIN,
         "torchRange": TORCH_RANGE, "nlFloor": NL_FLOOR,
         "near": {"r": NEAR_R, "p": NEAR_P, "range": NEAR_RANGE, "nl": NEAR_NL},
-        "hfall": {"y0": HFALL_Y0, "span": HFALL_SPAN, "min": HFALL_MIN},
+        "hfall": {"y0": HFALL_Y0, "span": HFALL_SPAN, "min": HFALL_MIN,
+                  "tint": [float(v) for v in HFALL_TINT]},
         "contact": {"ao": CONTACT_AO, "r": CONTACT_R,
                     "ao2": CONTACT_AO2, "r2": CONTACT_R2},
         "hueKeep": HUE_KEEP,

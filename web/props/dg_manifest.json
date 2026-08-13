@@ -10,9 +10,9 @@
    "tris": 2762,
    "mesh": "COL_DGP_ALTAR",
    "gain": [
-    3.49828,
-    3.67198,
-    3.7046
+    2.96754,
+    3.05424,
+    3.0681
    ]
   },
   {
@@ -23,9 +23,9 @@
    "tris": 15410,
    "mesh": "DECO_DGP_ARCH_GATE",
    "gain": [
-    3.93136,
-    4.10536,
-    4.0722
+    4.04678,
+    4.21736,
+    4.16953
    ]
   },
   {
@@ -36,22 +36,22 @@
    "tris": 8990,
    "mesh": "COL_DGP_BRAZIER",
    "gain": [
-    2.96917,
-    3.10109,
-    3.18208
+    3.38743,
+    3.52361,
+    3.55687
    ]
   },
   {
    "kind": "coping_chunk",
    "file": "dg_coping_chunk.glb",
-   "n": 20,
+   "n": 25,
    "cast": false,
-   "tris": 7600,
+   "tris": 9500,
    "mesh": "DECO_DGP_COPING_CHUNK",
    "gain": [
-    8.45538,
-    8.80789,
-    8.59163
+    7.38252,
+    7.65329,
+    7.3504
    ]
   },
   {
@@ -62,9 +62,9 @@
    "tris": 5992,
    "mesh": "COL_DGP_PILLAR_BROKEN",
    "gain": [
-    2.56015,
-    2.66573,
-    2.67161
+    2.65099,
+    2.75632,
+    2.75498
    ]
   },
   {
@@ -75,9 +75,9 @@
    "tris": 17580,
    "mesh": "COL_DGP_PILLAR_INTACT",
    "gain": [
-    2.93513,
-    3.05002,
-    3.03911
+    3.04482,
+    3.15825,
+    3.13364
    ]
   },
   {
@@ -88,35 +88,35 @@
    "tris": 14400,
    "mesh": "DECO_DGP_QUOIN_CORNER",
    "gain": [
-    6.44241,
-    6.70163,
-    6.53091
+    6.54229,
+    6.798,
+    6.62069
    ]
   },
   {
    "kind": "rubble_large",
    "file": "dg_rubble_large.glb",
-   "n": 9,
+   "n": 13,
    "cast": true,
-   "tris": 9900,
+   "tris": 14300,
    "mesh": "COL_DGP_RUBBLE_LARGE",
    "gain": [
-    6.94555,
-    7.16074,
-    7.03562
+    8.06775,
+    8.30341,
+    8.06924
    ]
   },
   {
    "kind": "rubble_small",
    "file": "dg_rubble_small.glb",
-   "n": 33,
+   "n": 39,
    "cast": true,
-   "tris": 13860,
+   "tris": 16380,
    "mesh": "COL_DGP_RUBBLE_SMALL",
    "gain": [
-    7.30784,
-    7.57511,
-    7.32891
+    7.99465,
+    8.25461,
+    7.93128
    ]
   }
  ]
