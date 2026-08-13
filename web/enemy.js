@@ -336,6 +336,89 @@ const DMG_SCALE = 0.5;          // ★칼 데미지 배율. 롤백 손잡이(1 =
 const SWORD_DMG = 1 * DMG_SCALE; // 칼 한 대가 깎는 체력(핍). e.hp 는 이 단위로 산다
 const DMG_SHOW = 100;           // 화면 환산 배수. 핍 1 = 100 (한 대 = 50 이 뜬다)
 
+// ---------------------------------------------------------------------------
+// ★★RPG 데미지 — 기술 · 흔들림 · 레벨 (오너 지시 2026-08-14)
+//   "rpg니까 레벨오르면 강해질텐데 그리고 데미지도 왜 이리 동일하냐?
+//    뭔가 조금씩은 달라야할거같은데."
+// ---------------------------------------------------------------------------
+// 여태 한 대는 **언제나 SWORD_DMG 한 값**이었다. Z 로 때리나 X 로 때리나 같고, 첫 대와
+// 열 번째 대가 같고, 백 마리를 벤 뒤에도 같았다. 그래서 화면의 수도 늘 **50** 이었다.
+// 세 축을 얹는다. 셋을 곱한 값이 곧 화면에 뜨는 수다(반올림 말고는 각색이 없다):
+//
+//     한 대 = SWORD_DMG x 기술배율 x 레벨배율 x (1 + 흔들림)
+//
+// ── ① 기술 배율 (SKILL_MUL) ──
+// 클립 이름 그대로 받는다(main.js atkClip: Attack=Z · Heavy=X · Wide=C).
+//   Z 1.00  기준. 3연타라 한 캐스트에 세 번 들어간다 = 총량은 이미 세 배다.
+//   X 1.60  UI 설명이 "크게 한 번"이다. 한 캐스트에 스윙 하나(single)라 Z 한 대와
+//           맞대 놓고 1.6 배여야 그 문장이 화면에서 참이 된다. Z 3연타 총량(3.0)보다
+//           작은 것도 의도다 — 크게 한 번은 **한 대의 무게**지 DPS 우위가 아니다.
+//   C 1.20  광역(횡일섬). 한 번에 여럿을 베므로 마리당은 낮아야 한다. 그래도 Z 보다는
+//           위 — 안 그러면 "쓸 이유가 없는 기술"이 된다.
+// ★배율은 **잡몹 전용**이다. 보스(boss.js)는 자기 체력·피해를 따로 갖는 별도 체계라
+//   이 파일과 공유하는 상수가 없다(18차 DMG_SCALE 주석과 같은 이유로 무접촉).
+//
+// ── ② 타격 흔들림 (DMG_JIT) — **위로만 얹는다** ──
+// 지시는 "±10%" 였다. 그대로 넣으면 안 된다는 것이 산수로 나왔다:
+//   잡몹의 60% 가 1핍이고, 레벨 1 Z 한 대는 정확히 그 절반(0.5)이다. ±10% 면
+//   두 대의 합이 1.0 을 넘을 확률이 **정확히 50%** 다(대칭이니까). 즉 1핍 잡몹의
+//   절반이 세 대를 버틴다 = 머리 위 눈금 2칸이 절반은 거짓말이 되고, 18차에 오너가
+//   못 박은 계약("모든 잡몹이 최소 두 대")도 같이 깨진다.
+//   기준값을 10% 올려 놓고 ±10% 를 흔들어도 0.41% 가 남는다(균등분포 삼각형 넓이).
+// 그래서 폭(20%p)은 그대로 두고 **바닥을 기준값에 맞춰 위로 세웠다**: 흔들림 [0, +0.20].
+//   · 한 대는 절대 기준값 아래로 안 떨어진다 → 「기술·레벨이 정한 기본 한 대」가
+//     **최솟값 보장**이 된다. 눈금·붉음 문턱·처치 타수가 전부 이 보장 위에 선다.
+//   · 레벨 1 최대 타격: Z 0.60 · X 0.96 · C 0.72. 셋 다 1핍(1.0) 아래다
+//     = **18차 계약("최소 두 대")이 레벨 1 에서 그대로 산다.** X 는 4% 차이로 걸린다.
+//   · 결정론이다(hash1). 같은 판을 다시 돌리면 같은 수가 나온다 → 950표본·A/B 촬영이
+//     재현된다. Math.random 이면 두 컷을 나란히 놓을 수가 없다.
+const DMG_JIT = 0.20;           // 타격 흔들림 폭(위로만). 0 = 흔들림 없음
+//
+// ── ③ 레벨 성장 (LVL_STEP / LVL_CAP) ──
+// 레벨 정의는 ui.js 뱃지와 **같은 셈**이다(1 + 처치/5). 여태 표시 전용이던 그 수를
+// 처음으로 게임에 붙인다. 정의를 두 벌 두지 않으려고 여기서도 kills 로 다시 센다.
+//   레벨당 +8%. 레벨 5 = +32% · 레벨 10 = +72% · 상한 12 = +88%.
+// 성장이 **화면에서 언제 보이는가**(1핍 잡몹 = 전체의 60%):
+//   X 는 레벨 2 부터 흔들림 상단이 1.0 을 넘어 **가끔 한 대**에 지운다(21%),
+//   레벨 5 부터는 최저타(1.056)가 1.0 을 넘어 **늘 한 대**다. 그게 성장 체감의 자리다.
+//   Z 는 레벨 10 부터 가끔 한 대(18%). 기본기는 천천히 세지는 게 맞다.
+// ★상한이 있는 이유. Z 의 **최저타**가 1.0 을 넘는 순간(0.5 x L >= 1.0 → L=2.0 →
+//   레벨 13.5) 잡몹 60% 가 기본 공격 한 대짜리가 된다 = 판에서 결이 통째로 사라진다.
+//   그 문턱 앞에서 끊는다. 12 는 마지막 안전 레벨(13)에 여유 한 단을 둔 값이다.
+//   ★뱃지(ui.js)는 계속 오른다 - 그 파일은 이 파일 소유가 아니다. "레벨은 오르는데
+//     안 세지는 구간"이 13 부터 생기므로, 뱃지도 멈출지는 오너 판정 영역이다.
+const LVL_STEP = 0.08;          // 레벨 한 단마다 붙는 피해(비율)
+const LVL_CAP = 12;             // 성장 상한 레벨. 이 위로는 안 는다
+const LVL_PER_KILL = 5;         // 몇 마리에 한 단인가(★ui.js 뱃지와 같은 값이어야 한다)
+//
+// ── ④ 파생 계약이 어떻게 사는가 ──
+//   · 머리 위 **눈금**: `maxHp / SWORD_DMG` **그대로 둔다**(1핍 2칸·2핍 4칸·리더 6칸).
+//     한 대가 가변이 되었으니 눈금을 실효 피해로 나누면 레벨 오를 때마다 칸 수가
+//     흔들려서 "이 놈이 뭐냐"를 말하는 표식이 못 된다. 눈금의 뜻을 다시 적는다 —
+//     **「기본 한 대(레벨 1 Z) 몇 배로 굳은 놈인가」= 몹의 고정 속성**이다.
+//     그래서 레벨을 올려도 눈금은 한 칸도 안 움직이고, 대신 같은 눈금을 더 적은
+//     타수로 밀어내게 된다. 그게 성장이 바에서 보이는 방식이다.
+//   · **붉음 문턱**: 뜻은 그대로 "다음 한 대에 죽는가"인데, 이제 그 답이 레벨을 탄다.
+//     상수(SWORD_DMG x 1.5)를 버리고 **유니폼**으로 옮겼다 = 지금 레벨의 **최저타**
+//     (Z, 흔들림 0)다. 흔들림이 위로만 뜨므로 hp <= 최저타면 **어떤 기술로 때려도**
+//     죽는다 = 붉은색이 거짓말을 못 한다(문턱을 최저타로 잡은 이유가 이것이다).
+//   · **바를 띄우는 조건**도 같은 최저타로 옮겼다(18차엔 SWORD_DMG 상수였다).
+//
+// ── ⑤ 롤백 ──
+// **RPG_DMG = 0** 한 줄이면 세 축이 전부 죽고 18차 그대로(균일 50)로 돌아온다
+// (기술 배율 1 · 흔들림 0 · 레벨 배율 1. 눈금은 애초에 안 건드렸다).
+// ★단 하나, 붉음 문턱의 **수**는 옛 리터럴(0.75)로 안 돌아간다 - 최저타 0.50 이 된다.
+//   화면은 똑같다: 18차의 0.75 는 「0.5 와 1.0 사이 중점」이었고 그때 hp 는 0.5 눈금에만
+//   서므로 붉은 집합은 hp <= 0.5 다. 새 문턱(0.50 + 1e-4)의 집합도 hp <= 0.5 로 같다.
+//   중점을 잡은 이유였던 부동소수 여유는 1e-4 가 대신한다(hp ~1 에서 float 오차는 1e-16 이라
+//   1e-4 는 12자리 여유다). 실측으로도 before/after 바 컷이 같은 색으로 나온다.
+const RPG_DMG = 1;              // ★★롤백 손잡이. 0 = 18차 균일 50 판
+// 기술 배율표. 키는 main.js 의 클립 이름 그대로다(모르는 이름이 오면 1.0 = Z 취급).
+const SKILL_MUL = { Attack: 1.00, Heavy: 1.60, Wide: 1.20 };
+// 체력이 0 에 닿았는가를 재는 여유. 한 대가 소수가 되면서 0.5 처럼 IEEE754 로
+// 정확히 떨어지던 뺄셈이 더 이상 보장되지 않는다(1e-16 이 남아 「한 대 더」가 된다).
+const HP_EPS = 1e-6;
+
 // ── 전투 수치 ──
 const PLAYER_MAX_HP = 100;
 // ★8 -> 6 (건틀릿 1회차 손맛). 목표 체감은 "3마리 캠프를 풀피로 붙어서 이기고
@@ -1688,7 +1771,9 @@ export function createEnemySystem(opts) {
   const pipMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, depthTest: false, fog: false,
     side: THREE.DoubleSide, blending: THREE.NormalBlending,
-    uniforms: {},
+    // ★붉어지는 문턱. 18차까지 셰이더에 구워 넣던 상수였는데, 한 대의 크기가 레벨을
+    //   타면서 **매 프레임 바뀌는 값**이 됐다(updatePlates 가 dmgFloor() 로 채운다).
+    uniforms: { uLow: { value: SWORD_DMG * 1.5 } },
     vertexShader: `
       attribute float aN; attribute float aHp; attribute float aA;
       varying vec2 vU; varying float vN; varying float vHp; varying float vA;
@@ -1710,6 +1795,7 @@ export function createEnemySystem(opts) {
     //   블룸 임계 1.02). 그래서 sRGB 표기를 그대로 못 넣는다 - ACES 를 되짚어 넣은 값이다.
     //   0.95 가 상한선이다. 그 위로 올리면 바가 블룸으로 번져 실루엣 밖까지 샌다.
     fragmentShader: `
+      uniform float uLow;
       varying vec2 vU; varying float vN; varying float vHp; varying float vA;
       void main(){
         // ★!(a > x) 꼴. a <= x 로 쓰면 NaN 이 통과해서 블룸이 화면을 검게 만든다
@@ -1750,10 +1836,13 @@ export function createEnemySystem(opts) {
         //   칸이 없어졌으니 "마지막 한 칸만"은 성립하지 않고, 채움 전체가 붉어진다.
         // ★18차: 문턱이 상수 1.5 였다. 그건 「핍 1 = 한 대」일 때만 맞는 수라서
         //   칼 데미지를 반으로 줄이자마자 **두 대 남았는데 붉은** 거짓말이 된다.
-        //   SWORD_DMG 에서 굽는다(×1.5 는 정수 사이 중점 = 부동소수 안전 여유).
-        //   DMG_SCALE=1 로 되돌리면 이 값도 정확히 1.5 로 돌아온다.
+        //   SWORD_DMG 에서 구웠다(×1.5 는 정수 사이 중점 = 부동소수 안전 여유).
+        // ★19차: 그 자리도 이제 못 굽는다. 한 대가 레벨을 타므로 문턱이 **판이 도는
+        //   중에 자란다**(처치 5마다 한 단). 그래서 유니폼(uLow)이다 - 값은
+        //   updatePlates 가 dmgFloor()로 채운다 = 지금 레벨의 **최저타**다.
+        //   흔들림이 위로만 뜨므로 vHp <= uLow 는 "어떤 기술로 때려도 죽는다"의 보장이다.
         float g = clamp((V - 0.16) / 0.68, 0.0, 1.0);
-        float LOW = ${(SWORD_DMG * 1.5).toFixed(4)};
+        float LOW = uLow;
         vec3 lo = (vHp < LOW) ? vec3(0.34, 0.05, 0.03) : vec3(0.03, 0.30, 0.14);
         vec3 hi = (vHp < LOW) ? vec3(0.95, 0.22, 0.13) : vec3(0.16, 0.90, 0.46);
         vec3 col = mix(track, mix(lo, hi, g), f);
@@ -1973,6 +2062,12 @@ export function createEnemySystem(opts) {
   let plateCount = { pip: 0, mark: 0 };
   function updatePlates() {
     if (!camera) return;
+    // ★붉음 문턱을 이번 프레임 값으로 맞춘다. 레벨이 오르면 같은 체력의 놈이
+    //   그 프레임부터 붉게 읽힌다(= "이제 한 대면 죽는다"가 화면에 바로 뜬다).
+    //   1e-4 는 hp 가 문턱과 **정확히 같을 때**를 붉은 쪽에 넣는 여유다
+    //   (레벨 1 Z 로 1핍을 한 대 치면 남는 체력이 딱 문턱 언저리다).
+    const lowNow = dmgFloor();
+    pipMat.uniforms.uLow.value = lowNow + 1e-4;
     _plR.setFromMatrixColumn(camera.matrixWorld, 0);
     _plU.setFromMatrixColumn(camera.matrixWorld, 1);
     const pPos = pipMesh.geometry.attributes.position.array;
@@ -1999,7 +2094,10 @@ export function createEnemySystem(opts) {
       //   말이라, 칼 데미지를 반으로 줄이면 **두 대 버티는 1핍 잡몹의 바가 통째로
       //   사라진다**(60% 가 그 놈이다). 뜻 그대로 다시 적는다 - "한 대 맞고도 사나".
       //   DMG_SCALE=1 이면 maxHp > 1 = 정수 maxHp 에서 `>= 2` 와 완전히 같은 집합이다.
-      if (e.pipT > 0 && e.maxHp > SWORD_DMG + 1e-6 && pn < MAX_ENEMIES) {
+      // ★19차: 상수 SWORD_DMG 자리를 **지금 레벨의 최저타**(lowNow)로 옮겼다.
+      //   뜻은 한 글자도 안 바뀐다("한 대 맞고도 사나"). 레벨이 오르면 그 답이
+      //   달라지므로 상수로 두면 그때부터 말이 안 맞는다.
+      if (e.pipT > 0 && e.maxHp > lowNow + 1e-6 && pn < MAX_ENEMIES) {
         const o = pn * 4;
         const a = Math.min(1, e.pipT / PIP_FADE);
         const nMax = e.maxHp;
@@ -2273,6 +2371,34 @@ export function createEnemySystem(opts) {
   // ★처치 기록. kills 를 올리는 자리가 이 파일에 한 군데뿐이라 이게 곧 전수 기록이다.
   //   "유령 증가" 신고가 들어오면 여기부터 본다(onScreen=false 면 화면 밖 처치다).
   const killLog = [];
+
+  // ── ★RPG 데미지 셈판 (위 RPG_DMG 주석이 정본) ──
+  // 지금 도는 공격 클립 이름. main.js 가 ctx.kind 로 넘긴다(Attack/Heavy/Wide).
+  // ★안 넘어오면 'Attack'(=배율 1.0) 이다. 낡은 main.js 와 짝을 지어도 게임은 돌고,
+  //   그때의 밸런스는 정확히 18차 + 흔들림·레벨이다(기술 축만 빠진다).
+  let atkKind = 'Attack';
+  // 레벨. **ui.js 뱃지와 같은 셈**이다(1 + 처치/5). 성장 배율만 상한에 걸린다.
+  function levelNow() { return 1 + Math.floor(kills / LVL_PER_KILL); }
+  function levelMul() {
+    if (!RPG_DMG) return 1;
+    const lv = Math.min(LVL_CAP, levelNow());
+    return 1 + LVL_STEP * (lv - 1);
+  }
+  // 이번 레벨의 **최저타**(Z · 흔들림 0). 흔들림이 위로만 뜨므로 이 값은
+  //   "어떤 기술로 때려도 이만큼은 들어간다"는 **보장**이다. 붉음 문턱과
+  //   바를 띄우는 조건이 둘 다 이 한 수를 본다(= 둘이 어긋날 수 없다).
+  function dmgFloor() { return SWORD_DMG * levelMul(); }
+  // 이 한 대가 실제로 깎는 체력. 화면에 뜨는 수는 여기에 DMG_SHOW 만 곱한 값이다.
+  // ★씨앗은 (스윙 번호 · 그 놈의 자리 씨앗)이다. 한 스윙에 넷을 베면 넷이 서로 다른
+  //   수를 받고(자리 씨앗), 같은 놈을 계속 때리면 매 스윙 다른 수를 받는다(스윙 번호).
+  //   sin 기반 hash1 은 인자가 커지면 정밀도를 잃으므로 9973 으로 접어서 넣는다.
+  function rollDamage(e) {
+    if (!RPG_DMG) return SWORD_DMG;
+    const mul = SKILL_MUL[atkKind] || 1;
+    const base = SWORD_DMG * mul * levelMul();
+    const seed = ((swingId * 131 + (e.spot ? e.spot.seed : 0) * 7) % 9973 + 9973) % 9973;
+    return base * (1 + hash1(seed) * DMG_JIT);
+  }
 
   // -------------------------------------------------------------------------
   // 무리 배치
@@ -2705,7 +2831,10 @@ export function createEnemySystem(opts) {
         if (segSegDist2(_segA, _segB, _capA, _capB, _hitP) > rad * rad) continue;
         e.lastSwing = swingId;
         const hpBefore = e.hp;
-        e.hp -= SWORD_DMG;
+        // ★한 대의 값이 여기서 정해진다(기술 x 레벨 x 흔들림. RPG_DMG 주석이 정본).
+        //   화면의 수와 깎인 체력은 여전히 **곱셈 하나**로 이어져 있다 = 거짓말이 없다.
+        const dmg = rollDamage(e);
+        e.hp -= dmg;
         // ★e.flash 는 "방금 맞았다"의 시계로만 남는다. 몸에 얹히는 색은 0 이다
         //   (FLASH_R 선언부 - 오너가 끄라고 한 그 번쩍이다).
         e.flash = 1;
@@ -2714,11 +2843,15 @@ export function createEnemySystem(opts) {
         hits++;
         const grp = e.grp;
         if (grp) aggroGroup(grp);                   // 맞으면 그 무리가 같이 온다
+        // ★엡실론이 붙었다. 18차까지는 한 대가 0.5(IEEE754 정확값)라 3 - 0.5x6 = 0 이
+        //   오차 없이 떨어졌는데, 흔들림·레벨이 붙으면서 그 보장이 사라졌다.
+        //   여유 없이 `<= 0` 으로 두면 1e-16 이 남은 놈이 "한 대 더" 를 요구한다.
+        if (e.hp < HP_EPS) e.hp = 0;
         const killed = e.hp <= 0;
         const hx = _hitP.x, hy = _hitP.y, hz = _hitP.z;
         // ★큰 데미지 숫자. **칼날이 실제로 닿은 그 점** 위에 띄운다(머리 위가 아니다 -
         //   벤 자리에 떠야 "이 한 대"와 숫자가 한 사건으로 읽힌다).
-        spawnDmgPop(hx, hy + DMG_ANCHOR_Y, hz, SWORD_DMG * DMG_SHOW, killed);
+        spawnDmgPop(hx, hy + DMG_ANCHOR_Y, hz, dmg * DMG_SHOW, killed);
         if (killed) {
           kills++;
           // ── ★유령 킬 추적 창구 ──
@@ -3022,6 +3155,11 @@ export function createEnemySystem(opts) {
     // ── 피격 판정 ──
     // 히스테리시스로 '베는 중'을 판정한다. 켜지는 순간이 새 스윙이다.
     const fast = ctx.fast || 0;
+    // ★어떤 기술로 때리는가. main.js 의 atkClip 을 그대로 받는다(Attack/Heavy/Wide).
+    //   추측(속도·single 플래그로 역산)하지 않는다 — 17차 "feel.slash 에 kind 직접
+    //   전달"과 같은 관례다. 공격이 끝나면 null 이 오는데, 그때는 마지막 값을 유지한다
+    //   (판정은 hot 구간에서만 도므로 그 사이 값이 쓰일 일이 없다).
+    if (ctx.kind) atkKind = ctx.kind;
     const wantHot = !!ctx.attacking && (hotState ? fast > HOT_OFF : fast > HOT_ON);
     // 캐스트가 바뀌면 "이 캐스트가 쓴 번호"를 비운다. main.js 가 공격 클립을 새로
     // 시작할 때만 ctx.cast 가 올라가므로, 캔슬로 이어 낸 다음 타도 새 캐스트로 잡힌다.
@@ -3554,6 +3692,11 @@ export function createEnemySystem(opts) {
     // ★처치 수는 "판(R~클리어)" 기준이다. R 재시작에서 main.js 가 부른다.
     //   죽음(리스폰)은 판이 이어지는 것이므로 여기서 지우면 안 된다.
     resetKills() { kills = 0; },
+    // ★검증용 처치 수 세우개(19차). 레벨 성장을 A/B 로 찍으려면 레벨 1·3·5·8 을
+    //   **같은 자리·같은 카메라**에서 나란히 놓아야 하는데, 35마리를 실제로 베면
+    //   무리 배치가 통째로 달라져서 화소가 안 겹친다. pipTest·dmgTest 와 같은 갈래의
+    //   "상태를 만드는 창구"다(이름에 test 를 남기지 않은 것은 resetKills 의 짝이라서다).
+    setKills(n) { kills = Math.max(0, n | 0); return kills; },
     // ★소수점이 생긴다. 겹쳐 맞을 때 흡수분만큼 깎여 8·2·2 처럼 들어가기 때문이다
     //   (아래 damagePlayer 의 새는 통). 화면에는 체력바 폭이라 눈에 안 띈다.
     get hp() { return +hp.toFixed(1); },
@@ -3591,6 +3734,41 @@ export function createEnemySystem(opts) {
                             tex: !!markMat.uniforms.uTex.value,
                             atkMark: MARK_ATK_ON, cells: MARK_N,
                             ...markCensus() }; },
+    // ── ★RPG 데미지 창구 (읽기 전용) ──
+    // 「기술·흔들림·레벨이 실제로 붙어 있는가」를 눈이 아니라 수로 본다. taps 는
+    // **셰이더의 seg 와 같은 정신**이다 - 상수를 다시 적지 않고 게임이 쓰는 그 함수로
+    // 계산하므로, 표가 맞으면 게임도 맞는다(자기 채점이 아니다).
+    //   taps[lv][기술][최대체력] = "최소~최대 타수"(흔들림 상단/하단으로 각각 계산)
+    get rpg() {
+      const taps = [];
+      for (let lv = 1; lv <= LVL_CAP; lv++) {
+        const L = RPG_DMG ? 1 + LVL_STEP * (lv - 1) : 1;
+        const row = { lv, mul: +L.toFixed(3) };
+        for (const k of ['Attack', 'Heavy', 'Wide']) {
+          const dLo = SWORD_DMG * (RPG_DMG ? SKILL_MUL[k] : 1) * L;
+          const dHi = dLo * (1 + (RPG_DMG ? DMG_JIT : 0));
+          row[k] = { dmg: [+ (dLo * DMG_SHOW).toFixed(0), +(dHi * DMG_SHOW).toFixed(0)] };
+          for (const mx of [1, 2, 3]) {
+            const best = Math.ceil(mx / dHi - 1e-9), worst = Math.ceil(mx / dLo - 1e-9);
+            row[k][mx] = best === worst ? String(best) : best + '~' + worst;
+          }
+        }
+        taps.push(row);
+      }
+      return { on: !!RPG_DMG, kind: atkKind, kills,
+               level: levelNow(), levelCapped: Math.min(LVL_CAP, levelNow()),
+               mul: +levelMul().toFixed(4), floor: +dmgFloor().toFixed(4),
+               step: LVL_STEP, cap: LVL_CAP, per: LVL_PER_KILL,
+               jit: DMG_JIT, skill: SKILL_MUL,
+               // 지금 이 순간 한 대가 뜰 수 있는 범위(화면 표기 단위).
+               // ★rollDamage 와 **같은 식**이다(RPG_DMG=0 이면 둘 다 50 으로 접힌다).
+               now: (() => {
+                 const b = SWORD_DMG * (RPG_DMG ? (SKILL_MUL[atkKind] || 1) : 1) * levelMul();
+                 const j = RPG_DMG ? DMG_JIT : 0;
+                 return [Math.round(b * DMG_SHOW), Math.round(b * (1 + j) * DMG_SHOW)];
+               })(),
+               taps };
+    },
     // ── ★체력 바 계약 창구 (읽기 전용) ──
     // 「폭이 몹 종류와 무관하게 같은가 · 눈금이 한 대 단위인가」를 눈이 아니라 수로
     // 확인하는 자리다. seg 는 **계약을 그대로 계산해 보여 준다** - 상수를 다시 적지 않고
@@ -3602,7 +3780,11 @@ export function createEnemySystem(opts) {
                tickHalf: BAR_TICK_HW, tickAA: BAR_TICK_AA,
                tickMul: BAR_TICK_MUL, tickLift: BAR_TICK_LIFT,
                show: PIP_SHOW, fade: PIP_FADE,
-               lowHp: +(SWORD_DMG * 1.5).toFixed(4), pip: SWORD_DMG };
+               // ★19차: 문턱은 이제 레벨을 탄다. lowHp = 지금 값(셰이더 유니폼과 같은 수),
+               //   lowUni = 셰이더가 실제로 들고 있는 값. 둘이 벌어지면 배선이 끊긴 것이다.
+               lowHp: +dmgFloor().toFixed(4),
+               lowUni: +pipMat.uniforms.uLow.value.toFixed(4),
+               pip: SWORD_DMG };
     },
     // ── ★머리 위 체력 바 검증 창구 (쓰는 창구) ──
     // 만피 / 부분 / 저체력을 **같은 자리·같은 카메라**에서 나란히 찍으려면 체력을
@@ -3703,8 +3885,12 @@ export function createEnemySystem(opts) {
                // ★18차: scale = 칼 데미지 배율(롤백 손잡이) · per = 한 대에 뜨는 수 ·
                //   lowHp = 바가 붉어지는 문턱(= 다음 한 대에 죽는 체력). 셋이 전부
                //   DMG_SCALE 에서 나오므로 여기 세 수만 보면 밸런스 회귀가 잡힌다.
+               // ★★19차 경고: **per 는 더 이상 "화면에 뜨는 수"가 아니다.** 기술·레벨·
+               //   흔들림이 붙어 한 대가 매번 다르다(RPG_DMG 주석). per 는 이제
+               //   「기본 한 대(레벨 1 Z · 흔들림 0)」의 표기값 = 눈금 한 칸의 값이다.
+               //   지금 실제로 뜰 수 있는 범위는 `enemies.rpg.now` 가 답한다.
                scale: DMG_SCALE, per: SWORD_DMG * DMG_SHOW, pip: SWORD_DMG,
-               lowHp: +(SWORD_DMG * 1.5).toFixed(4), show: DMG_SHOW,
+               lowHp: +dmgFloor().toFixed(4), show: DMG_SHOW,
                tex: !!dmgMat.uniforms.uTex.value,
                // 마지막으로 그린 뭉치의 화면 크기. cellPx = 칸 · glyphPx = 글자 획
                // (screenH 를 720 으로 잡은 값. 해상도가 달라지면 비례해 커진다)

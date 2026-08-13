@@ -5478,6 +5478,10 @@ function tick() {
       cast: atkStarts,
       // 한 방짜리 기술(수면참·횡일섬)인가. enemy.js 가 이 캐스트에는 스윙 번호를 하나만 준다.
       single: attacking && isOneShotClip(),
+      // ★어떤 기술로 때리는가(Attack=Z · Heavy=X · Wide=C). enemy.js 의 기술 배율이
+      //   이 한 줄을 읽는다. 넘기지 않으면 그 파일이 속도·single 로 **추측**하게 되는데,
+      //   17차에 feel.slash 에서 같은 추측을 걷어낸 이유가 그것이다(추측은 틀린다).
+      kind: atkClip,
       // ★층 돌파 뒤에는 요괴도 멈춘다. 입력만 잠그면 "층 돌파" 패널이 뜬 채로 요괴가
       //   계속 때리고, 그 넉백(enemy.js damagePlayer)이 플레이어를 조금씩 밀어낸다.
       //   판이 끝난 화면에서 움직이는 건 아무것도 없어야 한다.
