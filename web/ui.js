@@ -232,11 +232,45 @@ body{font-synthesis:none;-webkit-font-synthesis:none}
 
 /* ── 컷코너 한 벌 ────────────────────────────────────────────────────────────
    같은 다각형을 쓰는 판을 여기 한 번에 모은다. 크기(--c)만 각자 다르다.
-   ★남의 DOM(#bClear)에도 클래스를 못 붙이므로 선택자 목록으로 관리한다. */
+   ★남의 DOM(#bClear)에도 클래스를 못 붙이므로 선택자 목록으로 관리한다.
+
+   ★★17차 모서리 수리 - 「테가 모서리에서 끊긴다」의 진범.
+     테는 box-shadow:inset 으로 그리는데 그 겹은 **네모**다. 그 위에 clip-path 로
+     45도를 잘라 내면 잘린 자리에는 테가 남지 않는다 - 즉 판마다 **여덟 도막**
+     (네 변 + 네 빗변)에서 빗변 넷이 통째로 비어 있었다. 작은 칩(34px 「?」·키캡·
+     레벨 뱃지)일수록 잘리는 길이가 판에 비해 커서 **테가 네 조각으로 끊어져 보였다.**
+   ★고치는 법: 빗변 넷을 **배경 겹**으로 직접 깐다. 45도 그러데이션의 딱딱한 색참을
+     모서리 상자(--c x --c)의 대각선에 얹으면, 폭이 바뀌어도 clip-path 와 같은 자리에
+     그려진다(둘 다 --c 하나에서 나온다). 바깥 절반은 clip-path 가 도로 자르므로
+     남는 두께는 --cw 한 겹이다.
+   ★색은 판마다 다르므로 --cut-ink 로 받는다(기본값 = 기본 헤어라인).
+     **판의 테 색을 바꾸면 --cut-ink 도 같이 바꿀 것** - 안 그러면 빗변만 다른 색이 된다.
+   ★--c 를 안 정한 판이 이 목록에 끼면 배경 전체가 무효가 되므로 0px 대비책을 둔다
+     (var() 하나가 못 풀리면 background 선언이 통째로 죽는다 - 실제로 밟았다).
+   ★★이 표의 판은 **진짜 border 가 0** 이어야 한다. 테는 inset 그림자(네 변)와
+     이 빗변 겹이 함께 진다. 진짜 border 를 두르면 (가) 그 네모 테가 컷에 잘려
+     모서리마다 도막으로 끊기고 (나) 배경 원점이 padding-box 로 밀려 빗변까지
+     어긋난다. 남의 파일이 만든 판(#bClear · #eBar · #stHud)은 border 를 두르고
+     오므로 **우리 규칙에서 같은 특이도로 border:0 을 되받아야 한다.** */
 #uiTitle .win,#uiBanner .win,#uiDeath .win,#bClear,
-#uiSkills .sk,#uiSkills .skLock,#eBar,#bBox,#bGoal,#help,#stat,#uiHelpChip,
-#combo .uiCall,#uiDock .dkSword,#uiSkills .sk .key,#uiDock .dkLv,
+#uiSkills .sk,#uiSkills .skLock,#eBar,#bBox,#bGoal,#help,#help .k,#stat,#uiHelpChip,
+#combo .uiCall,#uiDock .dkSword,#uiSkills .sk .key,#uiDock .dkLv,#uiHpNum,
 #uiHpFloat .track,#uiHpFloat .lv,#uiNav .plate,#uiPip,#stHud,#uiNav .cap,#uiPip .cap,#uiNav .dst{
+  --cw:1px;
+  --cut-ink:var(--ui-edge);
+  --cut-lines:
+    linear-gradient(135deg,rgba(0,0,0,0) calc(50% - var(--cw)),
+      var(--cut-ink) calc(50% - var(--cw)) calc(50% + var(--cw)),
+      rgba(0,0,0,0) calc(50% + var(--cw))) no-repeat 0 0/var(--c,0px) var(--c,0px),
+    linear-gradient(45deg,rgba(0,0,0,0) calc(50% - var(--cw)),
+      var(--cut-ink) calc(50% - var(--cw)) calc(50% + var(--cw)),
+      rgba(0,0,0,0) calc(50% + var(--cw))) no-repeat 100% 0/var(--c,0px) var(--c,0px),
+    linear-gradient(45deg,rgba(0,0,0,0) calc(50% - var(--cw)),
+      var(--cut-ink) calc(50% - var(--cw)) calc(50% + var(--cw)),
+      rgba(0,0,0,0) calc(50% + var(--cw))) no-repeat 0 100%/var(--c,0px) var(--c,0px),
+    linear-gradient(135deg,rgba(0,0,0,0) calc(50% - var(--cw)),
+      var(--cut-ink) calc(50% - var(--cw)) calc(50% + var(--cw)),
+      rgba(0,0,0,0) calc(50% + var(--cw))) no-repeat 100% 100%/var(--c,0px) var(--c,0px);
   clip-path:polygon(var(--c) 0,calc(100% - var(--c)) 0,100% var(--c),
                     100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,
                     var(--c) 100%,0 calc(100% - var(--c)),0 var(--c))}
@@ -262,8 +296,9 @@ body{font-synthesis:none;-webkit-font-synthesis:none}
      게임 프레임을 먹는다. 반투명 + 어두운 바탕이면 흐림 없이도 글자가 뜬다. */
 #uiTitle .win,#uiBanner .win,#uiDeath .win{position:relative}
 #uiTitle .win,#uiBanner .win,#uiDeath .win,#bClear{
-  --c:14px;
+  --c:14px;--cw:1.5px;--cut-ink:var(--ui-edge-on);
   background:
+    var(--cut-lines),
     repeating-linear-gradient(0deg,rgba(120,190,255,.030) 0 1px,rgba(0,0,0,0) 1px 4px),
     linear-gradient(180deg,var(--ui-glass) 0%,var(--ui-glass-2) 100%);
   box-shadow:inset 0 0 0 1.5px var(--ui-edge-on),
@@ -274,6 +309,7 @@ body{font-synthesis:none;-webkit-font-synthesis:none}
 /* 붉은 변주(보스 경고 · 사망). ★판 색은 안 바꾼다 - 선·라벨·글자만 붉다.
    판까지 붉히면 다른 물건이 된다(13차 규칙 그대로). */
 #uiBanner .win,#uiDeath .win{
+  --cut-ink:rgba(255,110,88,.80);
   box-shadow:inset 0 0 0 1.5px rgba(255,110,88,.80),
              inset 0 0 40px rgba(190,60,40,.14);
   filter:drop-shadow(0 0 14px rgba(255,90,74,.28)) drop-shadow(0 10px 26px rgba(0,0,0,.62))}
@@ -433,8 +469,8 @@ body.uiBossIn #bHud{opacity:0;transition:opacity .3s ease}
 /* ★★#bBox 를 inline-block 으로 두지 말 것. #bGoal 도 inline 계열이라 **둘이 한 줄에
      올라타고**, 그러면 목표 태그가 보스 상자(투명해도 자리는 차지한다)에 밀려
      화면 가운데에서 43px 왼쪽으로 어긋난다(실측으로 잡았다). */
-#bBox{--c:7px;margin-top:12px;padding:7px 14px 9px;
-  background:linear-gradient(180deg,rgba(28,12,14,.86),rgba(12,6,8,.92));
+#bBox{--c:7px;--cut-ink:rgba(255,110,88,.55);margin-top:12px;padding:7px 14px 9px;
+  background:var(--cut-lines),linear-gradient(180deg,rgba(28,12,14,.86),rgba(12,6,8,.92));
   box-shadow:inset 0 0 0 1px rgba(255,110,88,.55),inset 0 0 18px rgba(190,50,36,.22)}
 #bName{margin-bottom:6px;line-height:1.2;
   font-size:11.5px;font-weight:800;letter-spacing:.16em;
@@ -457,9 +493,9 @@ body.uiBossIn #bHud{opacity:0;transition:opacity .3s ease}
      왼쪽에 못박는다(자리는 padding-left 가 비워 준다). 본문은 한 줄의 보통 글이라
      조사가 붙는다 - 한글 조판에서 강조는 **자리를 넓히지 말고 배경만 넓혀야** 한다.
      이 판에 margin·gap 을 다시 넣지 말 것. */
-#bGoal{--c:9px;display:inline-block;position:relative;
+#bGoal{--c:9px;--cut-ink:rgba(255,187,61,.62);display:inline-block;position:relative;
   padding:8px 20px 9px 74px;border:0;line-height:1.32;
-  background:linear-gradient(180deg,rgba(30,22,8,.86),rgba(14,10,4,.92));
+  background:var(--cut-lines),linear-gradient(180deg,rgba(30,22,8,.86),rgba(14,10,4,.92));
   box-shadow:inset 0 0 0 1px rgba(255,187,61,.62),inset 0 0 20px rgba(190,130,20,.18);
   color:var(--ui-txt);font-size:13.5px;font-weight:700;letter-spacing:.01em;
   text-shadow:none;opacity:1}
@@ -528,6 +564,7 @@ body.uiDeathOn #stVig{opacity:.05!important}
   font-size:var(--hf);line-height:1.5;
   padding:.9em 1.1em .95em;border:0;
   background:
+    var(--cut-lines),
     repeating-linear-gradient(0deg,rgba(120,190,255,.026) 0 1px,rgba(0,0,0,0) 1px 4px),
     linear-gradient(180deg,rgba(10,16,29,.86),rgba(6,10,20,.90));
   box-shadow:inset 0 0 0 1px var(--ui-edge),inset 0 0 26px rgba(50,130,200,.08);
@@ -539,10 +576,12 @@ body.uiDeathOn #stVig{opacity:.05!important}
    판 밖 왼쪽으로 흘러나간다(flex-basis 고정이라 줄지도 늘지도 않는다). */
 #help .ks{flex:0 0 6.9em;gap:.3em}
 /* 키캡. 어두운 유리 + 헤어라인 + 컷코너(작은 판이라 4px) */
-#help .k{--c:4px;border:0;border-radius:0;background:rgba(20,30,50,.92);
+/* ★컷코너는 위 「컷코너 한 벌」 표가 --c 로 잡는다(예전에는 이 자리에 4px 을 손으로
+   박아 둔 clip-path 가 한 벌 더 있었다 - 빗변 헤어라인을 못 받는 유일한 이유였다). */
+#help .k{--c:4px;--cut-ink:rgba(160,210,255,.42);
+  border:0;border-radius:0;
+  background:var(--cut-lines),rgba(20,30,50,.92);
   box-shadow:inset 0 0 0 1px rgba(160,210,255,.42);
-  clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),
-                    calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px);
   color:var(--ui-txt);font-weight:700;text-shadow:none;
   font-size:.92em;min-width:1.9em;padding:1px .5em 2px}
 #help .kx{color:var(--ui-mute);font-weight:600;font-size:.92em}
@@ -553,8 +592,9 @@ body.uiDeathOn #stVig{opacity:.05!important}
 #help .hNote{color:var(--ui-mute);font-weight:600;font-size:.92em;line-height:1.45}
 body.uiHelpOff #help{opacity:0;transform:translateX(-10px)}
 /* 「?」 칩. 같은 유리 문법(판만, 문구는 그대로 「?」) */
-#uiHelpChip{--c:8px;position:fixed;left:16px;top:14px;z-index:7;width:34px;height:34px;
-  border:0;background:linear-gradient(180deg,rgba(14,22,38,.92),rgba(7,12,23,.94));
+#uiHelpChip{--c:8px;--cut-ink:var(--ui-edge-on);
+  position:fixed;left:16px;top:14px;z-index:7;width:34px;height:34px;
+  border:0;background:var(--cut-lines),linear-gradient(180deg,rgba(14,22,38,.92),rgba(7,12,23,.94));
   box-shadow:inset 0 0 0 1px var(--ui-edge-on),inset 0 0 16px rgba(60,160,230,.16);
   color:var(--ui-cy);font-family:var(--ui-font);font-size:16px;font-weight:800;
   line-height:34px;text-align:center;user-select:none;cursor:pointer;
@@ -568,7 +608,7 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
 #eHud,#bHud,#stHud,#stat,#sword,#bGoal,#bName,#bClear,#combo{font-family:var(--ui-font)}
 /* 우상단 수치판(개발용). 평시에는 비어 있으므로 빈 칩이 안 뜨게 접는다 */
 #stat{--c:7px;display:inline-block;padding:6px 12px;border:0;
-  background:rgba(8,13,24,.86);box-shadow:inset 0 0 0 1px var(--ui-edge);
+  background:var(--cut-lines),rgba(8,13,24,.86);box-shadow:inset 0 0 0 1px var(--ui-edge);
   color:var(--ui-mute);font-weight:600;letter-spacing:.02em;text-shadow:none}
 #stat span{color:var(--ui-dim)}
 #stat:empty{display:none}
@@ -637,9 +677,9 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
      빨강=위험 / 초록=체력** 넷이다. 레벨과 EXP 는 「성장」이라 앰버 쪽에 속한다
      (SAO 의 선택 행 앰버 #E8A31E · 메이플 EXP 노랑 · 롤 골드가 전부 같은 자리다).
      덤으로 가운데 슬롯 열(시안)과 색이 갈려서 「나」와 「누를 것」이 한눈에 나뉜다. */
-#uiDock .dkLv{--c:7px;flex:0 0 auto;width:30px;height:30px;
+#uiDock .dkLv{--c:7px;--cut-ink:var(--ui-gold);flex:0 0 auto;width:30px;height:30px;
   display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(180deg,rgba(38,28,10,.94),rgba(18,13,4,.96));
+  background:var(--cut-lines),linear-gradient(180deg,rgba(38,28,10,.94),rgba(18,13,4,.96));
   box-shadow:inset 0 0 0 1px var(--ui-gold),inset 0 0 14px rgba(230,160,40,.26);
   color:var(--ui-gold);font-size:14px;font-weight:800;line-height:1;
   text-shadow:0 0 10px rgba(255,187,61,.6)}
@@ -667,10 +707,14 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
      같은 문턱(50/25%)으로 다시 계산해서** 클래스로 얹는다(updateHp).
      한쪽만 고치면 두 파일이 다른 색을 번갈아 칠하므로, 여기 문턱을 바꾸면
      enemy.js 의 문턱도 같이 볼 것. */
-#eBar{--c:5px;position:relative;flex:1 1 auto;width:auto;min-width:92px;max-width:300px;
+/* ★★17차 모서리 수리: 테를 트랙이 아니라 **덮개(::after)** 가 진다.
+   inset 그림자는 배경 위·자식 아래에 그려지므로, 채움(#eFill)이 100% 로 차면
+   트랙의 1px 테가 통째로 채움 밑에 깔려 사라졌다(만체력에서 게이지에 테가 없었다).
+   덮개는 채움보다 위라 언제나 보인다 - 컷코너 빗변도 같이 덮개가 진다. */
+#eBar{--c:5px;--cut-ink:rgba(150,205,245,.34);
+  position:relative;flex:1 1 auto;width:auto;min-width:92px;max-width:300px;
   height:20px;border:0;border-radius:0;
-  background:linear-gradient(180deg,rgba(9,15,29,.96),rgba(3,6,14,.96));
-  box-shadow:inset 0 0 0 1px rgba(150,205,245,.34)}
+  background:linear-gradient(180deg,rgba(9,15,29,.96),rgba(3,6,14,.96))}
 #eFill{position:relative;filter:none;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(0,0,0,.30)}
 #eBar.hpHi  #eFill{background:linear-gradient(180deg,#4bd193,#1fa96c 44%,#0d7248)!important}
@@ -684,7 +728,10 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
    ★17차: 25% 만 붉고 나머지는 검었다(한 바 안에 눈금이 두 색). **한 색으로 통일**하고
      세기만 다르게 둔다 - 위험은 채움 색과 숫자 캡슐이 이미 두 번 말한다. */
 #eBar::after{content:'';position:absolute;inset:0;pointer-events:none;
+  box-shadow:inset 0 0 0 1px rgba(150,205,245,.34);
   background:
+    /* 컷코너 빗변 넷. 트랙 배경이 아니라 여기 있어야 채움 위에 남는다 */
+    var(--cut-lines),
     /* ★카드의 스캔라인을 게이지 위에도 덮는다. 이 한 겹이 「웹 프로그레스바」와
        「홀로 계기」를 가른다 - 채움과 트랙이 같은 결을 쓰게 되기 때문이다. */
     repeating-linear-gradient(0deg,rgba(2,6,14,.16) 0 1px,rgba(0,0,0,0) 1px 3px),
@@ -698,19 +745,19 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
    만체력(형광 초록)에서 흰 글자가 그 위에 올라타 대비가 무너졌다 -
    흰 글자는 밝은 채움 위에서 읽히지 않는다. 카드가 쓰는 어두운 유리 캡슐로
    **바 밖에** 내보낸다. 컷코너까지 카드와 같은 문법이다. */
-#uiHpNum{--c:4px;position:static;flex:0 0 auto;
-  clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),
-                    calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px);
+/* ★컷코너는 위 「컷코너 한 벌」 표가 --c 로 잡는다(예전에는 여기에도 4px 을 손으로
+   박은 clip-path 가 한 벌 더 있었다). */
+#uiHpNum{--c:4px;--cut-ink:rgba(150,205,245,.30);position:static;flex:0 0 auto;
   padding:4px 9px 5px;line-height:1;
-  background:linear-gradient(180deg,rgba(11,18,33,.94),rgba(5,9,18,.96));
+  background:var(--cut-lines),linear-gradient(180deg,rgba(11,18,33,.94),rgba(5,9,18,.96));
   box-shadow:inset 0 0 0 1px rgba(150,205,245,.30);
   font-size:12.5px;font-weight:800;letter-spacing:.01em;color:#eaf6ff;
   font-variant-numeric:tabular-nums;text-shadow:none}
 #uiHpNum s,#uiHpNum u{text-decoration:none;color:var(--ui-mute);font-weight:700;font-size:11px}
 #uiHpNum s{margin:0 1px}
 /* 25% 밑으로 떨어지면 캡슐째로 붉힌다. 채움 색과 같은 뜻을 두 번 말해 준다 */
-#uiHpNum.low{color:#ffd9d1;
-  background:linear-gradient(180deg,rgba(38,12,10,.94),rgba(20,6,5,.96));
+#uiHpNum.low{color:#ffd9d1;--cut-ink:rgba(255,110,88,.62);
+  background:var(--cut-lines),linear-gradient(180deg,rgba(38,12,10,.94),rgba(20,6,5,.96));
   box-shadow:inset 0 0 0 1px rgba(255,110,88,.62),inset 0 0 14px rgba(190,50,36,.28)}
 /* 처치 수. 게이지 오른쪽에 **마름모 구분자** 하나 두고 붙인다(카드의 그 표식) */
 #eTxt{position:relative;flex:0 0 auto;margin:0;padding-left:18px;
@@ -747,7 +794,7 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
      그때는 JS 가 태그째로 접는다. */
 #uiDock .dkSword{--c:7px;display:inline-flex;align-items:center;gap:8px;
   padding:6px 14px 7px;border:0;
-  background:linear-gradient(180deg,rgba(12,20,35,.90),rgba(7,12,23,.94));
+  background:var(--cut-lines),linear-gradient(180deg,rgba(12,20,35,.90),rgba(7,12,23,.94));
   box-shadow:inset 0 0 0 1px var(--ui-edge)}
 #uiDock .dkSword .lb{font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--ui-cy)}
 #sword{position:static;right:auto;bottom:auto;opacity:1!important;
@@ -758,10 +805,16 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
      지금 계기판은 76px 이고 여유 12px 이라 88px 이다. */
 #stHud{--c:8px;bottom:88px;border:0;border-radius:0;
   letter-spacing:.08em;font-weight:800;font-size:12.5px;padding:7px 17px 8px;text-shadow:none}
-/* 은신 줄. 초록/주황이 무슨 뜻인지는 그대로 두고 판만 이 벌의 유리로 내린다. */
-#stHud.hide{color:#c8ffe4;background:linear-gradient(180deg,rgba(8,32,24,.92),rgba(4,18,14,.94));
+/* 은신 줄. 초록/주황이 무슨 뜻인지는 그대로 두고 판만 이 벌의 유리로 내린다.
+   ★★border:0 을 **여기에도** 적는다. 위 #stHud 규칙(0,1,0)의 border:0 은
+     stealth.js 의 #stHud.hide{border:1px solid #2b7a52}(0,1,1) 에게 진다 -
+     그래서 이 판만 진짜 border 를 하나 더 두르고 있었고, 그 네모 테가 컷코너에
+     잘려 **모서리마다 초록 도막이 튀어나온 채 끊겨** 보였다(실측 컷). */
+#stHud.hide{color:#c8ffe4;border:0;--cut-ink:var(--rb-ok);
+  background:var(--cut-lines),linear-gradient(180deg,rgba(8,32,24,.92),rgba(4,18,14,.94));
   box-shadow:inset 0 0 0 1px var(--rb-ok),inset 0 0 18px rgba(40,200,130,.20)}
-#stHud.loud{color:#ffe2bb;background:linear-gradient(180deg,rgba(40,24,8,.92),rgba(22,13,4,.94));
+#stHud.loud{color:#ffe2bb;border:0;--cut-ink:var(--ui-gold);
+  background:var(--cut-lines),linear-gradient(180deg,rgba(40,24,8,.92),rgba(22,13,4,.94));
   box-shadow:inset 0 0 0 1px var(--ui-gold),inset 0 0 18px rgba(230,160,40,.20)}
 /* 은신 비네트. stealth.js 것을 여기서 덮는다(이 style 이 나중에 붙어 이긴다). */
 #stVig{box-shadow:inset 0 0 190px 62px rgba(2,8,7,.72),
@@ -788,7 +841,14 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
 /* ★결과창만 **앰버**다. 이 벌의 색 규칙에서 앰버는 「목표·보상」이고, 층 돌파는
      이 게임에서 유일한 보상의 순간이다. 나머지 창(입장·경고·사망)과 색으로 갈라 두면
      화면을 처음 보는 사람도 「이건 좋은 소식」이라는 것을 글자보다 먼저 안다. */
-#bClear{padding:0;min-width:min(500px,88vw);
+/* ★★border:0 · border-radius:0 를 반드시 적을 것. boss.js·level2.js 가
+     「border:1px solid #2c4a63 · border-radius:12px」로 만들어 두었고, 특이도가
+     같아서(둘 다 #bClear) **우리가 안 적은 속성은 그쪽이 그대로 산다.**
+     그 결과 이 판만 「12px 둥근 파란 테」 위에 「14px 45도 컷」이 겹쳐서,
+     둥근 테가 빗변에 잘려 모서리마다 파란 도막이 끊긴 채 남아 있었다.
+     ★position 은 여기서 **절대** 안 건드린다(건드리면 판이 화면 밖으로 사라진다). */
+#bClear{padding:0;min-width:min(500px,88vw);border:0;border-radius:0;
+  --cut-ink:rgba(255,187,61,.72);
   box-shadow:inset 0 0 0 1.5px rgba(255,187,61,.72),inset 0 0 46px rgba(190,130,20,.14);
   filter:drop-shadow(0 0 16px rgba(255,187,61,.26)) drop-shadow(0 10px 26px rgba(0,0,0,.62));
   transition:opacity .45s ease,transform .45s cubic-bezier(.2,.9,.25,1);
@@ -860,7 +920,7 @@ body.uiCleared #uiClearDim{opacity:1}
 #uiSkills .sk,#uiSkills .skLock{
   --c:8px;--sk-accent:var(--ui-cy);
   position:relative;width:66px;height:58px;padding:0;border:0;border-radius:0;
-  background:linear-gradient(180deg,rgba(14,23,40,.88),rgba(7,12,23,.93));
+  background:var(--cut-lines),linear-gradient(180deg,rgba(14,23,40,.88),rgba(7,12,23,.93));
   box-shadow:inset 0 0 0 1px var(--ui-edge);
   overflow:visible;display:block;
   transition:background .16s ease,box-shadow .16s ease,filter .16s ease}
@@ -874,8 +934,8 @@ body.uiCleared #uiClearDim{opacity:1}
      사라진다**(첫 촬영에서 X·C 가 안 보였다). 롤도 덮개 위에 키를 남긴다 - 무엇을
      누를 칸인지는 쿨과 무관한 사실이기 때문이다. */
 #uiSkills .sk .key{position:absolute;left:50%;top:4px;transform:translateX(-50%);z-index:5;
-  --c:3px;min-width:22px;height:15px;line-height:13px;padding:0 6px;
-  border:0;border-radius:0;background:rgba(20,32,54,.95);
+  --c:3px;--cut-ink:rgba(160,210,255,.46);min-width:22px;height:15px;line-height:13px;padding:0 6px;
+  border:0;border-radius:0;background:var(--cut-lines),rgba(20,32,54,.95);
   box-shadow:inset 0 0 0 1px rgba(160,210,255,.46);
   color:var(--ui-txt);font-size:10.5px;font-weight:800;text-align:center;
   transition:color .16s ease,box-shadow .16s ease,background .16s ease}
@@ -931,20 +991,21 @@ body.uiCleared #uiClearDim{opacity:1}
   text-align:center;font-size:11px;line-height:1.15;font-weight:800;letter-spacing:-.01em;
   color:var(--ui-txt);text-shadow:0 1px 3px rgba(0,0,0,.7)}
 /* 준비 - 시안 테 + 은은한 발광. ★drop-shadow 는 clip-path 실루엣을 따라간다 */
-#uiSkills .sk.rdy{
-  background:linear-gradient(180deg,rgba(20,38,64,.90),rgba(9,17,32,.94));
+#uiSkills .sk.rdy{--cut-ink:var(--ui-edge-on);
+  background:var(--cut-lines),linear-gradient(180deg,rgba(20,38,64,.90),rgba(9,17,32,.94));
   box-shadow:inset 0 0 0 1px var(--ui-edge-on),inset 0 0 20px rgba(60,170,235,.22);
   filter:drop-shadow(0 0 6px rgba(86,216,255,.34))}
 #uiSkills .sk.rdy .nm{color:#eefaff}
 /* 불가(쿨 · 휘두르는 중). 면을 내리고 획·이름·키캡을 같이 물린다 */
-#uiSkills .sk.off{
-  background:linear-gradient(180deg,rgba(9,14,25,.92),rgba(5,9,17,.94));
+#uiSkills .sk.off{--cut-ink:rgba(150,190,225,.16);
+  background:var(--cut-lines),linear-gradient(180deg,rgba(9,14,25,.92),rgba(5,9,17,.94));
   box-shadow:inset 0 0 0 1px rgba(150,190,225,.16);filter:none}
 /* ★덮개 위에 남지만 **한 단 어둡게**. 완전히 죽이면 쿨 도는 칸이 빈 상자가 된다
    (첫 촬영에서 이름이 안 읽혔다. .34 -> .62). */
 #uiSkills .sk.off .nm{color:rgba(200,222,244,.62);text-shadow:0 1px 3px rgba(0,0,0,.8)}
 #uiSkills .sk.off::after{opacity:.26;filter:none}
-#uiSkills .sk.off .key{color:rgba(210,232,252,.38);background:rgba(10,16,28,.9);
+#uiSkills .sk.off .key{color:rgba(210,232,252,.38);--cut-ink:rgba(150,190,225,.24);
+  background:var(--cut-lines),rgba(10,16,28,.9);
   box-shadow:inset 0 0 0 1px rgba(150,190,225,.24)}
 #uiSkills .sk.off[data-k="Basic"]::before{opacity:.14;filter:none}
 /* 쿨다운 덮개. JS 가 conic-gradient 를 20Hz 로 다시 쓴다(페인트만 도는 일이다).
@@ -965,7 +1026,8 @@ body.uiCleared #uiClearDim{opacity:1}
      맞다 - 없는 기술이 있는 기술과 같은 크기·같은 대비로 서 있었다(52px · 자물쇠 .34).
      칸은 남기되 **실루엣**으로 내린다: 폭 34px · 면은 거의 안 보이게 · 자물쇠는
      형태만 남는 세기(.14). 「자리가 있다」는 말은 그 정도면 충분하다. */
-#uiSkills .skLock{background:rgba(6,10,19,.34);
+#uiSkills .skLock{--cut-ink:rgba(150,190,225,.07);
+  background:var(--cut-lines),rgba(6,10,19,.34);
   box-shadow:inset 0 0 0 1px rgba(150,190,225,.07)}
 #uiSkills .skLock .lk{position:absolute;left:50%;top:50%;width:11px;height:9px;
   margin:-1px 0 0 -5.5px;border-radius:2px;background:rgba(140,175,210,.14)}
@@ -995,9 +1057,9 @@ body.uiCleared #uiClearDim{opacity:1}
   border-top:10px solid transparent;border-bottom:10px solid transparent;
   filter:drop-shadow(0 0 6px var(--nav-glow)) drop-shadow(0 2px 3px rgba(0,0,0,.6))}
 /* 판 + 한 글자 */
-#uiNav .plate{--c:12px;position:absolute;left:50%;top:50%;
+#uiNav .plate{--c:12px;--cut-ink:var(--nav-ink);position:absolute;left:50%;top:50%;
   width:46px;height:46px;margin:-23px 0 0 -23px;border:0;border-radius:0;
-  background:linear-gradient(180deg,rgba(12,22,40,.92),rgba(6,11,22,.95));
+  background:var(--cut-lines),linear-gradient(180deg,rgba(12,22,40,.92),rgba(6,11,22,.95));
   box-shadow:inset 0 0 0 1px var(--nav-ink),inset 0 0 16px rgba(60,170,235,.20);
   display:flex;align-items:center;justify-content:center;
   font-family:var(--ui-font);font-weight:800;font-size:23px;line-height:1;
@@ -1005,7 +1067,7 @@ body.uiCleared #uiClearDim{opacity:1}
 /* 한자 첫 등장 라벨. ★단계마다 딱 한 번, 2.6초만 붙었다 사라진다(판정 S8) */
 #uiNav .cap,#uiPip .cap{--c:5px;position:absolute;left:50%;
   transform:translate(-50%,0);padding:3px 10px 4px;white-space:nowrap;
-  border:0;border-radius:0;background:rgba(6,11,22,.94);
+  border:0;border-radius:0;background:var(--cut-lines),rgba(6,11,22,.94);
   box-shadow:inset 0 0 0 1px var(--ui-edge);
   font-family:var(--ui-font);font-size:11px;font-weight:700;letter-spacing:.04em;
   color:var(--ui-txt);text-shadow:none;
@@ -1022,7 +1084,7 @@ body.uiCleared #uiClearDim{opacity:1}
    ★숫자는 tabular-nums. 안 그러면 12 -> 11 에서 판 폭이 흔들려 깜빡이는 걸로 읽힌다. */
 #uiNav .dst{--c:5px;position:absolute;left:50%;top:50%;margin-top:28px;
   transform:translate(-50%,0);padding:2px 8px 3px;white-space:nowrap;
-  border:0;border-radius:0;background:rgba(6,11,22,.94);
+  border:0;border-radius:0;background:var(--cut-lines),rgba(6,11,22,.94);
   box-shadow:inset 0 0 0 1px var(--ui-edge);
   font-family:var(--ui-font);font-size:11px;font-weight:800;letter-spacing:.02em;
   font-variant-numeric:tabular-nums;color:var(--nav-ink);text-shadow:none;
@@ -1046,7 +1108,7 @@ body.uiCleared #uiClearDim{opacity:1}
 #uiPip{--c:5px;position:fixed;left:50%;top:50%;z-index:5;pointer-events:none;user-select:none;
   transform:translate(-50%,-50%);width:20px;height:20px;border:0;border-radius:0;opacity:0;
   display:flex;align-items:center;justify-content:center;
-  background:rgba(8,14,26,.90);box-shadow:inset 0 0 0 1px var(--ui-edge);
+  background:var(--cut-lines),rgba(8,14,26,.90);box-shadow:inset 0 0 0 1px var(--ui-edge);
   transition:opacity .3s ease,left .12s linear,top .12s linear}
 /* 판 안의 점. 나침반의 한 글자가 앉는 자리와 같은 자리다 */
 #uiPip::after{content:'';width:6px;height:6px;border-radius:50%;
@@ -1069,10 +1131,11 @@ body.uiCleared #uiClearDim{opacity:1}
    비켜 주는 쪽이 팝이어야 한다 - 자리를 한 단 내려 띠를 가른다.
    ★자리(top)만 바꾼다. transform 은 main.js 가 인라인으로 쓰는 칸이라 여전히 안 건드린다. */
 #combo{top:25%}
-#combo .uiCall{--c:10px;display:inline-flex;flex-direction:column;align-items:center;
+#combo .uiCall{--c:10px;--cut-ink:var(--ui-edge-on);
+  display:inline-flex;flex-direction:column;align-items:center;
   vertical-align:middle;padding:24px 26px 12px;text-align:center;
   border:0;border-radius:0;position:relative;
-  background:linear-gradient(180deg,rgba(12,20,36,.90),rgba(6,11,22,.94));
+  background:var(--cut-lines),linear-gradient(180deg,rgba(12,20,36,.90),rgba(6,11,22,.94));
   box-shadow:inset 0 0 0 1px var(--ui-edge-on),inset 0 0 26px rgba(60,160,230,.16);
   filter:drop-shadow(0 0 12px rgba(86,216,255,.28));
   font-family:var(--ui-font)}
@@ -1100,9 +1163,18 @@ body.uiCleared #uiClearDim{opacity:1}
   transition:opacity .18s ease;will-change:transform}
 #uiHpFloat.on{opacity:1}
 #uiHpFloat i{position:absolute;left:0;top:0;bottom:0;display:block}
-#uiHpFloat .track{--c:3px;position:absolute;inset:0;overflow:hidden;border:0;border-radius:0;
-  background:rgba(2,5,11,.92);
-  box-shadow:inset 0 0 0 1px rgba(214,240,255,.72),0 2px 6px rgba(0,0,0,.6)}
+/* ★★17차 모서리 수리: 이 트랙도 테를 **덮개(::after)** 가 진다.
+   inset 그림자는 자식 밑에 깔리므로, 만체력이면 채움이 흰 테를 통째로 덮어
+   머리 위 바에 테가 없었다(모서리도 채움이 잘린 단면만 보였다).
+   ★바깥 그림자(0 2px 6px)는 애초에 clip-path 가 통째로 잘라 먹고 있었다 -
+     한 번도 그려진 적이 없는 겹이라 지운다(살리려면 filter 인데, 매 프레임
+     transform 이 도는 조각에 filter 를 걸 수는 없다). 흰 테가 그 일을 대신한다. */
+#uiHpFloat .track{--c:3px;--cut-ink:rgba(214,240,255,.72);
+  position:absolute;inset:0;overflow:hidden;border:0;border-radius:0;
+  background:rgba(2,5,11,.92)}
+#uiHpFloat .track::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:2;
+  background:var(--cut-lines);
+  box-shadow:inset 0 0 0 1px rgba(214,240,255,.72)}
 #uiHpFloat .track i{top:0;bottom:0;left:0;border-radius:0}
 /* 잔상. 방금 깎여 나간 만큼이 잠깐 남았다가 따라 줄어든다(폭은 JS 가 매 프레임 쓴다).
    ★채움보다 **뒤에** 깔린다(문서 순서). 그래야 줄어든 구간에서만 보인다. */
@@ -1110,10 +1182,11 @@ body.uiCleared #uiClearDim{opacity:1}
 /* 채움. 색(초록/노랑/빨강)은 enemy.js 의 규칙을 그대로 쓴다 - 뜻이 걸린 색이라 안 바꾼다 */
 #uiHpFloat .fl{filter:saturate(1.06);transition:filter .2s ease}
 /* 레벨 뱃지. 같은 transform 노드 안에서 트랙 왼쪽에 붙는다 */
-#uiHpFloat .lv{--c:5px;position:absolute;right:calc(100% - 3px);top:50%;z-index:3;
+#uiHpFloat .lv{--c:5px;--cut-ink:var(--ui-gold);
+  position:absolute;right:calc(100% - 3px);top:50%;z-index:3;
   width:24px;height:24px;transform:translateY(-50%);
   display:flex;align-items:center;justify-content:center;
-  border:0;border-radius:0;background:rgba(24,17,6,.94);
+  border:0;border-radius:0;background:var(--cut-lines),rgba(24,17,6,.94);
   box-shadow:inset 0 0 0 1px var(--ui-gold),inset 0 0 10px rgba(230,160,40,.30);
   color:var(--ui-gold);font-family:var(--ui-font);
   font-size:11.5px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
@@ -1122,7 +1195,8 @@ body.uiCleared #uiClearDim{opacity:1}
    태우면 그 순간 색(초록/노랑/빨강)이 사라져서 「얼마나 위험한가」를 못 읽는다.
    ★남은 쪽 밝기는 1.2 를 넘기지 않는다. 1.45 로 두니 옅은 쪽 끝이 흰색으로 타서
      초록 바가 통째로 청백색으로 읽혔다(f08 실측 (191,255,255)). 색이 곧 뜻이다. */
-#uiHpFloat.hit .track{box-shadow:inset 0 0 0 1.5px #fff,0 2px 6px rgba(0,0,0,.6)}
+#uiHpFloat.hit .track{--cut-ink:#fff;--cw:1.5px}
+#uiHpFloat.hit .track::after{box-shadow:inset 0 0 0 1.5px #fff}
 #uiHpFloat.hit .fl{filter:saturate(1.06) brightness(1.2);transition:none}
 #uiHpFloat.hit .gh{background:rgba(255,247,240,.95);transition:none}
 

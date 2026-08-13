@@ -95,13 +95,37 @@
   #load { position:fixed; inset:0; display:flex; align-items:center;
     justify-content:center;
     background:radial-gradient(ellipse at 50% 42%,#101c33 0%,#05080f 76%); z-index:9; }
+  /* ── 컷코너 한 벌 (ui.js 의 같은 이름 블록과 1:1) ──────────────────────────
+     ★★테는 box-shadow:inset 으로 그리는데 그 겹은 **네모**다. 그 위에 45도를
+       잘라 내면 잘린 자리에 테가 안 남는다 - 판마다 빗변 넷이 통째로 비어서
+       테가 네 도막으로 끊겨 보였다. 빗변은 45도 그러데이션 배경 겹으로 직접 깐다
+       (바깥 절반은 clip-path 가 도로 자르므로 남는 두께는 --cw 한 겹). */
+  #load .win, #load .ldTrack {
+    --cw:1px;
+    --cut-ink:var(--ui-edge-on);
+    --cut-lines:
+      linear-gradient(135deg,rgba(0,0,0,0) calc(50% - var(--cw)),
+        var(--cut-ink) calc(50% - var(--cw)) calc(50% + var(--cw)),
+        rgba(0,0,0,0) calc(50% + var(--cw))) no-repeat 0 0/var(--c,0px) var(--c,0px),
+      linear-gradient(45deg,rgba(0,0,0,0) calc(50% - var(--cw)),
+        var(--cut-ink) calc(50% - var(--cw)) calc(50% + var(--cw)),
+        rgba(0,0,0,0) calc(50% + var(--cw))) no-repeat 100% 0/var(--c,0px) var(--c,0px),
+      linear-gradient(45deg,rgba(0,0,0,0) calc(50% - var(--cw)),
+        var(--cut-ink) calc(50% - var(--cw)) calc(50% + var(--cw)),
+        rgba(0,0,0,0) calc(50% + var(--cw))) no-repeat 0 100%/var(--c,0px) var(--c,0px),
+      linear-gradient(135deg,rgba(0,0,0,0) calc(50% - var(--cw)),
+        var(--cut-ink) calc(50% - var(--cw)) calc(50% + var(--cw)),
+        rgba(0,0,0,0) calc(50% + var(--cw))) no-repeat 100% 100%/var(--c,0px) var(--c,0px);
+    clip-path:polygon(var(--c) 0,calc(100% - var(--c)) 0,100% var(--c),
+                      100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,
+                      var(--c) 100%,0 calc(100% - var(--c)),0 var(--c)); }
   /* 판: ui.js 의 창 규칙과 **같은 값**이어야 한다 - 어두운 유리 + 1px 시안 헤어라인 +
      컷코너 14px + 위 가운데 시안 막대·실선·삼각 노치.
      ★로딩 화면은 여기가 정본이라, ui.js 쪽을 고칠 때 이 블록도 같이 고칠 것. */
   #load .win { position:relative; padding:70px 44px 30px;
-    clip-path:polygon(14px 0,calc(100% - 14px) 0,100% 14px,100% calc(100% - 14px),
-                      calc(100% - 14px) 100%,14px 100%,0 calc(100% - 14px),0 14px);
+    --c:14px; --cw:1.5px;
     background:
+      var(--cut-lines),
       repeating-linear-gradient(0deg,rgba(120,190,255,.030) 0 1px,rgba(0,0,0,0) 1px 4px),
       linear-gradient(180deg,var(--ui-glass) 0%,var(--ui-glass-2) 100%);
     border:0;
@@ -130,11 +154,15 @@
     padding-left:.22em; color:var(--ui-cy); text-shadow:0 0 10px rgba(86,216,255,.55); }
   #load .bd { padding-top:0; display:flex; flex-direction:column;
     align-items:center; gap:13px; }
+  /* ★테는 트랙이 아니라 **덮개(::after)** 가 진다. inset 그림자는 자식 밑에 깔려서,
+       막대가 100% 로 차면 트랙의 1px 테가 통째로 채움 밑에 묻혔다(다 찬 순간
+       테가 사라진다). 덮개는 채움보다 위라 언제나 남는다 - 빗변도 여기 얹는다. */
   #load .ldTrack { position:relative; width:min(300px,54vw); height:13px;
-    clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),
-                      calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px);
-    border:0; background:rgba(2,5,11,.94);
-    box-shadow:inset 0 0 0 1px rgba(150,205,245,.40); overflow:hidden; }
+    --c:4px; --cut-ink:rgba(150,205,245,.40);
+    border:0; background:rgba(2,5,11,.94); overflow:hidden; }
+  #load .ldTrack::after { content:''; position:absolute; inset:0; z-index:2;
+    pointer-events:none; background:var(--cut-lines);
+    box-shadow:inset 0 0 0 1px rgba(150,205,245,.40); }
   #load .ldFill { position:absolute; left:0; top:0; bottom:0; width:100%;
     transform:scaleX(0); transform-origin:0 50%; border-radius:0;
     background:linear-gradient(180deg,#9beeff,var(--ui-cy) 45%,#1f9dc4);
