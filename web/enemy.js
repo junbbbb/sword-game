@@ -1646,7 +1646,7 @@ export function createEnemySystem(opts) {
   //
   // 표식과 같은 이유로 파일을 안 만든다(404·CSP·경로 문제가 통째로 없다).
   // ★다른 점이 하나 있다. 이건 **색이 아니라 마스크**다. 세 겹을 세 칸에 나눠 담는다.
-  //   G = 바깥 진한 외곽선 · B = 그 안쪽 크림색 테 · R = 글자 속 · A = 덮인 정도
+  //   G = 바깥 진한 외곽선 · B = 그 안쪽 백청색 테 · R = 글자 속 · A = 덮인 정도
   //   굽는 법: 초록(0,255,0)으로 굵게 긋고 → 파랑(0,0,255)으로 가늘게 덧긋고 →
   //   빨강(255,0,0)으로 속을 채운다. source-over 라 겹친 자리는 뒤에 그린 것이 이기고
   //   경계 한 겹만 둘이 섞인다 = 셰이더에서 그대로 부드러운 전환이 된다.
@@ -1666,20 +1666,16 @@ export function createEnemySystem(opts) {
   // 밉맵은 아틀라스라 이웃 칸이 샐 위험이 있는데, 글자 폭이 칸의 절반이라
   // 좌우 여백이 27px 씩(밉 2단에서도 7텍셀) 있어 실제로는 안 닿는다.
   const DIG_CW = 112, DIG_CH = 140;      // 아틀라스 한 칸(px)
-  // ── ★줄이 둘인 이유 (2026-08-12 13차. 오너 "빨간 글자에 흰 테두리") ──
-  // 0줄 = 일반타 · 1줄 = 처치타. **처치타는 흰 테를 더 굵게 굽는다.**
+  // ── ★줄이 둘인 이유 ──
+  // 0줄 = 일반타·스킬 · 1줄 = 처치타. **처치타는 백청 테를 더 굵게 굽는다.**
   // 처치타는 이미 1.35배로 커지지만 그건 전체가 같이 커지는 거라 테의 **몫**은 그대로다.
   // 오너가 말한 "처치타는 테가 더 굵다"는 몫의 이야기라, 굵기를 아예 따로 구워야 한다.
   const DIG_ROWS = 2;
   // 겹 굵기(px). ★보이는 두께는 절반씩이다 - 속을 나중에 채우므로 안쪽 절반이 덮인다:
-  //   흰 테 = rim/2 · 바깥 어두운 키라인 = (ol - rim)/2
-  // 개선 전에는 ol 36 / rim 13 이라 **어두운 겹 11.5px · 크림 6.5px** 이었다(실측 300:242).
-  // 즉 굵은 쪽이 어두운 겹이었고, 밝은 바닥에서는 글자가 갈색 테로 읽혔다. 그래서 뒤집는다.
-  // ★13/16px 로 한 번 밟았다. 흰 테가 획 굵기를 넘어서서 글자가 **흰 덩어리**로 읽혔고
-  //   0 의 속이 메워졌다(캡처로 확인). 테는 색을 이기면 안 된다 - codex 시트에서도
-  //   흰 테는 획 굵기의 절반쯤이다. 9/12px 로 내려서 색이 주인이고 테가 두르는 그림으로.
-  const DIG_W = [{ ol: 26, rim: 18 },    // 일반타 : 흰 9px · 키라인 4px
-                 { ol: 32, rim: 24 }];   // 처치타 : 흰 12px · 키라인 4px
+  //   백청 테 = rim/2 · 바깥 어두운 키라인 = (ol - rim)/2
+  // 이전 9/12px 테를 4/6px로 줄여 크림색 덩어리 대신 숫자 획이 주인이 되게 한다.
+  const DIG_W = [{ ol: 18, rim: 8 },     // 일반타 : 백청 4px · 샤프 키라인 5px
+                 { ol: 22, rim: 12 }];   // 처치타 : 백청 6px · 샤프 키라인 5px
   let digAdv = 0.75;                     // 자리 간격 / 칸 폭. 굽는 자리에서 실측해 덮는다
   let digInk = 0;                        // 잉크가 실제로 닿은 글자 폭(px). 자간 계약의 분모다
   let digCanvas = null;                  // 실측 창구(api.dmgScan)가 읽는 굽힌 캔버스
@@ -1718,25 +1714,18 @@ export function createEnemySystem(opts) {
     const g = cv.getContext('2d');
     g.clearRect(0, 0, cv.width, cv.height);
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    // 볼드 라운드체. 메이플·로블록스 숫자의 정체는 **두꺼운 라운드 + 굵은 외곽선**이다.
-    // macOS 는 Arial Rounded MT Bold 가 기본 탑재라 첫 칸에서 잡히고, 없는 기기에서도
-    // 뒤로 갈수록 두꺼운 산세리프로 떨어져서 "굵다"는 성질은 안 잃는다.
-    g.font = '900 96px "Arial Rounded MT Bold", "Avenir Next", ' +
+    // 어비스 HUD의 얇고 날카로운 인상: 협폭 고중량 숫자 + 각진 키라인.
+    // 협폭체가 없는 기기에서도 고중량 산세리프로 떨어져 획은 유지한다.
+    g.font = '900 96px "Avenir Next Condensed", "Arial Narrow", "Roboto Condensed", ' +
              '"Helvetica Neue", "Apple SD Gothic Neo", Arial, sans-serif';
-    g.lineJoin = 'round'; g.lineCap = 'round'; g.miterLimit = 2;
-    // ★굵기 내력(칸 112 기준. 앞의 둘은 128칸 시절이다)
-    //   36/17: 진한 테가 화면 2.6px 이라 회색 후광 - 진범은 굵기가 아니라 밉맵 없는 축소였다.
-    //   50/20: 너무 굵어 0 의 속이 메워지고 세 자리가 한 덩어리가 됐다.
-    //   36/13: 어두운 겹 11.5px · 크림 6.5px. **굵은 쪽이 어두운 겹이라 뒤집혀 있었다.**
-    //   34/26 · 40/32(지금): 흰 테 13·16px · 어두운 키라인 4px. 오너 지시의 "흰 굵은 테".
-    // ★어두운 키라인을 0 으로 못 없앤다. 밝은 흙바닥에서 흰 테가 배경에 먹히면
-    //   글자 모양이 통째로 사라진다 - codex 시트도 흰 테 바깥에 갈색 한 줄을 두르고 있다.
+    g.lineJoin = 'miter'; g.lineCap = 'butt'; g.miterLimit = 4;
+    // 키라인은 밝은 바닥에서 백청 테가 먹히지 않을 정도만 남긴다.
     for (let row = 0; row < DIG_ROWS; row++) {
       const LW_OL = DIG_W[row].ol, LW_RIM = DIG_W[row].rim;
       for (let d = 0; d <= 9; d++) {
         const ch = String(d);
         const cx = DIG_CW * d + DIG_CW / 2, cy = DIG_CH * row + DIG_CH / 2;
-        // 겹치는 순서가 곧 겹의 순서다: 바깥(G) -> 흰 테(B) -> 속(R).
+        // 겹치는 순서가 곧 겹의 순서다: 바깥(G) -> 백청 테(B) -> 속(R).
         // 속을 마지막에 채우므로 두 스트로크의 **안쪽 절반은 덮인다** = 테가 밖으로만 남는다.
         g.strokeStyle = '#00ff00'; g.lineWidth = LW_OL;
         g.strokeText(ch, cx, cy);
@@ -1936,19 +1925,35 @@ export function createEnemySystem(opts) {
   // 자리 한 칸 = 판 한 장. 뭉치 20개 × 다섯 자리 = 판 100장이 정점 버퍼 한 벌에 산다.
   const dgA = new Float32Array(DMG_MAX_POP * DMG_MAX_DIGITS * 4);        // 알파
   const dgTint = new Float32Array(DMG_MAX_POP * DMG_MAX_DIGITS * 4 * 3); // 글자 속 색(선형)
+  // 테마 색은 재질을 만들 때 한 번만 읽어 선형색으로 캐시한다.
+  // CSS 변수만 바꾸면 되고, 변수가 없거나 잘못된 색이면 Abyss 기본값으로 돌아간다.
+  function damageThemeColor(name, fallback) {
+    try {
+      const host = document.body || document.documentElement;
+      const raw = host ? getComputedStyle(host).getPropertyValue(name).trim() : '';
+      // THREE.Color(r160)이 확실히 해석하는 3/6자리 hex만 받는다. 브라우저는 알지만
+      // Three는 모르는 oklch()/color-mix()가 들어오면 흰색으로 굳지 않고 폴백한다.
+      if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(raw)) {
+        return fallback.slice();
+      }
+      const col = new THREE.Color().setStyle(raw, THREE.SRGBColorSpace);
+      if (isFinite(col.r) && isFinite(col.g) && isFinite(col.b)) return [col.r, col.g, col.b];
+    } catch (_) { /* 폴백 사용 */ }
+    return fallback.slice();
+  }
+  const DMG_TINT_HIT = damageThemeColor('--fx-damage-normal', [0.74, 0.84, 0.94]);
+  const DMG_TINT_SKILL = damageThemeColor('--fx-damage-critical', [0.58, 0.25, 0.90]);
+  const DMG_TINT_KILL = damageThemeColor('--fx-damage-kill', [0.90, 0.26, 0.035]);
+  const DMG_RIM = damageThemeColor('--fx-damage-accent', [0.52, 0.70, 0.86]);
+  const DMG_OUTLINE = damageThemeColor('--fx-damage-outline', [0.004, 0.012, 0.028]);
   const dmgMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, depthTest: false, fog: false,
     side: THREE.DoubleSide, blending: THREE.NormalBlending,
-    // 키라인·흰 테 색. ★선형 HDR 이다(위 FLASH_R 주석의 파이프라인 설명 참조).
-    //   uOl = 제일 바깥 한 줄. 진한 밤색이고 **얇다**(4px). 밝은 흙바닥에서 흰 테가
-    //         배경에 먹히는 것만 막는 역할이라, 이게 굵으면 글자가 갈색 테로 읽힌다.
-    //   uRim = 그 안쪽 **흰 테**. 오너가 말한 "흰색 테두리"가 이 겹이다.
-    // ★1.0 이 아니라 0.86 인 이유는 아래 DMG_TINT 주석과 같다 - ACES 가 입력을 1.75배로
-    //   받으므로 1.0 은 그냥 날아가고 블룸(임계 1.02)에 걸려 글자가 번진다. 0.86 이면
-    //   화면에서 흰색으로 읽히면서 안 번진다.
+    // 딥 네이비 키라인 + 차가운 백청색 헤어라인. ★선형 HDR 이다.
+    // CSS 색은 THREE.Color가 sRGB에서 선형으로 바꾼 값이 셰이더에 들어간다.
     uniforms: { uTex: { value: null },
-                uOl: { value: new THREE.Vector3(0.016, 0.008, 0.007) },
-                uRim: { value: new THREE.Vector3(0.86, 0.86, 0.87) } },
+                uOl: { value: new THREE.Vector3(...DMG_OUTLINE) },
+                uRim: { value: new THREE.Vector3(...DMG_RIM) } },
     vertexShader: `
       attribute float aA; attribute vec3 aTint;
       varying vec2 vU; varying float vA; varying vec3 vT;
@@ -1963,11 +1968,12 @@ export function createEnemySystem(opts) {
         vec4 t = texture2D(uTex, vU);
         float a = t.a * vA;
         if (!(a > 0.02)) discard;
-        // R = 글자 속 · G = 외곽선 · B = 크림 테. 셋은 경계 한 겹에서만 섞이므로
+        // R = 글자 속 · G = 외곽선 · B = 백청 테. 셋은 경계 한 겹에서만 섞이므로
         // 그냥 더하면 그게 곧 부드러운 전환이다(합은 언제나 1 언저리다).
-        // 속은 **위가 밝고 아래가 짙다**(메이플 숫자의 세로 색계단). vU.y 는 칸 안의
-        // 세로 자리라 그대로 계단이 된다(1 = 위).
-        vec3 fill = mix(vT * vec3(1.0, 0.55, 0.14), vT, vU.y);
+        // 아래는 냉색 그림자로 좁히고 위는 팔레트 원색을 남긴다.
+        // 아틀라스가 두 줄이므로 줄 안의 0~1 좌표로 다시 접어 같은 계단을 쓴다.
+        float gy = fract(vU.y * 2.0);
+        vec3 fill = mix(vT * vec3(0.42, 0.68, 1.0), vT, gy);
         gl_FragColor = vec4(uOl * t.g + uRim * t.b + fill * t.r, a);
       }`,
   });
@@ -1977,25 +1983,12 @@ export function createEnemySystem(opts) {
   try { dmgMat.uniforms.uTex.value = makeDigitTexture(); } catch (err) {
     if (DEV) console.warn('[enemy] 숫자 텍스처를 못 구웠다. 숫자 없이 돈다.', err);
   }
-  // 글자 속 색(선형 HDR). 아래로 갈수록 셰이더가 주황 쪽으로 눕힌다.
-  //   일반타 = 크림-금색 / 처치타 = 주황-빨강.
-  // ── ★왜 1.0 이 아니라 0.6 대인가 (두 번 밟은 함정) ──
-  // 이 값은 톤매핑 **전**이다. three 의 ACES 는 안에서 `color *= exposure / 0.6` 을 하고
-  // (main.js exposure 1.05) 곧 **입력이 1.75배로 들어간다.** 그래서 1.0 으로 칠하면
-  // 화면에서는 그냥 흰 글자가 나온다 - 실제로 첫 두 판이 그랬다.
-  // 크림·금색을 남기려면 0.6 대에서 칠하고 채널 비율로만 색을 만들어야 한다.
-  // ★블룸(임계 1.02)도 이 값으로 판정하므로 여기서 안 번지는 것이 덤으로 보장된다
-  //   - 글자가 번지면 오히려 못 읽는다.
-  // ★13차에 채움을 더 물들였다. 흰 테를 굵게 세우고 나니 속이 크림색이면 테와 안 갈려
-  //   글자가 통째로 흰 덩어리로 읽힌다. 오너 지시대로 일반타는 노랑~주황, 처치타는 빨강.
-  //   셰이더가 vU.y 로 아래를 더 주황 쪽에 눕히므로, 여기 값은 **위쪽 색**이다.
-  const DMG_TINT_HIT = [0.82, 0.60, 0.12];    // 위 노랑 -> 아래 주황
-  const DMG_TINT_KILL = [0.70, 0.20, 0.04];   // 위 주황 -> 아래 빨강
   // 뭉치 풀. 자릿수는 별도 배열에 담는다(뭉치당 DMG_MAX_DIGITS 칸, **1의 자리부터**).
   const dmgPops = [];
   for (let i = 0; i < DMG_MAX_POP; i++) {
     // seed = 자리별 세로 지터의 씨앗. 띄운 순번에서 받는다(결정론적. Math.random 금지)
-    dmgPops.push({ on: false, x: 0, y: 0, z: 0, t: 0, n: 0, ox: 0, oy: 0, sc: 1, kill: false, seed: 0 });
+    dmgPops.push({ on: false, x: 0, y: 0, z: 0, t: 0, n: 0, ox: 0, oy: 0,
+                   sc: 1, kill: false, skill: false, seed: 0 });
   }
   const dmgDig = new Int8Array(DMG_MAX_POP * DMG_MAX_DIGITS);
   let dmgSpawned = 0, dmgBad = 0, dmgShown = 0;
@@ -2234,6 +2227,9 @@ export function createEnemySystem(opts) {
     p.on = true; p.t = -DMG_DELAY;
     p.x = x; p.y = y; p.z = z;
     p.kill = !!kill;
+    // 별도 크리티컬 플래그는 없으므로, 이미 전달되는 공격 종류에서 스킬만 시각 강조한다.
+    // 처치 의미가 더 센 신호라 처치타는 아래 색상 선택에서 항상 우선한다.
+    p.skill = !p.kill && atkKind !== 'Attack';
     p.sc = kill ? DMG_KILL_SC : 1;
     // ★비키는 폭 (17차). 글자가 0.62 -> 0.34m 로 작아졌으니 옆으로 비키는 거리도 같이
     //   줄여야 "흩어진 네 뭉치"가 아니라 "한 사건의 네 숫자"로 읽힌다. 다만 세로는
@@ -2320,8 +2316,8 @@ export function createEnemySystem(opts) {
           dmgFracKind = p.kill ? 1 : 0;
         }
       }
-      const c = p.kill ? DMG_TINT_KILL : DMG_TINT_HIT;
-      // 처치타는 아틀라스 아랫줄(흰 테가 더 굵게 구워진 줄)을 본다.
+      const c = p.kill ? DMG_TINT_KILL : p.skill ? DMG_TINT_SKILL : DMG_TINT_HIT;
+      // 처치타는 아틀라스 아랫줄(백청 테가 더 굵게 구워진 줄)을 본다.
       const vRow = p.kill ? 1 : 0;
       const v0 = vRow / DIG_ROWS, v1 = (vRow + 1) / DIG_ROWS;
       const base = i * DMG_MAX_DIGITS;
