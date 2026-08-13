@@ -98,6 +98,10 @@
   1차는 왼손만 풀었고 오른팔은 소스 그대로 **검을 앞으로 겨눈** 자세였다.
   SWORD_DOWN 에 적은 클립은 오른팔 3본을 어깨에서 통째로 돌려 검을 몸 옆·아래로
   내린다. 자세한 표와 근거는 아래 [오른팔 내리기] 절에 있다.
+  ★★2026-08-13 17차: 그 "몸 옆"이 **화면에서는 발밑 수직 장대**였다(16차 건틀릿
+    SHEET_J3). 칼끝을 들고(E +14/+18) 방위를 45도 격자에서 비껴 놓고(Wd 122/128)
+    팔꿈치를 굽혀(EB +40) 여덟 방향 전부에서 실루엣이 서게 고쳤다. 굽는 자리에서
+    여덟 방향 화면을 재는 자가 같이 들어왔다 — [17차 신설: 8방향 화면 실루엣] 절.
 
 ★발 접지
   비례가 다르면(허벅지 0.247H vs 0.203H, 종아리 0.173H vs 0.240H) 각도만 옮겼을 때
@@ -137,6 +141,9 @@
   GRIP_ON/GRIP_OFF  파지 게이트 문턱(키 정규화. 기본 0.10 / 0.18)
   RELEASE   한 손으로 쥘 클립(쉼표)   기본 Jump  (빈 값이면 전부 양손)
   SWORD_DOWN 검 든 오른팔을 내릴 클립  기본 Jump  (빈 값이면 소스 그대로)
+  SWD_WRIST  오른손목이 먹어 줄 각의 상한(도)   기본 22
+  JUMP_V15   1 이면 점프 칼 위상표를 **15차 판**으로 되돌린다(17차 before 재현용)
+  SWD_TABLE  점프 칼 위상표 직접 주입 "t,E,Wd,A,F,EB;..." (튜닝용. 비면 파일 값)
   HAND_GRIP 1(기본) 왼손목 방향을 자루에서 역산 / 0 옛 판(리타게팅 그대로) 재현
   WRIST_LIM 왼손목 기하각 상한(도)     기본 60  (레스트 중립이 16.8도인 잣대다)
   KEEP_ORIG 1 이면 타깃 원본 액션을 Orig* 이름으로 같이 내보낸다(기본 0)
@@ -1109,21 +1116,61 @@ def balance_target(pose, t):
 #   옛 값 22~40도는 곧 "칼끝을 거의 정확히 뒤로" 라는 뜻이었고, 실측도 그랬다
 #   (칼끝 골반기준 뒤 -1.44~-1.50m). 팔을 내리려고 칼끝 고도만 신경 쓰다가
 #   방위를 안 본 것이다. 90도 부근이 '몸 옆(오른쪽)', 그보다 크면 옆·앞이다.
-#   그래서 Wd 를 88~106 으로 옮겼다 = **칼이 몸 옆으로 나간다.**
-#   ★칼끝을 옆으로 두면 바닥 관통 걱정도 같이 준다(고도를 -18도만 줘도 되니까).
-#   ★A(팔 벌림)는 오너 말대로 "살짝"인 20~28도다(어깨 외전 15~30도 구간).
-#     E 와 A 를 이 조합으로 둔 데는 기하 근거가 있다: 이 리그의 팔-칼 사잇각은
-#     ~45도로 파지가 고정한 상수라, 둘을 45도 안팎으로 떨어뜨려야 손목 잔각
-#     (SWD_WRIST 22도 상한)이 안 터진다. 옛 조합은 90도 가까이 벌어져 있었다.
+#   그래서 15차는 Wd 를 88~106 으로 옮겼다 = **칼이 몸 옆으로 나간다.**
+#
+# ★★★2026-08-13 17차 — 그 "몸 옆"이 **화면에서 발밑 수직 장대**였다 (이번 수정)
+#   16차 건틀릿 블라인드 비평이 SHEET_J3 #001~#003 을 집었다: 체공 중 칼이 캐릭터
+#   발밑으로 곧게 뻗어 "막대에 꿰인 사람"으로 보인다. 원인은 15차가 고른 방향이
+#   아니라 **재는 자**였다. 15차는 월드(몸 기준 오른쪽 +1.9m)로 통과시켰는데,
+#   게임 카메라는 월드 yaw 고정이고 캐릭터만 돈다 —
+#       캐릭터가 **화면 오른쪽을 보고 뛰면 몸 기준 오른쪽이 카메라 쪽**이 되고,
+#       카메라 쪽 1m 는 화면에서 49.5px **아래**다(위로 1m 는 41.5px 위).
+#   그래서 옆으로 내민 1.9m 이 통째로 화면 아래로 꽂혔다(실측 화면 칼 109px 중
+#   수직편차 2~11도 · 칼끝이 발밑보다 95~99px 아래 · 몸 겹침 0.20~0.24).
+#   자세한 기하와 8방향 표는 아래 [17차 신설: 8방향 화면 실루엣] 절에 있다.
+#
+#   무엇을 바꿨나 — 셋을 같이 눌렀다(하나만 고치면 다른 방향이 무너진다)
+#     1) **칼끝을 든다**(E -27 -> +14/+18). 아래로 꽂히는 성분이 그만큼 준다.
+#        칼끝 지면 여유도 +0.12m -> +1.3m 로 넉넉해진다(15차는 바닥에 붙어 있었다).
+#     2) **방위를 45도 격자에서 비껴 놓는다**(Wd 90 -> 122/128). 8방향은 45도
+#        간격이라 Wd 를 90 에 두면 어느 방향에서 **정확히 수직**이 된다.
+#        32~38도 비껴 두면 최악 방향에서도 수직편차 36~47도가 남는다.
+#     3) **팔꿈치를 굽힌다**(EB 신설 +40도). 1·2 만으로는 팔이 같이 들려
+#        어깨 외전이 46도까지 벌어졌다(만세). 팔꿈치를 굽히면 팔-칼 사잇각이
+#        32 -> 43도로 벌어져 **칼은 들고 위팔은 15~26도에 붙들 수 있다.**
+#   ★A(팔 벌림)는 손목 기준 각이라 팔꿈치를 굽히면 위팔보다 커 보인다. 오너가 말한
+#     "양팔이 살짝"은 **위팔 외전**이고, 실측 15~26도로 15~30도 구간 안이다.
+#   ★E 와 A 를 아무렇게나 못 고르는 기하 근거: 이 함수는 팔을 통째로 돌리므로
+#     팔-칼 사잇각이 소스가 준 상수(체공 32도, 팔꿈치 굽힌 뒤 43도)로 굳는다.
+#     칼끝 고도는 언제나 정확히 나오고, 못 맞춘 몫은 **팔이 밀려서** 갚는다
+#     (손목이 먹어 주는 몫이 SWD_WRIST 22도까지). 그래서 표를 고칠 때는 목표가
+#     아니라 로그의 "실제로 나온" 칼·위팔 각을 보라.
 SWD_KEYS = [       # (위상 t, 칼끝 고도 E도(음수=아래), 칼끝 벌림 Wd도(뒤에서 오른쪽),
-                   #          팔 벌림 A도, 팔 앞으로 F도(음수=뒤))
-    (0.00, -14, 62, 14, 10),    # f1  웅크림. 가중치 0이라 소스 그대로다
-    (0.20, -22, 84, 20, 6),     # f5  도약. 칼이 몸 옆으로 나오기 시작
-    (0.27, -27, 90, 26, 4),     # f7  ★상승 내내 이 자세로 멈춘다
-    (0.55, -29, 94, 30, -2),    # f13 ★하강 내내 이 자세로 멈춘다(조금 더 벌어짐)
-    (0.70, -20, 86, 22, 4),     # f16 착지 흡수. 팔이 돌아오기 시작
-    (1.00, -14, 76, 16, 2),     # f23 회복(가중치 0. 소스 착지 스윙으로 돌아간다)
+                   #          팔 벌림 A도, 팔 앞으로 F도(음수=뒤), 팔꿈치 더 굽힘 EB도)
+    (0.00, -14, 62, 14, 10, 0),    # f1  웅크림. 가중치 0이라 소스 그대로다
+    (0.20,  +8, 114, 30, 16, 32),  # f5  도약. 칼끝이 들리며 앞옆으로 나온다
+    (0.27, +14, 122, 34, 18, 40),  # f7  ★상승 내내 이 자세로 멈춘다
+    (0.55, +18, 128, 36, 12, 40),  # f13 ★하강 내내 이 자세로 멈춘다
+    (0.70,  +6, 114, 28, 10, 22),  # f16 착지 흡수. 칼끝이 내려오기 시작
+    (1.00,  -6,  98, 16,  4, 0),   # f23 회복(가중치 0. 소스 착지 스윙으로 돌아간다)
 ]
+# ★15차 판(오너 기각: 화면에서 발밑 수직 장대). `JUMP_V15=1` 로 언제든 재현된다 —
+#   17차 before/after 표를 이 스위치 하나로 같은 기계에서 다시 뽑을 수 있다.
+SWD_KEYS_V15 = [
+    (0.00, -14, 62, 14, 10, 0),
+    (0.20, -22, 84, 20, 6, 0),
+    (0.27, -27, 90, 26, 4, 0),
+    (0.55, -29, 94, 30, -2, 0),
+    (0.70, -20, 86, 22, 4, 0),
+    (1.00, -14, 76, 16, 2, 0),
+]
+if os.environ.get("JUMP_V15"):
+    SWD_KEYS = SWD_KEYS_V15
+# 튜닝 창구(굽는 값을 파일 안 고치고 바꾼다). "t,E,Wd,A,F,EB;t,..." 형식.
+_swd_tab = os.environ.get("SWD_TABLE", "").strip()
+if _swd_tab:
+    SWD_KEYS = [tuple(float(x) for x in row.split(","))
+                for row in _swd_tab.split(";") if row.strip()]
 # 가중치(위상, w). 도약 0.2초 안에 다 내리고, 착지 뒤에 소스로 돌려준다.
 SWD_W = [(0.00, 0.0), (0.03, 0.0), (0.20, 1.0), (0.70, 1.0), (0.88, 0.55), (1.00, 0.0)]
 # 손목이 먹어 줄 상한(도). 0 이면 팔이 칼 사잇각만큼 덜 내려간다.
@@ -1146,7 +1193,7 @@ def _key_at(keys, t):
 def swd_dirs(pose, t):
     """이번 프레임의 (칼끝 목표방향, 팔 목표방향) 월드 단위벡터.
     ★가슴 좌표계는 X=왼쪽이라, 오른쪽으로 벌어지는 쪽이 -X 다."""
-    E, Wd, A, F = _key_at(SWD_KEYS, t)
+    E, Wd, A, F = _key_at(SWD_KEYS, t)[:4]
     E, Wd, A, F = (math.radians(x) for x in (E, Wd, A, F))
     b = Vector((-math.sin(Wd) * math.cos(E), math.sin(E),
                 -math.cos(Wd) * math.cos(E)))       # 뒤·아래 대각
@@ -1163,13 +1210,36 @@ def apply_sword_down(pose, Rw, t):
     """
     w = _key_at(SWD_W, t)[0]
     if w <= 1e-4 or TIP_DIR is None:
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0, 0.0
     S = wpos(pose, R_ARM[0])
+    EL = wpos(pose, R_ARM[1])
     W = wpos(pose, HAND_R)
     Hr = (A2W @ pose[HAND_R]).to_3x3()
     Hr.normalize()
     d = (Hr @ TIP_DIR).normalized()                 # 지금 칼끝 방향
+    # ── ★★17차 신설: 팔꿈치 굽힘(EB) ──
+    # 왜 필요한가. 이 함수는 팔 3본을 **통째로** 돌리므로 팔-칼 사잇각이 소스가
+    # 준 상수(체공 구간 실측 32도)로 굳는다. 그래서 "칼끝을 들면 팔이 같이 들리고,
+    # 팔을 내리면 칼끝이 같이 내려간다" — 15차가 칼끝을 내리다 못해 지면 18cm 까지
+    # 간 것도, 17차 1차 시도에서 칼끝을 들자 팔이 46도까지 벌어진 것도 같은 뿌리다.
+    # 사잇각을 벌리는 정공법은 **팔꿈치**다(사람도 큰 칼은 팔꿈치를 굽혀 든다).
+    # 팔꿈치에서 팔뚝·손·칼을 함께 굽히면 파지는 한 톨도 안 변한다(칼은 손의 자식).
+    eb = _key_at(SWD_KEYS, t)[4]
+    if abs(eb) > 1e-4:
+        nx = (EL - S).cross(W - EL)                 # 지금 굽어 있는 평면의 법선
+        if nx.length < 1e-5:                        # 완전히 편 팔이면 가슴 왼쪽축으로
+            nx = torso_frame(pose) @ Vector((1, 0, 0))
+        qe = Quaternion(nx.normalized(), math.radians(eb) * w)
+        Rw[R_ARM[1]] = qe.to_matrix() @ Rw[R_ARM[1]]
+        Rw[R_ARM[2]] = qe.to_matrix() @ Rw[R_ARM[2]]
+        W = EL + qe @ (W - EL)                      # 손목이 팔꿈치 둘레로 돈다
+        d = (qe @ d).normalized()                   # 칼도 같이 돈다
     a = (W - S).normalized()                        # 지금 팔 방향
+    # ★17차: **팔-칼 사잇각**(파지가 정한 상수. 팔꿈치를 굽힌 뒤 값이다).
+    #   이 각 + 손목 상한이 곧 "칼끝을 얼마나 올리면서 팔을 얼마나 내릴 수 있나"의
+    #   한계다. 칼끝 고도 E 는 항상 정확히 나오고(회전으로 맞추니까), 못 맞추면
+    #   **팔**이 밀린다 — 그래서 팔 각도는 목표가 아니라 실측을 봐야 한다.
+    nat = math.degrees(d.angle(a))
     bt, at = swd_dirs(pose, t)
     q = d.rotation_difference(bt)                   # 1) 칼끝을 목표로
     # 2) 칼 축 둘레 회전은 칼끝을 안 건드린다. 그걸로 팔을 목표 쪽에 붙인다
@@ -1197,7 +1267,8 @@ def apply_sword_down(pose, Rw, t):
     if wr > 1e-4:
         qb = Quaternion().slerp(Quaternion(ax.normalized(), -wr), w)
         Rw[HAND_R] = qb.to_matrix() @ Rw[HAND_R]    # 손목만 되돌린다(칼 방향 유지)
-    return math.degrees(q.angle), math.degrees(wr * w), w
+    return (math.degrees(q.angle), math.degrees(wr * w), w, nat,
+            math.degrees(max(0.0, rest - math.radians(SWD_WRIST))) * w)
 
 
 def apply_grip(pose, Rw, gt, ph=None):
@@ -1426,14 +1497,16 @@ def bake(name):
             print("      t %.2f (f%-2d)  A %+3d도  F %+3d도  k %.2f   w %.2f"
                   % (t, f0 + int(round(t * (nf - 1))), A, F, k, bal_weight(t)))
     if swd:
-        print("   오른팔(검) 위상표(t / 칼끝 고도·벌림 / 팔 벌림·앞으로(음수=뒤) / 가중치):")
-        for t, E, Wd, A, F in SWD_KEYS:
+        print("   오른팔(검) 위상표(t / 칼끝 고도·벌림 / 팔 벌림·앞으로(음수=뒤) /"
+              " 팔꿈치 / 가중치):")
+        for t, E, Wd, A, F, EB in SWD_KEYS:
             print("      t %.2f (f%-2d)  칼끝 E %+3d도 Wd %+3d도   팔 A %+3d도 F %+3d도"
-                  "   w %.2f"
-                  % (t, f0 + int(round(t * (nf - 1))), E, Wd, A, F, _key_at(SWD_W, t)[0]))
+                  "   팔꿈치 %+3d도   w %.2f"
+                  % (t, f0 + int(round(t * (nf - 1))), E, Wd, A, F, EB,
+                     _key_at(SWD_W, t)[0]))
 
     lows, maxerr, befs, afts, swds, wrs = [], 0.0, [], [], [], []
-    jtips, jhnds, jhips = [], [], []
+    jtips, jhnds, jhips, jchs = [], [], [], []
     for i, f in enumerate(range(f0, f1 + 1)):
         sc.frame_set(f)
         bpy.context.view_layer.update()
@@ -1470,6 +1543,26 @@ def bake(name):
                                 / HMj.to_3x3().to_scale()[0]))
             jhnds.append(wpos(pose, HAND_R))
             jhips.append(wpos(pose, PELVIS))
+            # ★17차: **목표가 아니라 실제로 나온 각**을 잰다. 목표(SWD_KEYS)는
+            #   손목 상한(SWD_WRIST)에 걸리면 그대로 안 나온다 — 표만 보고
+            #   "몸 옆이다"라고 판정하면 15차와 같은 실수를 반복한다.
+            Cj = torso_frame(pose)                       # 가슴축(열=X왼쪽/Y위/Z앞)
+            Ct = Cj.transposed()
+            vb = Ct @ (jtips[-1] - jhnds[-1]).normalized()
+            va = Ct @ (jhnds[-1] - wpos(pose, R_ARM[0])).normalized()
+            # ★어깨 외전은 '어깨->손목'이 아니라 **'어깨->팔꿈치'(위팔)** 로 재야
+            #   오너가 말한 "양팔이 살짝 벌어지는 정도"와 같은 뜻이 된다.
+            #   팔꿈치를 굽히면 손목은 더 벌어져도 위팔은 몸에 붙어 있을 수 있다.
+            vu = Ct @ (wpos(pose, R_ARM[1]) - wpos(pose, R_ARM[0])).normalized()
+            jchs.append((
+                math.degrees(math.asin(max(-1.0, min(1.0, vb.y)))),      # 칼끝 고도 E
+                math.degrees(math.atan2(-vb.x, -vb.z)),                  # 칼끝 방위 Wd
+                math.degrees(math.atan2(-va.x, math.hypot(va.y, va.z))),  # 팔 벌림 A
+                math.degrees(math.atan2(va.z, -va.y)),                   # 팔 앞뒤 F
+                math.degrees((Cj @ Vector((0, 1, 0))).angle(W_UP)),      # 몸 기울기
+                math.degrees(math.atan2(-vu.x, math.hypot(vu.y, vu.z))),  # 위팔 외전
+                math.degrees((wpos(pose, R_ARM[0]) - wpos(pose, R_ARM[1])).angle(
+                    jhnds[-1] - wpos(pose, R_ARM[1])))))                 # 팔꿈치 굽힘
     shift = BIND_LOW - pct(lows, 0.10)
     print("   해석식 자기검증: Blender 평가와 뼈 위치 최대 오차 %.7f (키의 %.5f%%)"
           % (maxerr, maxerr / DH * 100))
@@ -1499,24 +1592,44 @@ def bake(name):
                   % (len(on), nf, b0[0], b0[-1], b0[len(b0) // 2],
                      b1[0], b1[-1], b1[len(b1) // 2], tg[0], tg[-1], WRIST_LIM))
     if swd and swds:
-        act_f = [(i, d, wr) for i, (d, wr, w) in enumerate(swds) if w > 1e-4]
+        act_f = [(i, d, wr, nt, er) for i, (d, wr, w, nt, er) in enumerate(swds)
+                 if w > 1e-4]
         print("   오른팔 회전량: %d/%d 프레임 적용 (팔 최대 %.1f도 f%d / 평균 %.1f도,"
               " 손목 되돌림 최대 %.1f도)"
-              % (len(act_f), nf, max(d for _, d, _ in act_f),
+              % (len(act_f), nf, max(r[1] for r in act_f),
                  f0 + max(act_f, key=lambda r: r[1])[0],
-                 sum(d for _, d, _ in act_f) / len(act_f),
-                 max(wr for _, _, wr in act_f)))
+                 sum(r[1] for r in act_f) / len(act_f),
+                 max(r[2] for r in act_f)))
+        print("   ★팔-칼 사잇각(파지 상수) %.0f~%.0f도 + 손목 상한 %.0f도"
+              " = 팔을 내릴 수 있는 한계. 목표 못 채운 팔 오차 최대 %.1f도"
+              % (min(r[3] for r in act_f), max(r[3] for r in act_f), SWD_WRIST,
+                 max(r[4] for r in act_f)))
 
     if swd and jtips:
         gkj = 1.75 / DH
+        ORG = DREST[ROOT_BONE][1]                 # 게임 루트(발밑)의 수평 기준점
         print("   ★칼끝(게임 1.75m 환산): 프레임 / 바닥여유 / 골반기준 오른쪽·위·앞 /"
-              " 오른손 높이")
+              " 오른손 높이 / **실제로 나온** 칼끝 고도·방위 · 손목 벌림·앞뒤 ·"
+              " 위팔 외전 · 팔꿈치 굽힘 · 몸기울기 · 팔칼 사잇각")
         for i, t in enumerate(jtips):
             d = t - jhips[i]
+            E_a, W_a, A_a, F_a, tl, UA, EBa = jchs[i]
             print("     f%-3d  바닥 %+.3f   오른 %+.2f 위 %+.2f 앞 %+.2f   손 %.2f"
+                  "   칼 E%+4.0f Wd%+4.0f  손목 A%+4.0f F%+4.0f  위팔%+4.0f"
+                  "  팔꿈치%4.0f  몸%3.0f  사잇각%4.0f"
                   % (i, (t.z + shift - BIND_LOW) * gkj,
                      -d.dot(W_LFT) * gkj, d.dot(W_UP) * gkj, d.dot(W_FWD) * gkj,
-                     (jhnds[i].z + shift - BIND_LOW) * gkj))
+                     (jhnds[i].z + shift - BIND_LOW) * gkj,
+                     E_a, W_a, A_a, F_a, UA, EBa, tl,
+                     swds[i][3] if i < len(swds) else 0.0))
+
+        # ── ★★17차: 여덟 방향 화면 실루엣 (이 파도의 진짜 자) ──
+        def _loc(P):
+            dd = P - ORG
+            return (-dd.dot(W_LFT) * gkj, (P.z + shift - BIND_LOW) * gkj,
+                    dd.dot(W_FWD) * gkj)
+
+        jump_screen_audit([(_loc(h), _loc(t)) for h, t in zip(jhnds, jtips)])
 
     # --- 2차: 보정을 넣고 키를 찍는다 ---
     act = new_action(name)
@@ -2002,6 +2115,135 @@ def screen_px(p):
     nx = d.dot(CAM_X) / (zz * CAM_TAN * CAM_ASPECT)
     ny = d.dot(CAM_Y) / (zz * CAM_TAN)
     return (nx * SCR_W * 0.5, -ny * SCR_H * 0.5)
+
+
+# ================================ 17차 신설: 8방향 화면 실루엣 ================================
+# ★★16차의 화면 자(screen_px)는 **캐릭터가 카메라를 등지고 선 한 방향**만 잰다.
+#   베기는 그래도 됐다 — 오너가 보는 컷이 대개 뒤통수 방향이고, 무엇보다 베기는
+#   0.5초 안에 끝난다. 점프는 다르다: 게임이 상승 내내 f6, 하강 내내 f12 에서
+#   **자세를 멈춰 세우고**, 플레이어는 여덟 방향 중 아무 데나 보고 뛴다.
+#   그래서 자세 한 장이 여덟 개의 화면 그림이 된다.
+#
+# ★16차가 확립한 함정의 점프판 (2026-08-13, 17차)
+#   카메라는 월드 yaw 고정이고 **캐릭터만 돈다.** 그러니 몸 기준 방향은 yaw 마다
+#   다른 화면 방향이 된다. 실측 감도(아래 screen_px 로 잰 값):
+#       월드 1m 위      -> 화면 41.5px 위
+#       월드 1m 카메라 반대쪽(멀리) -> 화면 49.5px **위**
+#       월드 1m 화면 오른쪽 -> 화면 64.8px 오른쪽
+#   즉 "카메라 쪽으로 1m" 는 화면에서 49.5px **아래**다. 칼끝을 몸 오른쪽으로
+#   1.9m 내밀어 놓으면, **오른쪽이 카메라 쪽이 되는 yaw**(= 캐릭터가 화면
+#   오른쪽을 보고 뛸 때)에서 그 1.9m 이 통째로 화면 아래로 꽂힌다.
+#   15차가 "칼끝 뒤 -1.44m -> 오른쪽 +1.9m" 로 고친 그 조치가, 화면에서는
+#   **발밑으로 뻗은 수직 장대**를 만들었다(16차 건틀릿 SHEET_J3 #001~#003).
+#   ★결론: 월드로 "몸 옆" 이라고 통과시키지 마라. 여덟 방향 전부 화면으로 재라.
+#
+# ★기하가 정한 한계(이 표를 읽는 사람이 반드시 알아야 한다)
+#   칼이 몸에 고정된 방향인 한, 어느 yaw 에서는 칼의 수평 성분이 카메라 축과
+#   나란해진다(8방향이면 최소 22.5도 안). 그때 화면 각은 거의 수직이 된다.
+#   화면에서 "아래로 꽂히지 않게" 하려면 41.5*sin(E) > 49.5*cos(E),
+#   즉 **칼끝 고도 E > 47.5도**여야 하는데 그건 팔을 만세로 들어야 나온다.
+#   그래서 17차의 처방은 "수직을 없애기"가 아니라 **셋을 동시에 누르기**다:
+#     1) 칼끝 고도 E 를 올려 아래로 꽂히는 성분을 줄인다(장대 길이 = 발밑 침투)
+#     2) 칼 방위 Wd 를 45도 격자에서 **22~25도 비껴** 어느 yaw 도 정확한 수직에
+#        떨어지지 않게 한다(수직편차 20도 이상 확보)
+#     3) 칼이 몸 실루엣을 가로지르는 몫(겹침)을 방위로 밀어낸다
+JUMP_YAW_NAMES = ["화면위(등)", "위-오른", "오른", "아래-오른",
+                  "아래(정면)", "아래-왼", "왼", "위-왼"]
+
+
+def _yaw_luf(rt, up, fw, yaw):
+    """캐릭터 로컬 (오른쪽,위,앞) 게임 m -> **고정 월드** (l,u,f) 게임 m.
+    yaw=0 이 카메라를 등진 자세(화면 위로 달릴 때)다. yaw 는 라디안, 화면
+    시계방향(위->오른쪽->아래->왼쪽)으로 돈다.
+    ★screen_px 의 (l,u,f) 는 캐릭터 축이 아니라 **카메라가 고정된 월드 축**이다
+      (l=화면 왼쪽 u=위 f=카메라 반대쪽). 캐릭터가 돌면 몸 축만 그 안에서 돈다."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    return (-rt * c - fw * s, up, fw * c - rt * s)
+
+
+def _seg_dist(p, a, b):
+    """점 p 에서 선분 ab 까지 거리(px)."""
+    ax, ay = b[0] - a[0], b[1] - a[1]
+    L2 = ax * ax + ay * ay
+    t = 0.0 if L2 < 1e-9 else max(0.0, min(1.0, ((p[0] - a[0]) * ax
+                                                 + (p[1] - a[1]) * ay) / L2))
+    return math.hypot(p[0] - a[0] - ax * t, p[1] - a[1] - ay * t)
+
+
+JUMP_BODY_R = 0.22        # 몸통 반폭(게임 m). 화면 겹침을 재는 통로 폭
+JUMP_HOLDS = (6, 12)      # 게임이 체공 중 멈춰 세우는 두 장(main.js jump.rise/fall)
+JUMP_AIR = (4, 14)        # 발이 떨어져 있는 구간. f15 는 착지 접촉장(a.time=LAND)
+
+
+def jump_screen_audit(rows, holds=JUMP_HOLDS, air=JUMP_AIR,
+                      title="점프 8방향 화면 실루엣"):
+    """rows = [((오른,위,앞) 손, (오른,위,앞) 칼끝)...] (게임 m, 발밑 원점).
+    여덟 방향 각각에서 화면 칼 실루엣을 재고 표로 찍는다. 반환 = 방향별 최악값.
+
+    ★판정을 셋으로 나눈 이유: 게임은 체공 중 **f6·f12 두 장에서 멈춰 선다**
+      (main.js 가 a.time 을 rise/fall 에 물린다). 오너가 본 장대도 그 두 장이다.
+      나머지 체공 장(f4~f14)은 1/30초씩 지나가고, 지상 장(도약 전·착지 후)은
+      칼이 바닥 가까이 있는 게 정상이라 같은 잣대로 재면 안 된다.
+    """
+    print("   ★%s (960x640 · 캐릭터 키 화면 %.0fpx)"
+          % (title, screen_px((0, 0, 0))[1] - screen_px((0, CHAR_H_GAME, 0))[1]))
+    print("     %-10s %s | %s"
+          % ("", "  ".join("%23s" % ("★체공정지 f%d" % f) for f in holds),
+             "체공 최악(f%d~%d)  지상 최악" % air))
+    print("     %-10s %s | %s"
+          % ("yaw(화면)",
+             "  ".join("%23s" % "길이  각도 편차 겹침 발밑" for _ in holds),
+             " 길이 편차 겹침 발밑        판정"))
+    out = []
+    for k, nm in enumerate(JUMP_YAW_NAMES):
+        yaw = math.radians(45.0 * k)
+        cells, w_air, w_grd = [], None, None
+        for i, (hd, tp) in enumerate(rows):
+            H = screen_px(_yaw_luf(*hd, yaw=yaw))
+            T = screen_px(_yaw_luf(*tp, yaw=yaw))
+            F = screen_px(_yaw_luf(0.0, 0.0, 0.0, yaw))
+            D = screen_px(_yaw_luf(0.0, CHAR_H_GAME, 0.0, yaw))
+            dx, dy = T[0] - H[0], T[1] - H[1]
+            ln = math.hypot(dx, dy)
+            ang = math.degrees(math.atan2(-dy, dx))        # +90 = 화면 위
+            vdev = abs(abs(ang) - 90.0)                    # 0 = 완전 수직
+            n = 24
+            ovl = sum(1 for j in range(n + 1)
+                      if _seg_dist((H[0] + dx * j / n, H[1] + dy * j / n), F, D)
+                      < JUMP_BODY_R * 64.76) / float(n + 1)
+            bel = T[1] - F[1]                              # + = 화면에서 발밑 아래
+            # 장대 점수: 길고(len) 수직에 가깝고(vdev) 몸을 가로지르거나(ovl)
+            # 발밑을 뚫고 내려간(bel) 만큼 나쁘다. 0.55 넘으면 "꿰인 사람"이다.
+            pole = ((max(0.0, 30.0 - vdev) / 30.0) * (ln / 100.0)
+                    * (0.4 + 0.6 * min(1.0, max(0.0, bel) / 60.0) + ovl))
+            if i in holds:
+                cells.append((ln, ang, vdev, ovl, bel))
+            tgt = "air" if air[0] <= i <= air[1] else "grd"
+            if tgt == "air" and (w_air is None or pole > w_air[0]):
+                w_air = (pole, ln, vdev, ovl, bel, i)
+            if tgt == "grd" and (w_grd is None or pole > w_grd[0]):
+                w_grd = (pole, ln, vdev, ovl, bel, i)
+        hold_bad = max(_pole_of(c) for c in cells)
+        vd = ("★장대" if max(hold_bad, w_air[0]) > 0.55
+              else ("접힘" if min(c[0] for c in cells) < 35
+                    else ("통과(지상만△)" if w_grd[0] > 0.55 else "통과")))
+        print("     %-10s %s | %4.0f %4.0f %5.2f %+5.0f  f%-2d %.2f / f%-2d %.2f  %s"
+              % (nm,
+                 "  ".join("%4.0f %+5.0f %4.0f %5.2f %+5.0f" % c for c in cells),
+                 w_air[1], w_air[2], w_air[3], w_air[4],
+                 w_air[5], w_air[0], w_grd[5], w_grd[0], vd))
+        out.append((nm, cells, w_air, w_grd))
+    bad = [o for o in out if max(max(_pole_of(c) for c in o[1]), o[2][0]) > 0.55]
+    print("     -> ★체공 장대 판정 %d/8 방향%s"
+          % (len(bad), ("  " + " ".join(o[0] for o in bad)) if bad else ""))
+    return out
+
+
+def _pole_of(c):
+    """표 셀(길이,각도,편차,겹침,발밑) -> 장대 점수. 위 식과 같은 것."""
+    ln, _, vdev, ovl, bel = c
+    return ((max(0.0, 30.0 - vdev) / 30.0) * (ln / 100.0)
+            * (0.4 + 0.6 * min(1.0, max(0.0, bel) / 60.0) + ovl))
 
 
 def _sph(el, az):
