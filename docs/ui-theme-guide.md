@@ -1,6 +1,9 @@
-# Abyss Hunter UI 테마 가이드
+# UI 테마 가이드
 
-이 테마는 기존 UI 구조와 게임 로직을 유지한 채 색, 표면, 테두리, 광택, 타이포그래피만 덮어쓰는 데모용 스킨이다. 다시 바꾸기 쉽도록 새 시각 규칙은 `web/ui-theme-abyss.css`에 모은다.
+UI는 기존 구조와 게임 로직을 유지한 채 색, 표면, 테두리, 장식, 타이포그래피만
+덮어쓰는 독립 스킨이다. 현재 활성 시안은 참고 이미지의 먹색·청동 알림창과 따뜻한
+판타지 게임 가독성을 섞은 **Bronze Story**다. 이전 **Abyss Hunter** 시안도 그대로
+보관하므로 한 줄로 왕복할 수 있다.
 
 ## 활성화
 
@@ -8,50 +11,52 @@
 
 ```html
 <link rel="stylesheet" href="./ui-theme-abyss.css">
-<body data-ui-theme="abyss-hunter">
+<link rel="stylesheet" href="./ui-theme-bronze.css">
+<body data-ui-theme="bronze-story">
 ```
 
-- 켜기: `data-ui-theme="abyss-hunter"`
+- 현재 시안: `data-ui-theme="bronze-story"`
+- 이전 시안: `data-ui-theme="abyss-hunter"`
 - 끄기: `data-ui-theme` 속성을 제거한다.
 - 다른 테마로 전환: 속성값만 새 테마 이름으로 바꾼다.
 
-모든 규칙은 `body[data-ui-theme="abyss-hunter"]` 아래로 제한한다. 테마 CSS는
+각 테마 규칙은 자기 `body[data-ui-theme="..."]` 아래로 제한한다. 테마 CSS는
 `ui.js`의 동적 기본 스타일보다 먼저 로드되지만, `body[...]`를 더한 높은 선택자
 우선순위로 외형을 유지한다. 상태 제어용 인라인 `width`, `transform`, `opacity`,
 `display`는 테마가 덮지 않는다.
 
-## 팔레트와 표면
+## Bronze Story 팔레트와 표면
 
-색과 공통 표면은 `web/ui-theme-abyss.css` 상단 토큰 블록에서 먼저 고친다. 개별 HUD 선택자에 같은 색을 반복해서 직접 쓰지 않는다.
+색과 공통 표면은 `web/ui-theme-bronze.css` 상단의 `--bs-*` 토큰 블록에서 먼저
+고친다. 개별 HUD 선택자에 같은 색을 반복해서 직접 쓰지 않는다.
 
-| 의미 | Abyss Hunter 토큰 | 용도 |
+| 의미 | Bronze Story 토큰 | 용도 |
 |---|---|---|
-| 서체 | `--ah-font-ui`, `--ah-font-display` | 본문/수치, 제목/레벨업 |
-| 바탕 단계 | `--ah-iron-0` ~ `--ah-iron-4` | 가장 깊은 배경부터 밝은 철색까지 |
-| 판 표면 | `--ah-panel`, `--ah-panel-strong`, `--ah-panel-soft` | 카드, 도크, 얇은 보조판 |
-| 글자 | `--ah-text`, `--ah-text-soft`, `--ah-text-muted` | 주 정보, 설명, 비활성 정보 |
-| 각성/마력 | `--ah-violet*` | 핵심 시스템, 각성, 기술타 강조 |
-| 시스템/스킬 | `--ah-cyan*` | 선택, 스킬, 인터랙션 피드백 |
-| 성장/보상 | `--ah-amber*` | 레벨, EXP, 목표, 획득물 |
-| 생존 체력 | `--ah-health*` | 플레이어 HP와 회복 |
-| 위험/보스 | `--ah-danger*` | 보스 HP, 피격, 경고, 사망 |
-| 은신/안전 | `--ah-stealth*` | 은신과 성공 상태 |
-| 선/깊이/각인 | `--ah-line*`, `--ah-shadow*`, `--ah-etch*` | 경계선, 그림자, 표면 문양 |
+| 서체 | `--bs-font-ui`, `--bs-font-display` | 수치, 픽셀풍 제목/알림 |
+| 바탕 단계 | `--bs-night-*`, `--bs-charcoal*` | 먹색 배경과 판 깊이 |
+| 판 표면 | `--bs-panel*`, `--bs-panel-fill*` | 카드, 도크, 보조판 |
+| 글자 | `--bs-cream*`, `--bs-parchment`, `--bs-muted` | 주 정보, 설명, 비활성 정보 |
+| 테두리/장식 | `--bs-bronze*`, `--bs-frame-image` | 이중선과 주요 카드 모서리 |
+| 성장/보상 | `--bs-gold*` | 레벨, EXP, 목표, 획득물 |
+| 생존/위험 | `--bs-green*`, `--bs-red*` | 플레이어 HP, 보스, 피격, 사망 |
 
 `--ui-*`와 `--rb-*`는 위 토큰을 가리키는 호환 alias다. 기본 UI 구조는 유지하고
-Abyss Hunter 토큰을 바꾸면 로딩 화면과 동적 HUD가 함께 따라오게 한다. 하단/머리 위
+Bronze Story 토큰을 바꾸면 로딩 화면과 동적 HUD가 함께 따라오게 한다. 하단/머리 위
 체력처럼 JS와 공유해야 하는 완성 그라데이션은 `--ui-hp-*-fill`, 성장 바는
 `--ui-exp-fill`, 데미지 숫자는 `--fx-damage-*`에서 바꾼다.
 
 `--fx-damage-*` 다섯 값은 Three.js 재질로도 전달되므로 `#RGB` 또는 `#RRGGBB`
 형식으로 지정한다. `oklch()`나 `color-mix()` 같은 문법은 안전한 기본색에 폴백한다.
 
-색은 의미를 유지한다. 팔레트를 바꿔도 체력=생존, 위험색=보스/피격, 금색=성장/보상, 청색=시스템/행동이라는 역할은 섞지 않는다. 투명도, 그라데이션, 컷코너, 발광은 같은 파일의 표면 규칙에서 조정하되, 작은 변경은 먼저 토큰으로 해결한다.
+색은 의미를 유지한다. 팔레트를 바꿔도 체력=생존, 적색=보스/피격,
+금색=성장/보상, 청동색=선택/행동이라는 역할은 섞지 않는다. 투명도, 그라데이션,
+프레임과 표면 질감은 같은 파일에서 조정하되 작은 변경은 먼저 토큰으로 해결한다.
 
 ## 스킬 아이콘 교체
 
-`web/ui-assets/abyss-skills.webp` 한 장을 2×2로 잘라 네 슬롯에 쓴다. 같은 크기와
-배치로 파일만 교체하면 CSS는 그대로 둘 수 있다.
+현재는 `web/ui-assets/bronze-skills.webp`, 이전 시안은
+`web/ui-assets/abyss-skills.webp` 한 장을 각각 2×2로 잘라 네 슬롯에 쓴다. 같은
+크기와 배치로 파일만 교체하면 CSS는 그대로 둘 수 있다.
 
 - 왼쪽 위: `Basic`
 - 오른쪽 위: `Heavy`
@@ -77,7 +82,7 @@ Abyss Hunter 토큰을 바꾸면 로딩 화면과 동적 HUD가 함께 따라오
 
 ## 새 테마 추가
 
-1. `web/ui-theme-abyss.css`를 참고해 `web/ui-theme-<name>.css`를 만든다.
+1. `web/ui-theme-bronze.css`를 참고해 `web/ui-theme-<name>.css`를 만든다.
 2. 모든 선택자를 `body[data-ui-theme="<name>"]`로 스코프한다.
 3. 의미 토큰부터 새 팔레트로 매핑하고, 필요한 부품의 표면 규칙만 추가한다.
 4. JS나 기존 기본 CSS를 복사해 수정하지 않는다. 인라인 상태까지 덮는 `!important`는 가급적 쓰지 않는다.
@@ -96,20 +101,21 @@ Abyss Hunter 토큰을 바꾸면 로딩 화면과 동적 HUD가 함께 따라오
 
 ## 롤백
 
-작업 브랜치는 `codex/ui-awakened-demo-20260814`이며, 원래 화면은 `main`에서 확인할 수 있다.
+현재 작업 브랜치는 `codex/ui-bronze-story-20260814`다. 이전 보라 시안은
+`c57a5ab` 또는 `codex/ui-awakened-demo-20260814`에서 확인할 수 있다.
 
 ```bash
 # UI 변경 이력 확인
-git log --oneline --decorate -- web/index.html web/ui-theme-abyss.css docs/ui-theme-guide.md
+git log --oneline --decorate -- web/index.html web/ui-theme-bronze.css docs/ui-theme-guide.md
 
 # 새 UI와 기존 UI 전환
+git switch codex/ui-bronze-story-20260814
 git switch codex/ui-awakened-demo-20260814
-git switch main
 
 # 공유된 이력을 보존하면서 특정 UI 커밋만 되돌리기
-git switch codex/ui-awakened-demo-20260814
+git switch codex/ui-bronze-story-20260814
 git revert <commit-sha>
-git push origin codex/ui-awakened-demo-20260814
+git push origin codex/ui-bronze-story-20260814
 ```
 
 브랜치를 바꾸기 전에는 작업 중인 변경을 먼저 커밋하거나 임시 보관한다. 이미 푸시한 이력에는 `reset --hard`나 강제 푸시 대신 `git revert`를 사용한다.

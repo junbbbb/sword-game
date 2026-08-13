@@ -1,0 +1,1447 @@
+@font-face {
+  font-family: "Galmuri11";
+  src: url("./ui-assets/fonts/Galmuri11-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+/*
+ * Bronze Story UI skin
+ * Activate with: <body data-ui-theme="bronze-story">
+ *
+ * Visual direction: charcoal story panels, restrained bronze filigree and
+ * warm, game-readable gauges. All rules are deliberately scoped so this skin
+ * can live beside the existing Abyss Hunter theme.
+ */
+
+body[data-ui-theme="bronze-story"] {
+  color-scheme: dark;
+
+  --bs-font-ui: "Galmuri11", "NeoDunggeunmo", "DungGeunMo", "Apple SD Gothic Neo",
+    "Noto Sans KR", "Malgun Gothic", sans-serif;
+  --bs-font-display: "Galmuri11", "NeoDunggeunmo", "DungGeunMo", "Apple SD Gothic Neo",
+    "Noto Sans KR", "Malgun Gothic", sans-serif;
+
+  --bs-night-0: #0b0a08;
+  --bs-night-1: #12100d;
+  --bs-night-2: #1a1713;
+  --bs-charcoal: #242321;
+  --bs-charcoal-hi: #302e29;
+  --bs-panel: rgba(33, 31, 28, .95);
+  --bs-panel-strong: rgba(20, 18, 15, .98);
+  --bs-panel-soft: rgba(42, 38, 32, .92);
+
+  --bs-cream: #fffaf0;
+  --bs-cream-soft: #e8dfd0;
+  --bs-parchment: #c8b9a2;
+  --bs-muted: #877c6d;
+  --bs-bronze-dark: #643c22;
+  --bs-bronze: #aa6e3d;
+  --bs-bronze-hi: #d29a5d;
+  --bs-gold: #efbd4f;
+  --bs-gold-hi: #ffe28a;
+  --bs-green: #65b85b;
+  --bs-green-hi: #b9ee89;
+  --bs-red: #c9473c;
+  --bs-red-hi: #ff9b82;
+  --bs-blue: #6ba8ba;
+  --bs-blue-hi: #bce6e8;
+  --bs-moss: #84a45f;
+
+  --bs-line: rgba(185, 119, 64, .64);
+  --bs-line-soft: rgba(211, 155, 94, .27);
+  --bs-line-faint: rgba(239, 212, 168, .10);
+  --bs-shadow: 0 9px 22px rgba(0, 0, 0, .62);
+  --bs-shadow-deep: 0 18px 48px rgba(0, 0, 0, .76);
+  --bs-frame-image: url("./ui-assets/bronze-ornament-frame.webp");
+
+  --bs-grain:
+    repeating-linear-gradient(0deg, rgba(255, 245, 221, .018) 0 1px,
+      transparent 1px 4px),
+    repeating-linear-gradient(92deg, rgba(0, 0, 0, .022) 0 1px,
+      transparent 1px 7px);
+  --bs-panel-fill: var(--bs-grain),
+    linear-gradient(180deg, rgba(48, 46, 42, .97), rgba(28, 27, 25, .98));
+  --bs-panel-fill-deep: var(--bs-grain),
+    linear-gradient(180deg, rgba(35, 32, 28, .98), rgba(16, 14, 12, .99));
+  --bs-panel-fill-warm: var(--bs-grain),
+    linear-gradient(180deg, rgba(48, 39, 29, .97), rgba(24, 19, 15, .99));
+
+  /* Semantic gauges: ui.js also reuses these values. */
+  --ui-hp-high-fill: linear-gradient(180deg, #c7f59a 0%, #71c65f 28%, #368337 68%, #205529 100%);
+  --ui-hp-mid-fill: linear-gradient(180deg, #ffe69a 0%, #e5ae3e 30%, #a36a22 70%, #684019 100%);
+  --ui-hp-low-fill: linear-gradient(180deg, #ffad8d 0%, #d95544 30%, #962c2b 70%, #5c1b20 100%);
+  --ui-hp-ghost-fill: linear-gradient(90deg, rgba(210, 76, 59, .72), rgba(255, 188, 133, .92));
+  --ui-exp-fill: linear-gradient(90deg, #7b5224 0%, #d69638 46%, #ffe17e 100%);
+
+  /* Canvas damage-number palette. Keep as hex/rgb for Three.js color parsing. */
+  --fx-damage-normal: #fff8e8;
+  --fx-damage-accent: #f2c65c;
+  --fx-damage-critical: #ff9d54;
+  --fx-damage-kill: #ff6757;
+  --fx-damage-outline: #21150e;
+
+  /* Current UI contract aliases. */
+  --ui-font: var(--bs-font-ui);
+  --ui-glass: var(--bs-panel);
+  --ui-glass-2: var(--bs-panel-strong);
+  --ui-deep: var(--bs-night-0);
+  --ui-edge: var(--bs-line-soft);
+  --ui-edge-on: var(--bs-line);
+  --ui-hair: var(--bs-line-faint);
+  --ui-txt: var(--bs-cream);
+  --ui-dim: var(--bs-parchment);
+  --ui-mute: var(--bs-muted);
+  --ui-cy: var(--bs-bronze-hi);
+  --ui-cy-dim: var(--bs-bronze);
+  --ui-gold: var(--bs-gold);
+  --ui-red: var(--bs-red);
+  --ui-green: var(--bs-green);
+  --ui-drop: var(--bs-shadow);
+  --rb-token: var(--bs-gold);
+  --rb-ok: var(--bs-moss);
+
+  background: var(--bs-night-0);
+  color: var(--bs-cream);
+  font-family: var(--bs-font-ui);
+  font-synthesis: none;
+  -webkit-font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+/* The ornament is nine-sliced so its corner scrollwork keeps its proportions
+   on wide notification cards. A normal bronze border is the asset-free
+   fallback and remains usable while a replacement frame is being produced. */
+body[data-ui-theme="bronze-story"] #load .win,
+body[data-ui-theme="bronze-story"] #uiTitle .win,
+body[data-ui-theme="bronze-story"] #uiBanner .win,
+body[data-ui-theme="bronze-story"] #uiDeath .win,
+body[data-ui-theme="bronze-story"] #bClear,
+body[data-ui-theme="bronze-story"] #uiLevelUp {
+  border: 2px solid var(--bs-bronze-hi);
+  border-image-source: var(--bs-frame-image);
+  /* 768px 원본에서 장식은 약 150px 안에 끝난다. 160px부터는 곧은 레일만
+     잘리므로 가로로 긴 카드에서도 잎·뿔 모서리가 늘어나지 않는다. */
+  border-image-slice: 160;
+  border-image-width: 32px;
+  border-image-outset: 5px;
+  border-image-repeat: stretch;
+  clip-path: none;
+}
+
+/* Loading gate */
+body[data-ui-theme="bronze-story"] #load {
+  background:
+    radial-gradient(ellipse at 50% 44%, rgba(131, 81, 38, .20), transparent 34%),
+    linear-gradient(180deg, #17120d 0%, #0c0b09 66%, #070706 100%);
+}
+
+body[data-ui-theme="bronze-story"] #load .win {
+  --cut-ink: var(--bs-bronze-hi);
+  background:
+    var(--bs-grain),
+    linear-gradient(180deg, rgba(47, 45, 41, .98), rgba(27, 26, 24, .99));
+  box-shadow:
+    inset 0 0 0 1px rgba(90, 53, 28, .95),
+    inset 0 0 0 3px rgba(208, 145, 81, .60),
+    inset 0 0 0 4px rgba(58, 35, 22, .92),
+    inset 0 0 36px rgba(0, 0, 0, .28);
+  filter: drop-shadow(0 13px 24px rgba(0, 0, 0, .72));
+}
+
+body[data-ui-theme="bronze-story"] #load .fr {
+  background:
+    radial-gradient(circle, var(--bs-gold-hi) 0 2px, var(--bs-bronze) 3px 4px, transparent 5px)
+      no-repeat 50% 4px / 11px 11px,
+    linear-gradient(90deg, transparent, var(--bs-bronze-hi) 18% 82%, transparent)
+      no-repeat 50% 0 / 150px 2px,
+    linear-gradient(90deg, transparent, rgba(203, 145, 85, .45) 20% 80%, transparent)
+      no-repeat 50% 33px / 100% 1px;
+}
+
+body[data-ui-theme="bronze-story"] #load .win::after {
+  border-top-color: var(--bs-bronze-hi);
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, .8));
+}
+
+body[data-ui-theme="bronze-story"] #load .hd b {
+  color: var(--bs-cream);
+  font-family: var(--bs-font-display);
+  letter-spacing: .18em;
+  text-shadow: 0 2px 0 #0a0807;
+}
+
+body[data-ui-theme="bronze-story"] #load .ldMeta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  min-height: 14px;
+  color: var(--bs-parchment);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: .12em;
+}
+
+body[data-ui-theme="bronze-story"] #load .ldMeta > * + *::before {
+  content: "◆";
+  margin-right: 11px;
+  color: var(--bs-bronze-hi);
+  font-size: 6px;
+}
+
+body[data-ui-theme="bronze-story"] #load .ldTrack {
+  --cut-ink: rgba(181, 119, 62, .68);
+  background: #100e0c;
+}
+
+body[data-ui-theme="bronze-story"] #load .ldTrack::after {
+  box-shadow:
+    inset 0 0 0 1px rgba(71, 42, 24, .95),
+    inset 0 0 0 2px rgba(205, 145, 81, .48);
+}
+
+body[data-ui-theme="bronze-story"] #load .ldFill {
+  background: linear-gradient(180deg, #ffe28b 0%, #d89839 48%, #86501f 100%);
+  box-shadow: inset 0 1px rgba(255, 250, 215, .46);
+}
+
+body[data-ui-theme="bronze-story"] #load .ldPct {
+  color: var(--bs-cream);
+  text-shadow: 0 1px 2px #000;
+}
+
+/* Help, status and utility chips */
+body[data-ui-theme="bronze-story"] #help {
+  --cut-ink: rgba(184, 119, 65, .54);
+  background: var(--cut-lines), var(--bs-panel-fill);
+  box-shadow:
+    inset 0 0 0 1px rgba(75, 45, 28, .92),
+    inset 0 0 0 2px rgba(190, 126, 69, .36),
+    var(--bs-shadow);
+  color: var(--bs-parchment);
+}
+
+body[data-ui-theme="bronze-story"] #help::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  top: 7px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--bs-bronze-hi), transparent);
+  opacity: .56;
+  pointer-events: none;
+}
+
+body[data-ui-theme="bronze-story"] #help .k {
+  --cut-ink: rgba(218, 158, 92, .72);
+  background: var(--cut-lines), linear-gradient(180deg, #4b3828, #211a14);
+  box-shadow:
+    inset 0 0 0 1px rgba(88, 51, 26, .96),
+    inset 0 0 0 2px rgba(214, 151, 84, .45),
+    inset 0 -2px 0 rgba(0, 0, 0, .42);
+  color: var(--bs-cream);
+  text-shadow: 0 1px #000;
+}
+
+body[data-ui-theme="bronze-story"] #help .kx,
+body[data-ui-theme="bronze-story"] #help .hNote {
+  color: var(--bs-muted);
+}
+
+body[data-ui-theme="bronze-story"] #help .t {
+  color: var(--bs-parchment);
+}
+
+body[data-ui-theme="bronze-story"] #help .t b,
+body[data-ui-theme="bronze-story"] #help b {
+  color: var(--bs-cream);
+}
+
+body[data-ui-theme="bronze-story"] #help .hSep {
+  background: linear-gradient(90deg, transparent, rgba(204, 145, 82, .48), transparent);
+}
+
+body[data-ui-theme="bronze-story"] #uiHelpChip {
+  --cut-ink: var(--bs-bronze-hi);
+  background: var(--cut-lines), linear-gradient(180deg, #493521, #211912);
+  box-shadow:
+    inset 0 0 0 1px #6f4024,
+    inset 0 0 0 2px rgba(229, 173, 105, .52),
+    0 5px 12px rgba(0, 0, 0, .44);
+  color: var(--bs-gold-hi);
+  text-shadow: 0 1px 1px #000;
+}
+
+body[data-ui-theme="bronze-story"] #uiHelpChip:hover {
+  color: #fff8de;
+  filter: brightness(1.12);
+}
+
+body[data-ui-theme="bronze-story"] #stat {
+  --cut-ink: rgba(167, 112, 62, .34);
+  background: var(--cut-lines), rgba(28, 25, 22, .88);
+  box-shadow: inset 0 0 0 1px rgba(180, 119, 64, .28);
+  color: var(--bs-muted);
+}
+
+body[data-ui-theme="bronze-story"] #stat span {
+  color: var(--bs-parchment);
+}
+
+/* Shared story cards. The first layer can be supplied later; the inset frame
+   underneath deliberately remains visible when the image is unavailable. */
+body[data-ui-theme="bronze-story"] #uiTitle .win,
+body[data-ui-theme="bronze-story"] #uiBanner .win,
+body[data-ui-theme="bronze-story"] #uiDeath .win,
+body[data-ui-theme="bronze-story"] #bClear {
+  --cut-ink: var(--bs-bronze-hi);
+  background:
+    var(--bs-grain),
+    linear-gradient(180deg, rgba(47, 45, 41, .985), rgba(31, 30, 28, .99));
+  color: var(--bs-cream);
+  font-family: var(--bs-font-display);
+  box-shadow:
+    inset 0 0 0 1px rgba(77, 43, 24, .96),
+    inset 0 0 0 3px rgba(200, 135, 75, .58),
+    inset 0 0 0 4px rgba(65, 38, 23, .90),
+    inset 0 0 42px rgba(0, 0, 0, .20);
+  filter: drop-shadow(0 15px 28px rgba(0, 0, 0, .72));
+}
+
+body[data-ui-theme="bronze-story"] #uiTitleBg {
+  background:
+    radial-gradient(ellipse at 50% 24%, rgba(117, 73, 34, .24), transparent 38%),
+    radial-gradient(ellipse at 50% 28%, rgba(18, 15, 12, .64), rgba(7, 7, 6, .94) 78%);
+}
+
+body[data-ui-theme="bronze-story"] #uiTitle .fr,
+body[data-ui-theme="bronze-story"] #uiBanner .fr,
+body[data-ui-theme="bronze-story"] #uiDeath .fr {
+  background:
+    radial-gradient(circle, var(--bs-gold-hi) 0 2px, var(--bs-bronze) 3px 4px, transparent 5px)
+      no-repeat 50% 4px / 11px 11px,
+    linear-gradient(90deg, transparent, var(--bs-bronze-hi) 18% 82%, transparent)
+      no-repeat 50% 0 / 154px 2px,
+    linear-gradient(90deg, transparent, rgba(196, 133, 72, .45) 24% 76%, transparent)
+      no-repeat 50% 33px / 100% 1px;
+}
+
+body[data-ui-theme="bronze-story"] #uiTitle .win::before,
+body[data-ui-theme="bronze-story"] #uiBanner .win::before,
+body[data-ui-theme="bronze-story"] #uiDeath .win::before {
+  background: linear-gradient(90deg, transparent, rgba(198, 133, 74, .68) 22% 78%, transparent)
+    no-repeat 50% 100% / 118px 1px;
+}
+
+body[data-ui-theme="bronze-story"] #uiTitle .win::after,
+body[data-ui-theme="bronze-story"] #uiBanner .win::after,
+body[data-ui-theme="bronze-story"] #uiDeath .win::after {
+  border-top-color: var(--bs-bronze-hi);
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, .86));
+}
+
+body[data-ui-theme="bronze-story"] #uiTitle .hd .ic,
+body[data-ui-theme="bronze-story"] #uiBanner .hd .ic,
+body[data-ui-theme="bronze-story"] #uiDeath .hd .ic {
+  background:
+    radial-gradient(circle, var(--bs-bronze-hi) 0 2px, transparent 3px) no-repeat 0 50% / 7px 7px,
+    radial-gradient(circle, var(--bs-bronze-hi) 0 2px, transparent 3px) no-repeat 100% 50% / 7px 7px,
+    linear-gradient(90deg, var(--bs-bronze), var(--bs-bronze)) no-repeat 4px 50% / 11px 1px,
+    linear-gradient(90deg, var(--bs-bronze), var(--bs-bronze)) no-repeat calc(100% - 15px) 50% / 11px 1px;
+}
+
+body[data-ui-theme="bronze-story"] #uiTitle .hd b,
+body[data-ui-theme="bronze-story"] #uiBanner .hd b,
+body[data-ui-theme="bronze-story"] #uiDeath .hd b,
+body[data-ui-theme="bronze-story"] #bClear::after {
+  color: var(--bs-bronze-hi);
+  text-shadow: 0 1px 1px #000;
+  letter-spacing: .20em;
+}
+
+body[data-ui-theme="bronze-story"] #uiTitle .big {
+  color: var(--bs-cream);
+  letter-spacing: .045em;
+  text-shadow: 0 3px 0 #12100e, 0 4px 8px rgba(0, 0, 0, .62);
+}
+
+body[data-ui-theme="bronze-story"] #uiTitle .sub {
+  color: var(--bs-gold-hi);
+  text-shadow: 0 2px 0 rgba(40, 23, 12, .9);
+}
+
+body[data-ui-theme="bronze-story"] #uiTitle .rule,
+body[data-ui-theme="bronze-story"] #uiDeath .rule {
+  background: linear-gradient(90deg, transparent, var(--bs-bronze), var(--bs-gold-hi), var(--bs-bronze), transparent);
+}
+
+body[data-ui-theme="bronze-story"] #uiTitle .rule::after,
+body[data-ui-theme="bronze-story"] #uiDeath .rule::after {
+  background: var(--bs-gold);
+  border: 1px solid #6d431f;
+  box-shadow: none;
+}
+
+body[data-ui-theme="bronze-story"] #uiTitle .lore {
+  color: var(--bs-parchment);
+  line-height: 1.65;
+}
+
+/* Boss warning, objective and boss health */
+body[data-ui-theme="bronze-story"] #uiBanner .win,
+body[data-ui-theme="bronze-story"] #uiDeath .win {
+  --cut-ink: #b4694a;
+  background:
+    var(--bs-grain),
+    linear-gradient(180deg, rgba(55, 37, 32, .985), rgba(30, 24, 22, .99));
+  box-shadow:
+    inset 0 0 0 1px rgba(75, 35, 28, .96),
+    inset 0 0 0 3px rgba(181, 96, 70, .56),
+    inset 0 0 0 4px rgba(66, 33, 27, .92),
+    inset 0 0 42px rgba(91, 25, 22, .18);
+}
+
+body[data-ui-theme="bronze-story"] #uiBanner .hd b,
+body[data-ui-theme="bronze-story"] #uiDeath .hd b {
+  color: var(--bs-red-hi);
+}
+
+body[data-ui-theme="bronze-story"] #uiBanner .tag {
+  color: var(--bs-parchment);
+}
+
+body[data-ui-theme="bronze-story"] #uiBanner .name {
+  color: #fff4e7;
+  text-shadow: 0 2px 0 #2b1210, 0 5px 12px rgba(0, 0, 0, .56);
+}
+
+body[data-ui-theme="bronze-story"] #uiBanner .name::before,
+body[data-ui-theme="bronze-story"] #uiBanner .name::after {
+  background: linear-gradient(90deg, transparent, #b66448);
+  box-shadow: none;
+}
+
+body[data-ui-theme="bronze-story"] #uiBanner .name::after {
+  background: linear-gradient(90deg, #b66448, transparent);
+}
+
+body[data-ui-theme="bronze-story"] #bBox {
+  --cut-ink: rgba(184, 85, 61, .70);
+  background: var(--cut-lines), var(--bs-grain),
+    linear-gradient(180deg, rgba(49, 30, 27, .95), rgba(24, 17, 16, .98));
+  box-shadow:
+    inset 0 0 0 1px rgba(80, 35, 29, .96),
+    inset 0 0 0 2px rgba(190, 91, 67, .44),
+    var(--bs-shadow);
+}
+
+body[data-ui-theme="bronze-story"] #bName {
+  color: #ffd7c7;
+  text-shadow: 0 1px 2px #000;
+}
+
+body[data-ui-theme="bronze-story"] #bBar {
+  background: #140d0d;
+  box-shadow:
+    inset 0 0 0 1px #5d2e28,
+    inset 0 0 0 2px rgba(217, 112, 81, .24);
+}
+
+body[data-ui-theme="bronze-story"] #bFill {
+  background: linear-gradient(180deg, #ff9f7d 0%, #d64d40 38%, #812626 100%) !important;
+  box-shadow: inset 0 1px rgba(255, 236, 214, .34);
+}
+
+body[data-ui-theme="bronze-story"] #bGoal {
+  --cut-ink: rgba(217, 157, 84, .78);
+  background: var(--cut-lines), var(--bs-panel-fill-warm);
+  box-shadow:
+    inset 0 0 0 1px rgba(84, 49, 25, .98),
+    inset 0 0 0 2px rgba(218, 155, 83, .48),
+    0 7px 17px rgba(0, 0, 0, .48);
+  color: var(--bs-cream);
+}
+
+body[data-ui-theme="bronze-story"] #bGoal::before {
+  background: radial-gradient(circle at 35% 30%, #fff1a9 0 12%, var(--bs-gold) 26%, #8b5424 70%);
+  border: 1px solid #5a351c;
+  box-shadow: 0 1px 2px #000;
+}
+
+body[data-ui-theme="bronze-story"] #bGoal::after,
+body[data-ui-theme="bronze-story"] #bGoal i {
+  color: var(--bs-gold-hi);
+}
+
+/* Death and clear */
+body[data-ui-theme="bronze-story"] #uiDeath {
+  background:
+    radial-gradient(ellipse 40% 34% at 50% 48%, rgba(119, 37, 30, .26), transparent 72%),
+    radial-gradient(ellipse at 50% 48%, rgba(18, 13, 11, .88), rgba(7, 7, 6, .98) 72%);
+}
+
+body[data-ui-theme="bronze-story"] #uiDeath .glyph {
+  color: #fff0e6;
+  text-shadow: 0 3px 0 #3d1715, 0 12px 25px rgba(0, 0, 0, .62);
+}
+
+body[data-ui-theme="bronze-story"] #uiDeath .cnt {
+  color: var(--bs-red-hi);
+}
+
+body[data-ui-theme="bronze-story"] #uiClearDim {
+  background: radial-gradient(ellipse at 50% 48%, rgba(139, 93, 35, .17), rgba(8, 7, 6, .90) 82%);
+}
+
+body[data-ui-theme="bronze-story"] #bClear {
+  background:
+    var(--bs-grain),
+    linear-gradient(180deg, rgba(54, 45, 32, .985), rgba(28, 23, 18, .99));
+}
+
+body[data-ui-theme="bronze-story"] #bClear::before {
+  background:
+    radial-gradient(circle, var(--bs-gold-hi) 0 2px, var(--bs-bronze) 3px 4px, transparent 5px)
+      no-repeat 50% 4px / 11px 11px,
+    linear-gradient(90deg, transparent, var(--bs-gold) 18% 82%, transparent)
+      no-repeat 50% 0 / 166px 2px,
+    linear-gradient(90deg, transparent, rgba(219, 158, 84, .42) 26% 74%, transparent)
+      no-repeat 50% 33px / 100% 1px;
+}
+
+body[data-ui-theme="bronze-story"] #bClear h1 {
+  color: #fff8df;
+  text-shadow: 0 3px 0 #4d3017, 0 8px 16px rgba(0, 0, 0, .58);
+}
+
+body[data-ui-theme="bronze-story"] #bClear table {
+  color: var(--bs-parchment);
+}
+
+body[data-ui-theme="bronze-story"] #bClear td {
+  border-bottom-color: rgba(222, 164, 93, .19);
+}
+
+body[data-ui-theme="bronze-story"] #bClear td.v,
+body[data-ui-theme="bronze-story"] #bClear::after {
+  color: var(--bs-gold-hi);
+  text-shadow: 0 1px #000;
+}
+
+body[data-ui-theme="bronze-story"] #bClear .hint {
+  color: var(--bs-parchment);
+}
+
+/* Bottom HUD: warm fantasy instrument panel */
+body[data-ui-theme="bronze-story"] #uiDock {
+  background:
+    linear-gradient(90deg, transparent 0 4%, rgba(116, 70, 34, .08) 18% 82%, transparent 96%),
+    var(--bs-grain),
+    linear-gradient(180deg, transparent 0%, rgba(29, 24, 19, .66) 17%, rgba(22, 18, 15, .96) 55%, #100d0b 100%);
+  box-shadow: inset 0 -1px 0 rgba(180, 118, 61, .22), 0 -17px 34px rgba(0, 0, 0, .22);
+}
+
+body[data-ui-theme="bronze-story"] #uiDock::before {
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, rgba(129, 77, 39, .48) 15%,
+    var(--bs-bronze-hi) 38%, var(--bs-gold-hi) 50%, var(--bs-bronze-hi) 62%,
+    rgba(129, 77, 39, .48) 85%, transparent 100%);
+  box-shadow: 0 1px 0 #3d2618, 0 -1px 0 rgba(255, 224, 163, .12);
+}
+
+body[data-ui-theme="bronze-story"] #uiDock::after {
+  opacity: .78;
+  background:
+    radial-gradient(circle, var(--bs-gold-hi) 0 2px, var(--bs-bronze) 3px, transparent 4px)
+      no-repeat 0 1px / 8px 8px,
+    radial-gradient(circle, var(--bs-gold-hi) 0 2px, var(--bs-bronze) 3px, transparent 4px)
+      no-repeat 100% 1px / 8px 8px,
+    linear-gradient(90deg, var(--bs-bronze), transparent) no-repeat 5px 5px / 28px 1px,
+    linear-gradient(90deg, transparent, var(--bs-bronze)) no-repeat calc(100% - 33px) 5px / 28px 1px;
+}
+
+body[data-ui-theme="bronze-story"] #uiDock .dkLv {
+  --cut-ink: var(--bs-gold);
+  background: var(--cut-lines), radial-gradient(circle at 36% 30%, #6b4b2a, #2a1d13 70%);
+  box-shadow:
+    inset 0 0 0 1px #5f381d,
+    inset 0 0 0 2px rgba(239, 189, 79, .60),
+    0 3px 7px rgba(0, 0, 0, .44);
+  color: var(--bs-gold-hi);
+  text-shadow: 0 1px 1px #000;
+}
+
+body[data-ui-theme="bronze-story"] #uiDock .dkLb {
+  color: var(--bs-bronze-hi);
+}
+
+body[data-ui-theme="bronze-story"] #eBar {
+  --cut-ink: rgba(206, 146, 78, .56);
+  background: linear-gradient(180deg, #17140f, #0c0b09);
+}
+
+body[data-ui-theme="bronze-story"] #eBar.hpHi #eFill {
+  background: var(--ui-hp-high-fill) !important;
+}
+
+body[data-ui-theme="bronze-story"] #eBar.hpMid #eFill {
+  background: var(--ui-hp-mid-fill) !important;
+}
+
+body[data-ui-theme="bronze-story"] #eBar.hpLo #eFill {
+  background: var(--ui-hp-low-fill) !important;
+}
+
+body[data-ui-theme="bronze-story"] #eFill {
+  box-shadow: inset 0 1px rgba(255, 255, 225, .36), inset 0 -1px rgba(40, 21, 11, .42);
+}
+
+body[data-ui-theme="bronze-story"] #eFill::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 251, 215, .52));
+}
+
+body[data-ui-theme="bronze-story"] #eBar::after {
+  background:
+    var(--cut-lines),
+    linear-gradient(180deg, rgba(255, 249, 220, .22) 0 1px, transparent 1px),
+    linear-gradient(90deg, transparent 0 calc(25% - 1px), rgba(25, 16, 10, .54) calc(25% - 1px) 25%, transparent 25%),
+    linear-gradient(90deg, transparent 0 calc(50% - 1px), rgba(25, 16, 10, .46) calc(50% - 1px) 50%, transparent 50%),
+    linear-gradient(90deg, transparent 0 calc(75% - 1px), rgba(25, 16, 10, .46) calc(75% - 1px) 75%, transparent 75%);
+  box-shadow:
+    inset 0 0 0 1px #4c2d1b,
+    inset 0 0 0 2px rgba(211, 148, 78, .45);
+}
+
+body[data-ui-theme="bronze-story"] #uiHpNum {
+  --cut-ink: rgba(195, 132, 69, .56);
+  background: var(--cut-lines), linear-gradient(180deg, rgba(51, 43, 34, .98), rgba(24, 20, 16, .99));
+  box-shadow:
+    inset 0 0 0 1px #4d301e,
+    inset 0 0 0 2px rgba(195, 132, 69, .30);
+  color: var(--bs-cream);
+}
+
+body[data-ui-theme="bronze-story"] #uiHpNum s,
+body[data-ui-theme="bronze-story"] #uiHpNum u {
+  color: var(--bs-muted);
+}
+
+body[data-ui-theme="bronze-story"] #uiHpNum.low {
+  --cut-ink: rgba(207, 82, 64, .76);
+  background: var(--cut-lines), linear-gradient(180deg, rgba(63, 31, 28, .98), rgba(27, 16, 15, .99));
+  box-shadow:
+    inset 0 0 0 1px #5d2824,
+    inset 0 0 0 2px rgba(216, 83, 66, .42);
+  color: #ffe8dc;
+}
+
+body[data-ui-theme="bronze-story"] #eTxt {
+  color: var(--bs-parchment);
+}
+
+body[data-ui-theme="bronze-story"] #eTxt::before {
+  background: var(--bs-gold);
+  border: 1px solid #65401f;
+  box-shadow: none;
+}
+
+body[data-ui-theme="bronze-story"] #eTxt b {
+  color: var(--bs-cream);
+  text-shadow: 0 1px 1px #000;
+}
+
+body[data-ui-theme="bronze-story"] #eTxt b.s1 {
+  color: #f5d16e;
+}
+
+body[data-ui-theme="bronze-story"] #eTxt b.s2 {
+  color: #ee9854;
+}
+
+body[data-ui-theme="bronze-story"] #eTxt b.s3 {
+  color: #ff6f55;
+  text-shadow: 0 1px 1px #2e100c;
+}
+
+body[data-ui-theme="bronze-story"] #uiDock .dkExp {
+  background: #110e0b;
+  box-shadow:
+    inset 0 0 0 1px #4e301c,
+    inset 0 0 0 2px rgba(201, 137, 69, .28);
+}
+
+body[data-ui-theme="bronze-story"] #uiDock .dkExp i {
+  background: var(--ui-exp-fill);
+  box-shadow: inset 0 1px rgba(255, 244, 194, .40);
+}
+
+/* Skills, cooldowns, locks and weapon */
+body[data-ui-theme="bronze-story"] #uiSkills .sk,
+body[data-ui-theme="bronze-story"] #uiSkills .skLock {
+  --cut-ink: rgba(180, 119, 61, .48);
+  background: var(--cut-lines), var(--bs-grain),
+    linear-gradient(180deg, rgba(54, 45, 35, .97), rgba(24, 20, 16, .99));
+  box-shadow:
+    inset 0 0 0 1px #4e2e1b,
+    inset 0 0 0 2px rgba(194, 132, 67, .30),
+    0 3px 8px rgba(0, 0, 0, .35);
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Basic"] {
+  --sk-accent: #f1c45b;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Heavy"] {
+  --sk-accent: #db7650;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Wide"] {
+  --sk-accent: #7dba85;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Dash"],
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Jump"] {
+  --sk-accent: #89b9c2;
+}
+
+/* 2x2 warm-fantasy skill sheet: Basic TL, Heavy TR, Wide BL, mobility BR. */
+body[data-ui-theme="bronze-story"] #uiSkills .sk::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  transform: none;
+  background-image: url("./ui-assets/bronze-skills.webp");
+  background-repeat: no-repeat;
+  background-size: 200% 200%;
+  opacity: .86;
+  filter: saturate(.92) contrast(1.04) drop-shadow(0 1px 1px rgba(0, 0, 0, .84));
+  transition: opacity .16s ease, filter .16s ease;
+  pointer-events: none;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Basic"]::before {
+  background-position: left top;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Heavy"]::before {
+  background-position: right top;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Wide"]::before {
+  background-position: left bottom;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Dash"]::before,
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Jump"]::before {
+  background-position: right bottom;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk::after,
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Basic"]::after,
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Heavy"]::after,
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Wide"]::after,
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Dash"]::after,
+body[data-ui-theme="bronze-story"] #uiSkills .sk[data-k="Jump"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  transform: none;
+  background:
+    linear-gradient(180deg, rgba(17, 13, 10, .38) 0 27%, transparent 47%),
+    linear-gradient(0deg, rgba(16, 12, 9, .91) 0 25%, transparent 49%);
+  box-shadow: none;
+  opacity: 1;
+  filter: none;
+  pointer-events: none;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk .key {
+  --cut-ink: rgba(236, 184, 105, .72);
+  background: var(--cut-lines), linear-gradient(180deg, #735032, #302116);
+  box-shadow:
+    inset 0 0 0 1px #5e351c,
+    inset 0 0 0 2px rgba(235, 179, 99, .42),
+    inset 0 -2px rgba(0, 0, 0, .38);
+  color: #fff0c3;
+  text-shadow: 0 1px #000;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk .nm {
+  color: var(--bs-cream);
+  text-shadow: 0 1px 2px #000, 0 2px 4px #000;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk.rdy {
+  --cut-ink: var(--sk-accent);
+  background: var(--cut-lines), var(--bs-grain),
+    linear-gradient(180deg, rgba(71, 54, 37, .98), rgba(29, 23, 17, .99));
+  box-shadow:
+    inset 0 0 0 1px #51301a,
+    inset 0 0 0 2px var(--sk-accent),
+    inset 0 0 18px rgba(230, 171, 81, .11);
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .42));
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk.rdy .nm {
+  color: #fff8e8;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk.off {
+  --cut-ink: rgba(130, 102, 76, .22);
+  background: var(--cut-lines), linear-gradient(180deg, rgba(37, 32, 27, .96), rgba(18, 16, 14, .99));
+  box-shadow: inset 0 0 0 1px rgba(105, 75, 48, .28);
+  filter: grayscale(.18) brightness(.72);
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk.off::before {
+  opacity: .30;
+  filter: grayscale(.46) saturate(.42) brightness(.60);
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk.off::after {
+  opacity: 1;
+  background: linear-gradient(rgba(18, 15, 12, .56), rgba(13, 11, 9, .80));
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk.off .nm {
+  color: rgba(221, 207, 185, .54);
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk.off .key {
+  --cut-ink: rgba(141, 105, 70, .24);
+  background: var(--cut-lines), #251d17;
+  box-shadow: inset 0 0 0 1px rgba(133, 94, 57, .24);
+  color: rgba(226, 207, 180, .40);
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk .cd {
+  mix-blend-mode: multiply;
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .sk .cds {
+  color: #fff5dc;
+  text-shadow: 0 2px 2px #000, 0 0 8px rgba(232, 166, 74, .34);
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .skLock {
+  --cut-ink: rgba(129, 96, 64, .16);
+  background: var(--cut-lines), rgba(27, 23, 19, .64);
+  box-shadow: inset 0 0 0 1px rgba(136, 92, 52, .15);
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .skLock .lk {
+  background: rgba(180, 139, 93, .20);
+}
+
+body[data-ui-theme="bronze-story"] #uiSkills .skLock .lk::before {
+  border-color: rgba(180, 139, 93, .20);
+  border-bottom: 0;
+}
+
+body[data-ui-theme="bronze-story"] #uiDock .dkSword {
+  --cut-ink: rgba(209, 145, 76, .58);
+  background: var(--cut-lines), var(--bs-panel-fill-warm);
+  box-shadow:
+    inset 0 0 0 1px #57341d,
+    inset 0 0 0 2px rgba(206, 142, 75, .30);
+}
+
+body[data-ui-theme="bronze-story"] #uiDock .dkSword .lb {
+  color: var(--bs-bronze-hi);
+}
+
+body[data-ui-theme="bronze-story"] #sword {
+  color: #fff2ce;
+  text-shadow: 0 1px 2px #000;
+}
+
+/* Stealth */
+body[data-ui-theme="bronze-story"] #stHud {
+  font-family: var(--bs-font-ui);
+  box-shadow: var(--bs-shadow);
+}
+
+body[data-ui-theme="bronze-story"] #stHud.hide {
+  --cut-ink: #7fa55f;
+  background: var(--cut-lines), var(--bs-grain),
+    linear-gradient(180deg, rgba(40, 58, 35, .96), rgba(20, 30, 20, .99));
+  box-shadow:
+    inset 0 0 0 1px #3c552e,
+    inset 0 0 0 2px rgba(132, 171, 99, .44),
+    0 6px 14px rgba(0, 0, 0, .48);
+  color: #dff1bd;
+}
+
+body[data-ui-theme="bronze-story"] #stHud.loud {
+  --cut-ink: var(--bs-gold);
+  background: var(--cut-lines), var(--bs-grain),
+    linear-gradient(180deg, rgba(67, 47, 25, .96), rgba(31, 22, 15, .99));
+  box-shadow:
+    inset 0 0 0 1px #5d391c,
+    inset 0 0 0 2px rgba(229, 166, 79, .43),
+    0 6px 14px rgba(0, 0, 0, .48);
+  color: var(--bs-gold-hi);
+}
+
+body[data-ui-theme="bronze-story"] #stVig {
+  box-shadow: inset 0 0 190px 62px rgba(13, 24, 12, .70),
+    inset 0 0 70px 8px rgba(102, 145, 78, .20);
+}
+
+body[data-ui-theme="bronze-story"] #stVig.loud {
+  box-shadow: inset 0 0 190px 62px rgba(25, 15, 8, .72),
+    inset 0 0 70px 8px rgba(187, 118, 43, .24);
+}
+
+/* Objective compass and nearby-enemy pip */
+body[data-ui-theme="bronze-story"] #uiNav .tip {
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, .82));
+}
+
+body[data-ui-theme="bronze-story"] #uiNav .plate {
+  --cut-ink: var(--nav-ink);
+  background: var(--cut-lines), radial-gradient(circle at 50% 44%, #493822, #211a14 72%);
+  box-shadow:
+    inset 0 0 0 1px #3f291a,
+    inset 0 0 0 2px var(--nav-ink),
+    0 6px 14px rgba(0, 0, 0, .52);
+  color: var(--nav-ink);
+  text-shadow: 0 2px 1px #000;
+}
+
+body[data-ui-theme="bronze-story"] #uiNav .plate::after {
+  box-shadow: inset 0 0 12px 1px rgba(255, 230, 166, .10);
+}
+
+body[data-ui-theme="bronze-story"] #uiNav .cap,
+body[data-ui-theme="bronze-story"] #uiPip .cap,
+body[data-ui-theme="bronze-story"] #uiNav .dst {
+  --cut-ink: rgba(188, 124, 65, .50);
+  background: var(--cut-lines), rgba(31, 26, 21, .97);
+  box-shadow:
+    inset 0 0 0 1px #4c2f1d,
+    inset 0 0 0 2px rgba(195, 130, 68, .24),
+    0 5px 11px rgba(0, 0, 0, .40);
+  color: var(--bs-cream-soft);
+}
+
+body[data-ui-theme="bronze-story"] #uiNav .dst {
+  color: var(--bs-gold-hi);
+}
+
+body[data-ui-theme="bronze-story"] #uiPip {
+  --cut-ink: rgba(189, 124, 65, .46);
+  background: var(--cut-lines), linear-gradient(180deg, #403125, #201914);
+  box-shadow:
+    inset 0 0 0 1px #4e301d,
+    inset 0 0 0 2px rgba(193, 129, 67, .30),
+    0 4px 10px rgba(0, 0, 0, .42);
+}
+
+body[data-ui-theme="bronze-story"] #uiPip::after {
+  background: var(--bs-gold);
+  border: 1px solid #68411f;
+  box-shadow: 0 1px 2px #000;
+}
+
+/* Overhead HP */
+body[data-ui-theme="bronze-story"] #uiHpFloat .track {
+  --cut-ink: rgba(232, 197, 143, .82);
+  background: #120f0c;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat .track::after {
+  box-shadow:
+    inset 0 0 0 1px #21150e,
+    inset 0 0 0 2px rgba(229, 190, 130, .88);
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat .gh {
+  background: var(--ui-hp-ghost-fill);
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="#2ee08a"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="46, 224, 138"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="46 224 138"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="ui-hp-high-fill"] {
+  background: var(--ui-hp-high-fill) !important;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="#e0c22e"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="224, 194, 46"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="224 194 46"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="ui-hp-mid-fill"] {
+  background: var(--ui-hp-mid-fill) !important;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="#e04a2e"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="224, 74, 46"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="224 74 46"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="ui-hp-low-fill"] {
+  background: var(--ui-hp-low-fill) !important;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat .lv {
+  --cut-ink: var(--bs-gold);
+  background: var(--cut-lines), radial-gradient(circle at 36% 30%, #6a4a29, #291d14 72%);
+  box-shadow:
+    inset 0 0 0 1px #5b351c,
+    inset 0 0 0 2px rgba(239, 189, 79, .62),
+    0 3px 7px rgba(0, 0, 0, .48);
+  color: var(--bs-gold-hi);
+  text-shadow: 0 1px #000;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat.hit .track {
+  --cut-ink: #fff3d6;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat.hit .track::after {
+  box-shadow: inset 0 0 0 1px #21150e, inset 0 0 0 2.5px #fff3d6;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat.hit .gh {
+  background: linear-gradient(90deg, #fff8e5, #ffbd91);
+}
+
+/* Combo and skill callout */
+body[data-ui-theme="bronze-story"] #combo {
+  color: var(--bs-gold-hi);
+  text-shadow: 0 2px 0 #3e2514, 0 5px 10px rgba(0, 0, 0, .72);
+}
+
+body[data-ui-theme="bronze-story"] #combo i {
+  color: var(--bs-cream-soft);
+}
+
+body[data-ui-theme="bronze-story"] #combo .uiCall {
+  --cut-ink: rgba(208, 143, 75, .76);
+  background:
+    var(--bs-grain),
+    linear-gradient(180deg, rgba(49, 44, 37, .98), rgba(25, 22, 18, .99));
+  box-shadow:
+    inset 0 0 0 1px #56351f,
+    inset 0 0 0 3px rgba(207, 141, 74, .48),
+    0 11px 22px rgba(0, 0, 0, .58);
+  filter: none;
+}
+
+body[data-ui-theme="bronze-story"] #combo .uiCall .hd {
+  color: var(--bs-bronze-hi);
+  text-shadow: 0 1px #000;
+}
+
+body[data-ui-theme="bronze-story"] #combo .uiCall .nm {
+  color: var(--bs-cream);
+  text-shadow: 0 2px 0 #2b1b12, 0 5px 10px rgba(0, 0, 0, .56);
+}
+
+body[data-ui-theme="bronze-story"] #combo .uiCall .ty {
+  color: var(--bs-gold-hi);
+}
+
+/* Level-up story notification */
+body[data-ui-theme="bronze-story"] #uiLevelUp {
+  position: fixed;
+  left: 50%;
+  top: 42%;
+  z-index: 14;
+  width: min(520px, 82vw);
+  min-height: 176px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 38px 42px 32px;
+  pointer-events: none;
+  user-select: none;
+  isolation: isolate;
+  opacity: 0;
+  color: var(--bs-cream);
+  background:
+    var(--bs-grain),
+    linear-gradient(180deg, rgba(48, 47, 44, .99), rgba(31, 30, 28, .995));
+  box-shadow:
+    inset 0 0 0 1px #5c371f,
+    inset 0 0 0 3px rgba(207, 139, 73, .66),
+    inset 0 0 0 4px #4a2d1c,
+    0 16px 36px rgba(0, 0, 0, .72);
+  font-family: var(--bs-font-display);
+  text-align: center;
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp::before,
+body[data-ui-theme="bronze-story"] #uiLevelUp::after {
+  content: "";
+  position: absolute;
+  left: 19px;
+  right: 19px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--bs-bronze-hi), transparent);
+  opacity: .65;
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp::before {
+  top: 15px;
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp::after {
+  bottom: 15px;
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp .sigil {
+  position: absolute;
+  left: 24px;
+  top: 18px;
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--bs-bronze-hi);
+  border-radius: 50% 46% 52% 48%;
+  transform: rotate(-18deg);
+  background: radial-gradient(circle, #8c5b2d 0 22%, #362316 24% 54%, #b87a3d 56% 61%, transparent 63%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, .65);
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp .sigil::before,
+body[data-ui-theme="bronze-story"] #uiLevelUp .sigil::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 7px;
+  border-top: 2px solid var(--bs-bronze-hi);
+  border-radius: 50%;
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp .sigil::before {
+  left: -12px;
+  top: 8px;
+  transform: rotate(-42deg);
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp .sigil::after {
+  right: -12px;
+  bottom: 7px;
+  transform: rotate(-42deg);
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp .eyebrow {
+  margin-bottom: 11px;
+  color: var(--bs-bronze-hi);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .28em;
+  padding-left: .28em;
+  text-shadow: 0 1px #000;
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp strong {
+  display: block;
+  color: var(--bs-cream);
+  font-size: clamp(28px, 4.2vw, 44px);
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: .10em;
+  padding-left: .10em;
+  text-shadow: 0 3px 0 #17130f, 0 6px 11px rgba(0, 0, 0, .62);
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp .level {
+  margin-top: 14px;
+  color: var(--bs-gold-hi);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .16em;
+  padding-left: .16em;
+  text-shadow: 0 2px 0 #402512;
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp.on {
+  animation: bs-level-card 1.9s cubic-bezier(.16, .82, .26, 1) both;
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp.on .sigil {
+  animation: bs-level-seal 1.65s ease-out both;
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp.on .eyebrow,
+body[data-ui-theme="bronze-story"] #uiLevelUp.on strong,
+body[data-ui-theme="bronze-story"] #uiLevelUp.on .level {
+  animation: bs-level-copy 1.55s ease-out .10s both;
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp.on strong {
+  animation-delay: .16s;
+}
+
+body[data-ui-theme="bronze-story"] #uiLevelUp.on .level {
+  animation-delay: .24s;
+}
+
+@keyframes bs-level-card {
+  0% { opacity: 0; transform: translate(-50%, calc(-50% + 18px)) scale(.94); }
+  15%, 72% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, calc(-50% - 13px)) scale(.985); }
+}
+
+@keyframes bs-level-seal {
+  0% { opacity: 0; transform: rotate(-34deg) scale(.55); }
+  22%, 72% { opacity: 1; transform: rotate(-18deg) scale(1); }
+  100% { opacity: 0; transform: rotate(-8deg) scale(.96); }
+}
+
+@keyframes bs-level-copy {
+  0% { opacity: 0; transform: translateY(7px); }
+  22%, 74% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+
+/* Responsive refinement: base UI handles layout; these rules preserve the
+   ornament and type hierarchy once the slots start shrinking. */
+@media (max-width: 780px) {
+  body[data-ui-theme="bronze-story"] #uiTitle .win,
+  body[data-ui-theme="bronze-story"] #uiBanner .win,
+  body[data-ui-theme="bronze-story"] #uiDeath .win,
+  body[data-ui-theme="bronze-story"] #bClear,
+  body[data-ui-theme="bronze-story"] #load .win {
+    box-shadow:
+      inset 0 0 0 1px rgba(77, 43, 24, .96),
+      inset 0 0 0 2px rgba(200, 135, 75, .60),
+      inset 0 0 0 3px rgba(65, 38, 23, .92),
+      0 12px 24px rgba(0, 0, 0, .64);
+  }
+
+  body[data-ui-theme="bronze-story"] #uiDock {
+    background: var(--bs-grain), linear-gradient(180deg, rgba(30, 25, 20, .95), #100d0b);
+  }
+
+  body[data-ui-theme="bronze-story"] #uiSkills .sk,
+  body[data-ui-theme="bronze-story"] #uiSkills .skLock {
+    box-shadow:
+      inset 0 0 0 1px #4e2e1b,
+      inset 0 0 0 2px rgba(194, 132, 67, .26);
+  }
+
+  body[data-ui-theme="bronze-story"] #uiLevelUp {
+    width: min(480px, 88vw);
+    min-height: 158px;
+    padding: 33px 31px 28px;
+  }
+}
+
+@media (max-width: 600px) {
+  body[data-ui-theme="bronze-story"] #uiDock {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "hero gear"
+      "skills skills";
+    align-items: center;
+    column-gap: 7px;
+    row-gap: 6px;
+    padding:
+      8px
+      max(9px, env(safe-area-inset-right))
+      calc(13px + env(safe-area-inset-bottom))
+      max(9px, env(safe-area-inset-left));
+  }
+
+  body[data-ui-theme="bronze-story"] #uiDock .dkLeft {
+    grid-area: hero;
+    width: 100%;
+    gap: 5px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiDock .dkSlots {
+    grid-area: skills;
+    width: 100%;
+    gap: 6px;
+    justify-self: stretch;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiDock .dkRight {
+    grid-area: gear;
+    justify-self: end;
+  }
+
+  body[data-ui-theme="bronze-story"] #eHud {
+    width: 100%;
+    gap: 5px;
+  }
+
+  body[data-ui-theme="bronze-story"] #eBar {
+    min-width: 42px;
+    max-width: none;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiHpNum {
+    padding: 3px 5px 4px;
+    font-size: 10.5px;
+  }
+
+  body[data-ui-theme="bronze-story"] #eTxt {
+    padding-left: 10px;
+    font-size: 10px;
+  }
+
+  body[data-ui-theme="bronze-story"] #eTxt::before {
+    left: 1px;
+    width: 4px;
+    height: 4px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiDock .dkSword {
+    gap: 4px;
+    padding: 4px 7px 5px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiDock .dkExp {
+    left: max(9px, env(safe-area-inset-left));
+    right: max(9px, env(safe-area-inset-right));
+    bottom: calc(4px + env(safe-area-inset-bottom));
+  }
+
+  body[data-ui-theme="bronze-story"] #stHud {
+    bottom: calc(120px + env(safe-area-inset-bottom));
+  }
+
+  body[data-ui-theme="bronze-story"] #help {
+    box-shadow:
+      inset 0 0 0 1px rgba(75, 45, 28, .92),
+      inset 0 0 0 2px rgba(190, 126, 69, .30),
+      0 6px 15px rgba(0, 0, 0, .48);
+  }
+
+  body[data-ui-theme="bronze-story"] #uiLevelUp {
+    top: 38%;
+    width: 88vw;
+    min-height: 142px;
+    padding: 29px 24px 24px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiLevelUp .sigil {
+    left: 18px;
+    top: 14px;
+    width: 28px;
+    height: 28px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiLevelUp .eyebrow {
+    margin-bottom: 8px;
+    font-size: 10px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiLevelUp .level {
+    margin-top: 10px;
+    font-size: 12px;
+  }
+
+  body[data-ui-theme="bronze-story"] #combo .uiCall {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+@media (max-width: 380px) {
+  body[data-ui-theme="bronze-story"] #uiDock .dkLv {
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiDock .dkLb {
+    font-size: 8px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiSkills {
+    gap: 4px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiSkills .sk {
+    width: 46px;
+    height: 46px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiSkills .skLock {
+    width: 21px;
+    height: 46px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiDock .dkSword .lb {
+    display: none;
+  }
+
+  body[data-ui-theme="bronze-story"] #sword {
+    max-width: 66px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10px;
+  }
+}
+
+@media (pointer: coarse) {
+  body[data-ui-theme="bronze-story"] #uiHelpChip {
+    left: auto;
+    right: max(10px, env(safe-area-inset-right));
+    top: max(10px, env(safe-area-inset-top));
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+    opacity: 1;
+    pointer-events: auto;
+    touch-action: manipulation;
+  }
+}
+
+@media (max-height: 620px) {
+  body[data-ui-theme="bronze-story"] #uiLevelUp {
+    top: 34%;
+    min-height: 126px;
+    padding-top: 25px;
+    padding-bottom: 21px;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiLevelUp strong {
+    font-size: clamp(25px, 5.2vh, 34px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui-theme="bronze-story"] #uiLevelUp.on,
+  body[data-ui-theme="bronze-story"] #uiLevelUp.on .sigil,
+  body[data-ui-theme="bronze-story"] #uiLevelUp.on .eyebrow,
+  body[data-ui-theme="bronze-story"] #uiLevelUp.on strong,
+  body[data-ui-theme="bronze-story"] #uiLevelUp.on .level {
+    animation: none;
+  }
+
+  body[data-ui-theme="bronze-story"] #uiLevelUp.on,
+  body[data-ui-theme="bronze-story"] #uiLevelUp.on .sigil,
+  body[data-ui-theme="bronze-story"] #uiLevelUp.on .eyebrow,
+  body[data-ui-theme="bronze-story"] #uiLevelUp.on strong,
+  body[data-ui-theme="bronze-story"] #uiLevelUp.on .level {
+    opacity: 1;
+  }
+}

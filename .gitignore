@@ -19,3 +19,5 @@ web/tex/dg_floor.png
 web/tex/dg_floor_b.png
 web/tex/dg_wall.png
 web/tex/dg_block.png
+# Local image-generation working files. Final UI assets live under web/ui-assets/.
+tmp/
