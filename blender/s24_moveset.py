@@ -1024,21 +1024,84 @@ def grip_target():
 # ★2026-08-13 오너 지시 3차로 벌림을 절반 가까이 줄였다. "그냥 양팔이 살짝
 #   벌려지는 정도 아님?" — 옛 값 40~54도는 만세에 가까웠다. 새 값은 오른팔(SWD_KEYS
 #   의 A 20~28도)과 **좌우 대칭**이 되게 20~30도로 맞췄다. 그게 곧 "양팔이 살짝".
-BAL_KEYS = [                    # (위상 t, 벌림 A도, 앞으로 F도, 뻗음 k=팔길이 비)
-    (0.00, 12, -8, 0.84),       # f1  웅크림. 아직 자루를 쥐고 있다(가중치 0)
-    (0.18, 20, 10, 0.86),       # f5  도약. 손을 놓으며 팔이 살짝 벌어진다
-    (0.27, 26, 14, 0.88),       # f7  ★상승 내내 이 자세로 멈춘다
-    (0.55, 30, 2, 0.90),        # f13 ★하강 내내 이 자세로 멈춘다
-    (0.70, 22, 8, 0.86),        # f16 착지 흡수. 팔을 내린다
-    (1.00, 14, 2, 0.82),        # f23 회복. Idle 로 0.18초 크로스페이드되며 다시 쥔다
+# ★★★2026-08-13 17차 4번째 — **팔꿈치가 몸통에 붙어 있었다** (이번 수정)
+#   오너 직접 지시: **"점프할때 칼안든손 팔꿈치가 몸통에왜이렇게 붙어있음.
+#                     칼든손처럼 좀 자연스러운자세가 되어야지."**
+#   실측(committed ca0e350a, blender/probe_jump_larm.py. 게임이 멈춰 세우는 두 장):
+#       f7   왼 **위팔 외전 +7.6도** / 팔꿈치 굽힘 56.7 / 팔꿈치 바깥 +0.040m / 척추 0.308m
+#            오른 위팔 외전 +14.9도 / 굽힘 100.0 / 바깥 +0.077m / 척추 0.388m
+#       f13  왼 **위팔 외전 +8.6도** / 굽힘 51.7 / 바깥 +0.045m / 척추 0.316m
+#            오른 위팔 외전 +25.5도 / 굽힘  93.6 / 바깥 +0.129m / 척추 0.427m
+#   왼 위팔 외전이 오너 기준("살짝 벌림 15~30도")의 **절반**이었다. 팔꿈치가 어깨
+#   바로 밑 4cm 에 매달려 갈비뼈를 스치고 있었다.
+#
+# ★왜 A 를 26·30 으로 줘 놓고 7.6·8.6 도가 나왔나 — 17차 함정 4번의 재판
+#   A(BAL_KEYS 의 벌림)는 **손목** 기준 각이다. 실측도 손목 기준으로는 +26.0·+30.0 도로
+#   목표대로 나왔다. 그런데 **팔꿈치**는 그 선 위에 없다 — IK 는 팔꿈치를 스위블
+#   평면(pole)이 정한 자리에 놓고, 그 자리가 어깨->손목 축에서 l1·sin(어깨각) = **15cm**
+#   떨어져 있다. 그 15cm 를 어디로 쓰느냐가 곧 "팔꿈치가 몸에 붙나 뜨나"이고,
+#   옛 BAL_POLE(-0.10,-1.00,-0.45)은 그걸 **안쪽으로 34.6도** 썼다. 그래서
+#   손목은 26도 벌어졌는데 위팔은 7.6도였다.
+#
+# ★고친 방법 — 팔꿈치 방향을 **어깨->손목 축에 수직인 평면 안에서 각으로** 준다 (EO 신설)
+#   폴을 절대 방향(가슴 좌표 상수)으로 주면 안 된다. 팔이 벌어질수록 그 폴이
+#   어깨->손목 축과 나란해져 수직 성분이 짧아지고(f13 에서 |perp| 0.39), 팔꿈치가
+#   프레임마다 홱 돈다. 대신 그 축에 수직인 평면을 만들어 **바깥·뒤 두 축**을 세우고
+#   (바깥축은 팔이 아래로 늘어져 있는 한 늘 안정적이다) 각 EO 하나로 정한다:
+#       EO   0도 = 팔꿈치가 **곧게 뒤** · +면 바깥 · -면 안쪽(옛 값이 -34.6도였다)
+#   오른팔 EB(팔꿈치 굽힘)와 같은 자리의 채널이다 — 오른팔은 칼을 든 강체라 굽힘으로,
+#   왼팔은 IK 라 **스위블**로 팔꿈치를 몸에서 띄운다.
+# ★뻗음 k 도 같이 내렸다(0.88/0.90 -> 0.85/0.86). 팔꿈치를 더 굽히면(56.7 -> 63.6도)
+#   팔꿈치가 축에서 더 멀어져(15.7 -> 16.2cm) 같은 EO 로도 더 뜨고, 무엇보다
+#   **소프트하게 굽은 팔**이 균형 잡는 사람의 팔이다(편 팔은 차렷에 가깝다).
+# ★좌우를 거울로 맞추지 않았다. 칼(1.66m)을 든 오른팔은 무게 때문에 f7 에 덜 벌어졌다가
+#   f13 에 더 벌어진다(14.9 -> 25.5도). 왼팔은 그 사이에서 **거의 일정**하게 둔다
+#   (23~26도) — 한쪽은 칼에 끌려가고 한쪽은 균형을 잡는, 그게 자연스러운 비대칭이다.
+#   ★A(벌림)·F(앞으로)는 **한 칸도 안 건드렸다**. 바뀐 것은 EO(신설)와 두 정지 장의
+#     k 뿐이다. 그래서 실측 '손목 벌림' 칸이 전 프레임 before 와 **같은 값**으로 나온다
+#     = 손목 목표가 그대로고 **팔꿈치만** 돌았다는 증명이다.
+#     t 0.09 줄은 전환 완충용으로 새로 끼웠고 A·F·k 는 위아래 두 키의 중점을 넣었다.
+BAL_KEYS = [                    # (위상 t, 벌림 A도, 앞으로 F도, 뻗음 k=팔길이 비,
+                                #  ★팔꿈치 방향 EO도(0=곧게 뒤 / +바깥 / -안쪽))
+    (0.00, 12, -8, 0.84, -35),  # f1  웅크림. 아직 자루를 쥐고 있다(가중치 0)
+    (0.09, 16, 1, 0.85, -30),   # f3  ★전환 완충용으로 끼운 줄(A·F·k 는 위아래 중점).
+                                #     여기서 EO 를 미리 풀면 놓은 손이 f4 한 장 동안
+                                #     앞을 지르는 그림이 나온다(실측 주먹면 -80 -> -18도)
+    (0.18, 20, 10, 0.86, -16),  # f5  도약. 손을 놓으며 팔꿈치가 몸에서 떨어지기 시작
+    (0.27, 26, 14, 0.85, +4),   # f7  ★상승 내내 이 자세로 멈춘다
+    (0.55, 30, 2, 0.86, +3),    # f13 ★하강 내내 이 자세로 멈춘다
+    (0.70, 22, 8, 0.86, -8),    # f16 착지 흡수. 팔을 내린다
+    (1.00, 14, 2, 0.82, -35),   # f23 회복. Idle 로 0.18초 크로스페이드되며 다시 쥔다
+]
+# ★옛 판(오너 기각: 팔꿈치가 몸통에 붙는다). `LARM_OUT=0` 하나로 이 표와 옛 폴이
+#   같이 돌아오고 **6줄 md5 까지 ca0e350a 로 일치**한다 = 이번 코드가 옛 경로를
+#   한 톨도 안 건드렸다는 증명이자, before/after 를 같은 기계에서 다시 굽는 창구다.
+#   (EO 칸은 옛 폴의 실측 각 -34.6도를 적어 둔 것이다. 이 표를 쓸 때는 안 읽힌다.)
+BAL_KEYS_PRE = [
+    (0.00, 12, -8, 0.84, -35),
+    (0.18, 20, 10, 0.86, -35),
+    (0.27, 26, 14, 0.88, -35),
+    (0.55, 30, 2, 0.90, -35),
+    (0.70, 22, 8, 0.86, -35),
+    (1.00, 14, 2, 0.82, -35),
 ]
 BAL_ON, BAL_FULL = 0.02, 0.18   # 파지->균형 전환 구간(위상). 도약 순간에 놓는다
-# 팔꿈치가 향할 방향(가슴 좌표계 X=왼쪽/Y=위/Z=앞). 아래·약간 뒤·약간 안쪽.
+# ★옛 판(LARM_OUT=0)의 팔꿈치 방향. 가슴 좌표계 X=왼쪽/Y=위/Z=앞 — 아래·약간 뒤·
+#   **약간 안쪽**. 이 '약간 안쪽'이 팔꿈치를 갈비뼈에 붙여 놓은 범인이었다.
 BAL_POLE = (-0.10, -1.00, -0.45)
+# 0 이면 옛 경로 그대로(md5 재현 창구). 1 이면 위 EO 채널을 쓴다.
+LARM_OUT = os.environ.get("LARM_OUT", "1") == "1"
+if not LARM_OUT:
+    BAL_KEYS = BAL_KEYS_PRE
+# 튜닝 창구(굽는 값을 파일 안 고치고 바꾼다). "t,A,F,k,EO;t,..." 형식.
+_bal_tab = os.environ.get("BAL_TABLE", "").strip()
+if _bal_tab:
+    BAL_KEYS = [tuple(float(x) for x in row.split(","))
+                for row in _bal_tab.split(";") if row.strip()]
 
 
 def bal_key(t):
-    """위상 t 의 (A,F,k). 구간 안은 smoothstep(속도가 튀면 팔이 홱 꺾인다)."""
+    """위상 t 의 (A,F,k,EO). 구간 안은 smoothstep(속도가 튀면 팔이 홱 꺾인다)."""
     ks = BAL_KEYS
     if t <= ks[0][0]:
         return ks[0][1:]
@@ -1072,10 +1135,42 @@ def torso_frame(pose):
 
 def balance_target(pose, t):
     """이번 프레임의 왼손목 목표(균형 팔). 어깨에서 가슴 기준 방향으로 뻗는다."""
-    A, F, k = bal_key(t)
+    A, F, k = bal_key(t)[:3]
     A, F = math.radians(A), math.radians(F)
     u = Vector((math.sin(A), -math.cos(A) * math.cos(F), math.cos(A) * math.sin(F)))
     return wpos(pose, L_ARM[0]) + (torso_frame(pose) @ u) * (ARM_L * k)
+
+
+def bal_pole(pose, t, S, T):
+    """이번 프레임의 왼 팔꿈치가 향할 방향(월드 단위벡터). S 어깨 / T **이번 프레임의
+    실제 손목 목표**(파지<->균형이 섞인 뒤의 값).
+
+    ★어깨->손목 축에 **수직인 평면 안에서** 각(EO)으로 준다. 절대 방향 상수로 주면
+      팔이 벌어질수록 그 상수가 축과 나란해져 수직 성분이 짧아지고, 팔꿈치가
+      프레임마다 홱 돈다(옛 BAL_POLE 이 f13 에서 |perp| 0.39 까지 떨어졌다).
+      바깥축은 팔이 아래로 늘어져 있는 한 축과 60도 이상 벌어져 늘 안정적이다.
+      EO 0 = 곧게 뒤 · + = 바깥 · - = 안쪽.
+    ★기준 축을 **섞인 뒤의 T** 로 잡는 것이 중요하다. 순수 균형 목표로 잡으면
+      전환 두 장(f3·f4)에서 실제 팔 축과 어긋난 평면에 각을 재게 돼 팔꿈치가
+      엉뚱한 데로 간다(실측: f2 외전이 -21.9 -> -39.0 도로 오히려 안으로 말렸다).
+    """
+    if not LARM_OUT:
+        return (torso_frame(pose) @ Vector(BAL_POLE)).normalized()
+    n = (T - S)
+    if n.length < 1e-5:
+        return (torso_frame(pose) @ Vector(BAL_POLE)).normalized()
+    n.normalize()
+    C = torso_frame(pose)
+    o = C @ Vector((1, 0, 0))                        # 가슴 X = 왼쪽 = 왼팔의 바깥
+    o = (o - n * o.dot(n))
+    if o.length < 1e-4:                              # 팔을 옆으로 완전히 뻗은 경우
+        return (torso_frame(pose) @ Vector(BAL_POLE)).normalized()
+    o.normalize()
+    b = -n.cross(o)                                  # 같은 평면의 '뒤' 축(외적 부호는
+    if b.dot(C @ Vector((0, 0, -1))) < 0:            # 리그를 안 믿고 가슴 뒤로 검산한다)
+        b = -b
+    e = math.radians(bal_key(t)[3])
+    return (b * math.cos(e) + o * math.sin(e)).normalized()
 
 
 # ------------------------------------------------------------ 오른팔 내리기
@@ -1312,10 +1407,9 @@ def apply_grip(pose, Rw, gt, ph=None):
         if wb > 1e-4:
             T = T.lerp(balance_target(pose, ph), wb)
             w = max(w, wb)                          # 균형 팔은 파지 게이트와 무관
-            # 팔꿈치가 향할 방향도 같은 비율로 넘긴다(아래·약간 뒤). 툭 끊기지 않게
+            # 팔꿈치가 향할 방향도 같은 비율로 넘긴다(EO 채널). 툭 끊기지 않게
             # 원래 팔꿈치 방향에서 섞는다.
-            pole = (E - S).normalized().lerp(
-                (torso_frame(pose) @ Vector(BAL_POLE)).normalized(), wb)
+            pole = (E - S).normalized().lerp(bal_pole(pose, ph, S, T), wb)
     before = (Lw - T).length
     # ★손목 방향 교정([왼손 손목])에 넘길 값: 자루 기준점 C 와 **파지 전용** 가중치.
     #   균형 팔(RELEASE)로 넘어간 몫(wb)은 빼야 한다. 안 그러면 손을 놓은 팔이
@@ -1594,10 +1688,14 @@ def bake(name):
               % (on, nf, min(g[2] for g in gts), max(g[2] for g in gts),
                  "  <- RELEASE 라 이 게이트 위에 균형 팔을 덮어쓴다" if rel else ""))
     if rel:
-        print("   균형 팔 위상표(t / 벌림 / 앞으로 / 뻗음 / 파지->균형 가중치):")
-        for t, A, F, k in BAL_KEYS:
-            print("      t %.2f (f%-2d)  A %+3d도  F %+3d도  k %.2f   w %.2f"
-                  % (t, f0 + int(round(t * (nf - 1))), A, F, k, bal_weight(t)))
+        print("   균형 팔 위상표(t / 벌림 / 앞으로 / 뻗음 / ★팔꿈치 EO(0=뒤,+바깥) /"
+              " 파지->균형 가중치):")
+        for t, A, F, k, EO in BAL_KEYS:
+            print("      t %.2f (f%-2d)  A %+3d도  F %+3d도  k %.2f  팔꿈치 EO %+4d도"
+                  "   w %.2f"
+                  % (t, f0 + int(round(t * (nf - 1))), A, F, k, EO, bal_weight(t)))
+        if not LARM_OUT:
+            print("      ★LARM_OUT=0 — EO 를 안 쓰고 옛 폴(%s)로 굽는다" % (BAL_POLE,))
     if swd:
         print("   오른팔(검) 위상표(t / 칼끝 고도·벌림 / 팔 벌림·앞으로(음수=뒤) /"
               " 팔꿈치 / 가중치):")
@@ -1614,7 +1712,7 @@ def bake(name):
                   % (t, f0 + int(round(t * (nf - 1))), RL, BD, bal_weight(t)))
 
     lows, maxerr, befs, afts, swds, wrs, frs = [], 0.0, [], [], [], [], []
-    jtips, jhnds, jhips, jchs = [], [], [], []
+    jtips, jhnds, jhips, jchs, larms = [], [], [], [], []
     for i, f in enumerate(range(f0, f1 + 1)):
         sc.frame_set(f)
         bpy.context.view_layer.update()
@@ -1642,6 +1740,27 @@ def bake(name):
             if rf:
                 frs.append(rf)
                 pose, basis = build(Rw, pw)
+        if rel:
+            # ★왼팔도 **실제로 나온 각**을 잰다(오른팔 jchs 와 같은 규칙).
+            #   A(BAL_KEYS) 는 손목 기준 목표라 위팔이 얼마나 벌어졌는지를 못 말한다 —
+            #   그 착각이 팔꿈치를 갈비뼈에 붙여 놓고도 "A 26도면 살짝 벌림"이라고
+            #   통과시킨 원인이다(17차 함정 4의 왼팔판).
+            Cl = torso_frame(pose).transposed()     # 월드 -> 가슴(X=왼쪽=왼팔 바깥)
+            Sl, El, Wl = (wpos(pose, L_ARM[0]), wpos(pose, L_ARM[1]),
+                          wpos(pose, HAND_L))
+            vu = Cl @ (El - Sl).normalized()
+            vw = Cl @ (Wl - Sl).normalized()
+            Pv, Nv = wpos(pose, PELVIS), wpos(pose, NECK)
+            sv = Nv - Pv
+            ss = 0.0 if sv.length_squared < 1e-9 else max(
+                0.0, min(1.0, (El - Pv).dot(sv) / sv.length_squared))
+            larms.append((
+                math.degrees(math.asin(max(-1.0, min(1.0, vu.x)))),   # 위팔 외전
+                math.degrees(math.asin(max(-1.0, min(1.0, vw.x)))),   # 손목 기준 벌림
+                math.degrees((El - Sl).angle(Wl - El)),               # 팔꿈치 굽힘
+                (Cl @ (El - Sl)).x,                                   # 팔꿈치 바깥
+                (El - (Pv + sv * ss)).length,                         # 팔꿈치-척추축
+                (Cl @ (El - Sl)).z))                                  # 팔꿈치 앞뒤
         for bn in ORDER:
             arm.pose.bones[bn].matrix_basis = basis[bn]
         bpy.context.view_layer.update()
@@ -1705,6 +1824,30 @@ def bake(name):
                   " -> 후 %.0f~%.0f(중앙 %.0f) / 구멍축-자루축 후 %.0f~%.0f (상한 %.0f도)"
                   % (len(on), nf, b0[0], b0[-1], b0[len(b0) // 2],
                      b1[0], b1[-1], b1[len(b1) // 2], tg[0], tg[-1], WRIST_LIM))
+    if larms:
+        gkl = 1.75 / DH
+        print("   ★왼팔(균형) **실제로 나온** 값 — 위팔 외전이 오너 기준"
+              "('살짝 벌림' 15~30도)의 과녁이다")
+        print("     %3s %8s %8s %8s %9s %9s"
+              % ("f", "위팔외전", "손목벌림", "팔꿈치굽힘", "팔꿈치바깥", "척추거리"))
+        for i, r in enumerate(larms):
+            print("     f%-2d %+7.1f도 %+7.1f도 %7.1f도 %+8.3fm %8.3fm"
+                  % (i, r[0], r[1], r[2], r[3] * gkl, r[4] * gkl))
+        air = [larms[i] for i in range(len(larms)) if JUMP_AIR[0] <= i <= JUMP_AIR[1]]
+        if air:
+            print("     체공 f%d~f%d: 위팔 외전 %+.1f~%+.1f도 · 굽힘 %.1f~%.1f도"
+                  " · 팔꿈치 바깥 %+.3f~%+.3fm · 척추거리 %.3f~%.3fm"
+                  % (JUMP_AIR[0], JUMP_AIR[1],
+                     min(r[0] for r in air), max(r[0] for r in air),
+                     min(r[2] for r in air), max(r[2] for r in air),
+                     min(r[3] for r in air) * gkl, max(r[3] for r in air) * gkl,
+                     min(r[4] for r in air) * gkl, max(r[4] for r in air) * gkl))
+        for h in JUMP_HOLDS:
+            if h < len(larms):
+                r = larms[h]
+                print("     ★f%-2d(게임 정지) 위팔 외전 %+.1f도 · 팔꿈치 굽힘 %.1f도"
+                      " · 팔꿈치 바깥 %+.3fm · 척추거리 %.3fm"
+                      % (h, r[0], r[2], r[3] * gkl, r[4] * gkl))
     if frs:
         on = [r for r in frs if r[3] > 0.5]
         if on:
