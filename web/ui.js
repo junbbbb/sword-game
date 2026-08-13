@@ -826,8 +826,9 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
                   inset 0 0 70px 8px rgba(24,120,70,.30)}
 #stVig.loud{box-shadow:inset 0 0 190px 62px rgba(10,5,0,.74),
                        inset 0 0 70px 8px rgba(150,96,16,.34)}
-/* #combo 판 자체. ★18차부터 여기 실리는 것은 **기술 이름 콜아웃 하나뿐**이다 -
-   평타 「1타」·「2타」 는 main.js 의 COMBO_UI_ON=false 로 꺼졌다(오너 지시).
+/* #combo 판 자체. ★18차 오너 지시 두 건으로 **이 판은 이제 아무것도 안 싣는다** -
+   평타 「1타」·「2타」 는 COMBO_UI_ON=false, 기술 이름 카드는 SKILL_CALLOUT_ON=false
+   (둘 다 main.js). 아래 #combo 관련 규칙은 **전부 롤백용으로 남겨 둔 옷**이다.
    ★transform 은 main.js 가 inline 으로 쓴다(여기서 절대 잡지 말 것) */
 #combo{font-weight:800;color:#eaf6ff;letter-spacing:.02em;
   font-variant-numeric:tabular-nums;
@@ -2332,9 +2333,12 @@ export function initUI() {
   //   같은 창을 영원히 다시 씌우는 무한 루프가 된다.
   //   **내가 마지막으로 써 넣은 innerHTML 을 그대로 기억해 두고 비교한다.** 서명이
   //   같으면 그건 내 글씨이므로 아무것도 안 한다 - 어떤 순서로 배달돼도 안 돈다.
-  // ★표에 있는 이름으로 시작할 때만 씌운다. (평타 「1타」·「3타」 는 원래 표에 없어서
-  //   안 씌워졌고, 18차부터는 main.js 가 아예 안 쓴다 - COMBO_UI_ON=false. 그래서
-  //   이제 #combo 에 글자를 넣는 쪽은 showSkill 하나뿐이다.)
+  // ★표에 있는 이름으로 시작할 때만 씌운다.
+  // ★★18차 오너 지시 두 건으로 **이 관찰자는 이제 한 번도 안 돈다.** main.js 가
+  //   #combo 에 글자를 아예 안 쓰기 때문이다(COMBO_UI_ON=false 로 타수가, 뒤이어
+  //   SKILL_CALLOUT_ON=false 로 기술 이름이 끊겼다). 관찰자는 **변경이 있을 때만**
+  //   깨어나므로 도는 비용도 0 이다. 아래 코드는 스위치를 되돌릴 때를 위해 그대로 둔다 -
+  //   지우면 콜아웃만 켜도 맨 글자가 뜨고 카드가 안 씌워진다.
   const comboEl = document.getElementById('combo');
   let comboSig = '';
   function skillOf(t) {

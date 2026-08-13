@@ -3931,11 +3931,18 @@ function tryWide() {
 // 18차 이전이 한 글자도 안 다르게 복원된다.
 //   끄는 것: 화면 한가운데 위쪽에 뜨던 「1타」·「2타」·「3타」 와 그 옆 작은 「명중 6」.
 //   안 끄는 것(전부 그대로 산다):
-//     · 기술 이름 콜아웃(showSkill -> ui.js 가 씌우는 「스킬 / 수면참 / 물의 一」 판).
-//       그 판은 **입력한 순간** 뜨는 다른 경로라 이 스위치가 안 지난다.
 //     · 내부 누적 comboHits · 연격 단수 comboStep · 데미지 숫자 · 처치 수 · 체력바.
 //     · atkHitT(명중 확정 캔슬의 기준점) - 이건 게임 규칙이라 표시와 무관하게 찍는다.
 const COMBO_UI_ON = false;
+// ── ★기술 이름 콜아웃 스위치 (18차 후속, 오너 지시 「스킬 쓸때 화면 가운데 스킬명뜨고그런거 안나오게..」) ──
+// 위 스위치가 남겨 뒀던 **나머지 절반**이다. 두 지시가 합쳐져 #combo 판은 이제
+// **아무것도 안 쓴다** - 판(div)과 수명 코드는 롤백을 위해 그대로 둔다(아래 ★참고).
+//   끄는 것: X 수면참 · C 횡일섬 을 **입력한 순간** 화면 가운데 위쪽에 뜨던
+//            「스킬 / 수면참 / 물의 一」 카드(ui.js 의 dressCombo 가 씌우던 그 판).
+//   안 끄는 것: 기술 자체(모션·이펙트·피해·쿨다운)·하단 스킬 칩(X·C)·거부 흔들림.
+//              comboLabel 도 그대로 세운다 - resetCombo 는 표시가 아니라 **연격 상태**다.
+// ★두 스위치를 하나로 합치지 않는다. 오너 지시가 두 건이라 되돌릴 때도 따로 되돌려야 한다.
+const SKILL_CALLOUT_ON = false;
 const comboEl = document.getElementById('combo');
 let comboT = 0;
 let comboHits = 0;                 // 이번 연격에서 누적된 명중 수
@@ -3947,6 +3954,7 @@ function resetCombo(label) {
 }
 // 기술 이름은 **입력한 순간** 뜬다. "이 기술이 나갔다"는 알림이라 허공에 그어도 거짓이 아니다.
 function showSkill(label) {
+  if (!SKILL_CALLOUT_ON) return;   // 오너 지시. 부르는 자리(tryHeavy·tryWide)는 안 건드린다
   comboEl.textContent = label;
   comboT = 0.9;
 }
@@ -3960,6 +3968,8 @@ function showHit() {
     //   건드리면 이번 작업(타수 지우기)이 남의 연출까지 짧게 만드는 회귀가 된다.
     // ★단, **이미 꺼진 판은 안 되살린다.** 조건 없이 채우면 평타를 때릴 때 직전에
     //   썼던 기술 이름이 유령처럼 다시 뜬다(#combo 는 글자를 지우지 않고 투명해질 뿐이다).
+    // ★후속 지시로 SKILL_CALLOUT_ON 까지 꺼진 지금은 comboT 가 영영 0 이라 이 줄이
+    //   아무 일도 안 한다. 그래도 남긴다 - 콜아웃만 되살리는 롤백에서 다시 필요하다.
     if (comboLabel && comboT > 0) comboT = 0.9;
     return;
   }
@@ -5521,6 +5531,11 @@ function tick() {
   // 화면 겹(붓질 슬래시·속도선)도 실제 dt. 카메라와 같은 시계를 쓴다.
   feel.updateOverlay(rawDt);
 
+  // #combo 판의 수명·등장 팝. ★18차에 두 스위치(COMBO_UI_ON·SKILL_CALLOUT_ON)가 모두
+  //   꺼지면서 comboT 를 0 위로 올리는 자리가 하나도 안 남았다 - 그래서 지금은 매 프레임
+  //   else 가지로만 흐르고(불투명도 0 고정) 판은 영영 안 보인다. **그래도 안 지운다**:
+  //   ①스위치 둘 중 아무거나 되돌리면 이 줄이 그대로 다시 필요하다 ②comboEl 은 index.html
+  //   의 실제 div 라 null 이 아니고, 하는 일은 프레임당 style 쓰기 한 번뿐이다(비용 0에 가깝다).
   if (comboT > 0) {
     comboT -= dt;
     comboEl.style.opacity = Math.max(0, Math.min(1, comboT * 1.6));
