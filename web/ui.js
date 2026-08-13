@@ -50,17 +50,17 @@
 //   index    조작 안내       '층 재시작'(수 없음) 본문      ✓
 // ★새 층·새 문구를 넣을 때 이 표에 한 줄을 같이 적을 것.
 //
-// ★예외가 딱 하나 있다: **나침반 글리프(鬼·符·門)**. 그건 표기가 아니라 아이콘이다
-//   (한 글자가 목표 종류를 말한다). 정보로서 잘 작동해 온 자산이라 그대로 둔다.
+// ★나침반 한 글자는 표기가 아니라 아이콘이다. 픽셀 폰트가 모든 기기에서 같은 모양으로
+//   그릴 수 있는 한글(적·표·문)을 써서 목표 종류를 바로 읽게 한다.
 const FLOOR = {
-  head: '던전 진입',                // 창 머리
+  head: '탐험 알림',                // 창 머리
   no: '탑 1층',                     // 큰 글자
   name: '풀에 덮인 절터',           // 층 이름
-  lore: '생존 조건이 갱신되었습니다.', // 아래 한 줄
+  lore: '새로운 층의 문이 열렸습니다.', // 아래 한 줄
 };
 
 const BOSS_CARD = {
-  head: '위험 감지',                // 창 머리(붉은 변주)
+  head: '강적 출현',                // 창 머리(붉은 변주)
   tag: '탑 1층 · 수문장',           // 윗줄(작게)
   name: '각귀',                     // 큰 글자
 };
@@ -69,17 +69,17 @@ const DEATH = {
   // ★17차: 보스 경고창도 '경고'였다. 같은 말이 두 창의 머리에 걸리면 머리말이
   //   창을 구별하는 일을 못 한다(비평 7). 사망 쪽을 상태 낱말로 내린다 -
   //   '경고'는 앞으로 다가올 일이고, 이건 이미 일어난 일이다.
-  head: '생존 실패',                // 창 머리(붉은 변주)
-  glyph: '敗',                      // 한 글자 도장
+  head: '모험 실패',                // 창 머리(붉은 변주)
+  glyph: '패',                      // 한 글자 도장
   line: '다시 일어선다',            // 카운트 뒤에 붙는 말 ("3초 뒤 다시 일어선다")
   soon: '곧 다시 일어선다',         // 남은 시간이 1초 밑일 때
 };
 
 // 결과창(클리어). ★패널 DOM 은 boss.js 것이라 못 바꾼다. 머리 낱말만 여기서 얹는다.
-const CLEAR_HEAD = '층 돌파';
+const CLEAR_HEAD = '층 공략 완료';
 
 // 기술 콜아웃 창 머리.
-const SKILL_HEAD = '각성 기술';
+const SKILL_HEAD = '전투 기술';
 
 // 한자 나침반 판이 처음 뜰 때 딱 한 번 밑에 붙는 작은 말.
 // ★두 번째부터는 안 붙는다. 한 번 배우면 글자만으로 읽힌다.
@@ -1070,7 +1070,7 @@ body.uiCleared #uiClearDim{opacity:1}
 
 /* ── 8) 목표 방향 나침반 ─────────────────────────────────────────────────────
    3차 QA: **블라인드 18분간 보스를 육안으로 한 번도 못 봤다.** 그래서 셋을 바꿨다.
-     (가) 판 + 한 글자(鬼 · 符 · 門). 무엇을 가리키는지 화살표 자신이 말한다
+     (가) 판 + 한 글자(적 · 표 · 문). 무엇을 가리키는지 화살표 자신이 말한다
      (나) 크기 2배(화살 28x20 + 46px 판)
      (다) 은은한 명멸. 정지한 그림은 밝은 배경에서 지형으로 읽힌다
    ★글리프와 크기는 한 점도 안 바꿨다(정보로서 잘 작동해 온 자산이다).
@@ -1079,7 +1079,7 @@ body.uiCleared #uiClearDim{opacity:1}
   transform:translate(-50%,-50%);opacity:0;width:0;height:0;
   transition:opacity .35s ease,left .12s linear,top .12s linear;
   --nav-ink:#8fe6ff;--nav-glow:rgba(86,216,255,.55)}
-/* 화살은 판 **둘레를 돈다.** .dial 만 돌리고 글자는 안 돌린다(뒤집힌 鬼 는 못 읽는다) */
+/* 화살은 판 **둘레를 돈다.** .dial 만 돌리고 글자는 안 돌린다(뒤집힌 글자는 못 읽는다) */
 #uiNav .dial{position:absolute;left:0;top:0;width:0;height:0;
   transition:transform .1s linear}
 /* ★길쭉해야 한다. 28x20 이라야 비스듬히 돌아가도 뾰족한 끝이 읽힌다.
@@ -1517,10 +1517,10 @@ export function initUI() {
   const pipCap = pip.querySelector('.cap');
   pipCap.textContent = PIP_HINT;
 
-  // 표시 전용 각성 피드백. 처치 5회마다 오르는 기존 HUD 레벨을 크게 한 번 읽어 준다.
+  // 표시 전용 성장 피드백. 처치 5회마다 오르는 기존 HUD 레벨을 크게 한 번 읽어 준다.
   const levelUp = el('div', 'uiLevelUp');
-  levelUp.innerHTML = '<i class="sigil"></i><span class="eyebrow">각성</span>'
-    + '<strong>LEVEL UP</strong><span class="level">LEVEL 1</span>';
+  levelUp.innerHTML = '<i class="sigil"></i><span class="eyebrow">성장 알림</span>'
+    + '<strong>레벨이 상승했습니다</strong><span class="level">LEVEL 1</span>';
   const levelUpValue = levelUp.querySelector('.level');
 
   document.body.append(bg, title, banner, death, chip, dim, nav, pip, levelUp);
@@ -2022,7 +2022,7 @@ export function initUI() {
   //   재서** 못 들어가는 상자를 만든다.
   //   ★HUD 를 피하는 기준은 **판**이다. 화살은 얇은 획이라 위를 스쳐도 글자를
   //     못 읽게 만들지 않는다. 판이 겹치면 그때는 정말 못 읽는다.
-  // ★v95 판정 S12: "門 판이 계기판과 근접 충돌한다(우하단)." 원인 두 가지.
+  // ★v95 판정 S12: "문 판이 계기판과 근접 충돌한다(우하단)." 원인 두 가지.
   //     (가) 아래 한계를 **가로 전체**에 걸었다. 계기판은 화면 가운데 아래에만 있는데
   //          오른쪽 아래를 가리킬 때도 판을 계기판 윗선까지 밀어 올렸다.
   //          → x 를 먼저 정하고, **그 x 가 계기판 가로 범위 안일 때만** 위로 민다.
@@ -2053,7 +2053,7 @@ export function initUI() {
       return r.height > 0 ? r : null;
     };
     const hud = rect('bHud');            // 목표문구 + 보스 체력바
-    // ★v93 판정 S5: 탈출 단계에서 門 판이 칼 이름 위로 올라탔다. 그때는 여기서 재는
+    // ★v93 판정 S5: 탈출 단계에서 문 판이 칼 이름 위로 올라탔다. 그때는 여기서 재는
     //   상자가 **스킬 칩만** 이었다. 이제 셋이 한 판(#uiDock)에 도킹돼 있으므로
     //   판 하나만 재면 아래쪽이 통째로 막힌다.
     const sk = rect('uiDock');
@@ -2092,9 +2092,9 @@ export function initUI() {
   //   색만 이 벌의 네 색 규칙에 맞춘다 - **위험=빨강 · 보상=앰버 · 길=시안**.
   //   화면의 실물과도 여전히 짝이다(보스=어귀 선돌의 붉은 끈, 증표=호박색 빛기둥).
   const NAV_KIND = {
-    boss:  { glyph: '鬼', ink: '#ff5a4a', glow: 'rgba(255,90,74,.55)' },
-    token: { glyph: '符', ink: '#ffbb3d', glow: 'rgba(255,187,61,.50)' },
-    exit:  { glyph: '門', ink: '#56d8ff', glow: 'rgba(86,216,255,.50)' },
+    boss:  { glyph: '적', ink: '#ff5a4a', glow: 'rgba(255,90,74,.55)' },
+    token: { glyph: '표', ink: '#ffbb3d', glow: 'rgba(255,187,61,.50)' },
+    exit:  { glyph: '문', ink: '#56d8ff', glow: 'rgba(86,216,255,.50)' },
   };
   // 목표. ★boss.guide 가 정본이다(상단 문구와 **같은 값**을 본다). 낡은 boss.js 로
   //   돌아가도 화살은 살아 있어야 하므로 옛 경로를 폴백으로 남긴다.
