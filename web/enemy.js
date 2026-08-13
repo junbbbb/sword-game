@@ -235,7 +235,9 @@ const PIP_SHOW = 1.2;
 const PIP_FADE = 0.25;          // 마지막 0.25초에 걷힌다
 // 표식 판 크기(m). 정사각형이다.
 const MARK_SZ = 0.62;
-// 표식 종류(텍스처 아틀라스 칸 번호). 0=! 1=? 2=공격 쐐기
+// 표식 종류(식별 번호). 0=! 1=? 2=공격 쐐기
+// ★이 번호는 더 이상 「아틀라스 몇 번째 칸」이 아니다. 표식을 끄면 그 칸을 아예 안 굽기
+//   때문에 칸 번호가 앞으로 당겨진다 — 칸 번호는 아래 MARK_CELL 이 따로 답한다.
 const MARK_NONE = -1, MARK_EX = 0, MARK_Q = 1, MARK_ATK = 2;
 // ── ★공격 쐐기(머리 위 삼각형) 스위치 (오너 지시 2026-08-13) ──
 // "고블린 머리위에 삼각형 표시뜨는거 없애줘."
@@ -246,8 +248,27 @@ const MARK_NONE = -1, MARK_EX = 0, MARK_Q = 1, MARK_ATK = 2;
 //   · 인지 표식(! / ?)은 남는다. 은신이 성립하려면 "쟤가 나를 놓쳤다"가 보여야 한다.
 // 되살리려면 이 한 줄을 true 로. 아틀라스 칸 수(MARK_N)·markOf 분기·UV 가 같이 돌아온다.
 const MARK_ATK_ON = false;
-// 아틀라스 칸 수. 쐐기를 끄면 칸을 굽지도 않는다(빈 칸을 남기면 그게 부스러기다).
-const MARK_N = MARK_ATK_ON ? 3 : 2;
+// ── ★발견 표식(머리 위 느낌표) 스위치 (오너 지시 2026-08-14, 18차) ──
+// "느낌표 안뜨게해라. 몬스터머리위에 느낌표"
+// 쐐기(MARK_ATK_ON)와 **완전히 같은 방식**이다. 끄는 것은 시각물 한 갈래뿐이다.
+//   · 발견 판정 자체는 무변경이다. 시야(canSee)·무리 전파(aggroGroup)·추격·놓침
+//     (LOSE_SIGHT)·수색·포기가 한 줄도 안 바뀌었다 = 밸런스·AI 무변경.
+//   · MARK_FOUND(1.4초) 시계도 그대로다. 그 시계는 이제 아무 그림도 안 그릴 뿐이다.
+//   · 수색·놓침(?)은 남는다. 오너가 지목한 건 느낌표 하나이고, ? 는 은신의 심장이다
+//     ("쟤가 나를 놓쳤다"가 안 보이면 수풀에 들어간 사람은 자기 판단이 통했는지 모른다).
+// 되살리려면 이 한 줄을 true 로.
+const MARK_ALERT_ON = false;
+// 켜져 있는 표식만 이 순서대로 굽는다 = **이 배열의 자리 번호가 곧 아틀라스 칸 번호다.**
+// 꺼진 표식의 칸을 비워 두면 그 빈 칸이 곧 부스러기라, 칸 자체를 안 만든다.
+const MARK_BAKE = [
+  ...(MARK_ALERT_ON ? [MARK_EX] : []),
+  MARK_Q,
+  ...(MARK_ATK_ON ? [MARK_ATK] : []),
+];
+// 아틀라스 칸 수. 지금은 둘 다 꺼져 있어 ? 한 칸뿐이다.
+const MARK_N = MARK_BAKE.length;
+// 표식 번호 -> 칸 번호. 꺼진 표식은 -1 이다(그 자리를 읽으려 드는 코드가 있으면 그게 회귀다).
+const MARK_CELL = [MARK_EX, MARK_Q, MARK_ATK].map(m => MARK_BAKE.indexOf(m));
 // 상태별 표시 시간
 const MARK_FOUND = 1.4;         // 발견(!) 이 떠 있는 시간
 const MARK_LOST_FADE = 0.9;     // 포기(? 페이드)
@@ -1566,6 +1587,8 @@ export function createEnemySystem(opts) {
   // 건틀릿 1회차가 짚은 두 구멍을 한 시스템으로 메운다.
   //   손맛 5위 "적 HP 바가 없다"          -> 맞은 놈 머리 위 체력 바 1.2초
   //   손맛 8번 "은신 인지 표식 0 (3/10)"  -> ! / ? / 공격 쐐기
+  //     ★그중 남은 건 ? 하나다. 쐐기(17차)와 ! (18차)는 오너 지시로 꺼졌다
+  //       — MARK_ATK_ON · MARK_ALERT_ON. 판정은 그대로고 그림만 빠졌다.
   //
   // 구현 원칙은 먹 파편(inkMesh)과 같다. **판 40장을 정점 버퍼 한 벌에 담아
   // 드로우콜 1로 그린다.** DOM 으로 하면 40마리분 좌표 투영 + style 쓰기가
@@ -1576,7 +1599,8 @@ export function createEnemySystem(opts) {
   //   맵의 정보가 새지 않는다(표식은 이미 나를 아는 놈에게만 붙는다).
   // -------------------------------------------------------------------------
   // 표식 글자는 파일로 안 만든다. 캔버스에 구우면 404·CSP·경로 문제가 통째로 없다.
-  // 아틀라스 = 128px 칸 MARK_N 개: [0] ! · [1] ? · [2] 공격 쐐기(MARK_ATK_ON 일 때만)
+  // 아틀라스 = 128px 칸 MARK_N 개. **켜져 있는 표식만** MARK_BAKE 순서대로 들어간다
+  //   (! = MARK_ALERT_ON · 쐐기 = MARK_ATK_ON. 지금은 둘 다 꺼져 있어 ? 한 칸이다).
   function makeMarkTexture() {
     const S = 128;
     const cv = document.createElement('canvas');
@@ -1595,17 +1619,20 @@ export function createEnemySystem(opts) {
       g.fillStyle = '#f6f0e2';
       g.fillText(ch, cx, cy);
     };
-    glyph('!', 0);
-    glyph('?', 1);
-    // 공격 쐐기. 아래(= 그 놈 머리)를 가리키는 삼각형이라 "이놈이 친다"가 읽힌다.
-    // ★오너 지시로 꺼져 있다(MARK_ATK_ON). 칸 자체를 안 굽는다.
-    if (MARK_ATK_ON) {
-      const cx = S * 2 + S / 2;
-      g.beginPath();
-      g.moveTo(cx - 40, 30); g.lineTo(cx + 40, 30); g.lineTo(cx, 104); g.closePath();
-      g.strokeStyle = 'rgba(8,7,10,0.96)'; g.lineWidth = 20; g.stroke();
-      g.fillStyle = '#f6f0e2'; g.fill();
-    }
+    // ★굽는 목록이 곧 칸 배치다. 꺼진 표식은 여기 없으므로 칸이 만들어지지도 않는다
+    //   (! · 쐐기 둘 다 오너 지시로 꺼져 있다 = 지금 이 아틀라스는 ? 한 칸짜리다).
+    MARK_BAKE.forEach((m, i) => {
+      if (m === MARK_ATK) {
+        // 공격 쐐기. 아래(= 그 놈 머리)를 가리키는 삼각형이라 "이놈이 친다"가 읽힌다.
+        const cx = S * i + S / 2;
+        g.beginPath();
+        g.moveTo(cx - 40, 30); g.lineTo(cx + 40, 30); g.lineTo(cx, 104); g.closePath();
+        g.strokeStyle = 'rgba(8,7,10,0.96)'; g.lineWidth = 20; g.stroke();
+        g.fillStyle = '#f6f0e2'; g.fill();
+      } else {
+        glyph(m === MARK_EX ? '!' : '?', i);
+      }
+    });
     const t = new THREE.CanvasTexture(cv);
     t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
@@ -1980,17 +2007,18 @@ export function createEnemySystem(opts) {
   const GLYPH_OF_CELL = (69 + DIG_W[0].ol) / DIG_CH;
 
   // 표식 색조. 발견은 주홍(경보), 수색·놓침은 종이색(중립), 공격은 진홍(임박).
-  // ★2번(공격 쐐기)은 MARK_ATK_ON = false 라 지금은 아무도 안 읽는다. 되살릴 때 쓰라고 남긴다.
+  // ★표식 **번호**로 찾는 표다(칸 번호가 아니다). 0·2 는 지금 꺼져 있어 아무도 안 읽는다 —
+  //   되살릴 때 쓰라고 남긴다.
   const MK_TINT = [
-    [1.00, 0.44, 0.32],     // 0 = !
+    [1.00, 0.44, 0.32],     // 0 = !(꺼짐)
     [0.96, 0.93, 0.85],     // 1 = ?
     [1.00, 0.30, 0.22],     // 2 = 공격 쐐기(꺼짐)
   ];
 
   // 이 놈에게 지금 무슨 표식을 붙일까. 우선순위가 곧 "제일 급한 정보"의 순서다.
   //   ① 공격 예고(쐐기 — ★MARK_ATK_ON 으로 꺼짐)  ② 수색(?)  ③ 쫓는 중인데 못 봄(? 깜빡)
-  //   ④ 방금 발견(! 팝)  ⑤ 포기(? 페이드)
-  // ★쐐기가 꺼져 있으면 이 분기 자체를 안 탄다 = 예고 중인 놈은 판을 한 장도 안 쓴다
+  //   ④ 방금 발견(! — ★MARK_ALERT_ON 으로 꺼짐)  ⑤ 포기(? 페이드)
+  // ★꺼진 갈래는 분기 안에서 null 로 끊는다 = 그 놈은 판을 한 장도 안 쓴다
   //   (알파 0 으로 그리는 게 아니라 아예 안 담는다).
   const _mk = { slot: 0, a: 0, sc: 1 };
   function markOf(e) {
@@ -2011,6 +2039,10 @@ export function createEnemySystem(opts) {
     }
     const sa = T - g.aggroAt;
     if (g.aggro && sa < MARK_FOUND) {
+      // ★오너 지시로 꺼졌다(MARK_ALERT_ON). **여기서 끊는다.** 그냥 아래로 흘려보내면
+      //   포기(? 페이드)가 발견의 자리를 대신 차지할 수 있다 — 우선순위가 곧 뜻이라
+      //   그건 "지운 것"이 아니라 "바꿔치기한 것"이 된다. 시각물 한 갈래만 뺀다.
+      if (!MARK_ALERT_ON) return null;
       _mk.slot = MARK_EX;
       _mk.a = sa > MARK_FOUND - 0.3 ? (MARK_FOUND - sa) / 0.3 : 1;
       _mk.sc = 1 + Math.max(0, 1 - sa * 7) * 0.55;      // 튀어나왔다 가라앉는다
@@ -2043,18 +2075,24 @@ export function createEnemySystem(opts) {
     }
   }
 
-  // ★쐐기 제거의 증거 창구(진단 전용, 매 프레임 경로 아님).
-  //   winding = 지금 예비 자세를 잡고 있는 놈 수 · slots = 지금 붙어 있는 표식 칸 번호들
-  //   "winding 이 0 을 넘는데 slots 에 2 가 한 번도 안 뜬다" = 예고는 도는데 삼각형은 없다.
+  // ★표식 제거의 증거 창구(진단 전용, 매 프레임 경로 아님).
+  //   winding = 지금 예비 자세를 잡고 있는 놈 수
+  //   aggro   = 지금 나를 발견해 쫓고 있는 놈 수
+  //   found   = 그중 발견 직후(1.4초 안)인 놈 수 = 원래 ! 가 떠 있어야 할 놈 수
+  //   slots   = 지금 붙어 있는 표식 **번호**들(0=! 1=? 2=쐐기)
+  //   "winding > 0 인데 slots 에 2 가 없다" = 예고는 도는데 삼각형은 없다.
+  //   "found  > 0 인데 slots 에 0 이 없다" = 발견은 도는데 느낌표는 없다.
   function markCensus() {
-    let winding = 0; const slots = [];
+    let winding = 0, aggro = 0, found = 0; const slots = [];
     for (let i = 0; i < live.length; i++) {
       const e = live[i];
       if (e.wndT > 0) winding++;
+      const g = e.grp;
+      if (g && g.aggro) { aggro++; if (T - g.aggroAt < MARK_FOUND) found++; }
       const m = markOf(e);
       if (m && m.a > 0.01) slots.push(m.slot);
     }
-    return { winding, slots };
+    return { winding, aggro, found, slots };
   }
 
   // 이 거리 밖의 놈은 판을 안 그린다. 34m 카메라에서 화면 대각이 대략 이만큼이다.
@@ -2114,13 +2152,16 @@ export function createEnemySystem(opts) {
       }
       // ── 표식 ──
       const mk = markOf(e);
-      if (mk && mk.a > 0.01 && mn < MAX_ENEMIES) {
+      // ★MARK_CELL[..] >= 0 은 안전줄이다. 꺼진 표식은 markOf 가 이미 안 돌려주지만,
+      //   만에 하나 새면 UV 가 -1 칸을 집어 **옆 칸 그림**이 뜬다(조용한 회귀). 여기서 막는다.
+      if (mk && mk.a > 0.01 && MARK_CELL[mk.slot] >= 0 && mn < MAX_ENEMIES) {
         const o = mn * 4;
         const hw = MARK_SZ * 0.5 * mk.sc;
+        const cell = MARK_CELL[mk.slot];
         // ★머리에 더 붙인다. 처음엔 발밑에서 1.99m 였는데 실사에서 "누구 것인지"가
         //   한 박자 늦게 읽혔다(고블린 키가 1.30m 라 머리 위 0.69m 는 몸 하나 반이다).
         putPlate(mPos, mUv, o, e.pos.x, headY + MARK_SZ * 0.50 + PIP_H * 1.5, e.pos.z,
-          hw, hw, mk.slot / MARK_N, (mk.slot + 1) / MARK_N);
+          hw, hw, cell / MARK_N, (cell + 1) / MARK_N);
         const c = MK_TINT[mk.slot];
         for (let k = 0; k < 4; k++) {
           mkA[o + k] = mk.a;
@@ -3728,11 +3769,13 @@ export function createEnemySystem(opts) {
     //   이 배열이 곧 "왜 숫자가 올라갔나"의 전부다. onScreen=false 면 화면 밖 처치다.
     get killLog() { return killLog.slice(); },
     // 머리 위 판이 실제로 몇 장 서 있나(눈 없이 회귀를 잡는 창구)
-    // ★atkMark/cells/winding/slots 은 쐐기 제거의 증거다. winding > 0 인데 slots 에 2 가
-    //   한 번도 안 들어오면 "예고는 도는데 삼각형은 없다"가 코드로 증명된다.
+    // ★atkMark/exMark/cells/winding/aggro/found/slots 은 표식 제거의 증거다.
+    //   winding > 0 인데 slots 에 2 가 없으면 "예고는 도는데 삼각형은 없다",
+    //   found   > 0 인데 slots 에 0 이 없으면 "발견은 도는데 느낌표는 없다"가 코드로 증명된다.
     get plates() { return { pip: plateCount.pip, mark: plateCount.mark,
                             tex: !!markMat.uniforms.uTex.value,
-                            atkMark: MARK_ATK_ON, cells: MARK_N,
+                            atkMark: MARK_ATK_ON, exMark: MARK_ALERT_ON,
+                            cells: MARK_N, cellOf: MARK_CELL.slice(),
                             ...markCensus() }; },
     // ── ★RPG 데미지 창구 (읽기 전용) ──
     // 「기술·흔들림·레벨이 실제로 붙어 있는가」를 눈이 아니라 수로 본다. taps 는
