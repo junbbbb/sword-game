@@ -200,6 +200,17 @@ const PIP_FADE = 0.25;          // 마지막 0.25초에 걷힌다
 const MARK_SZ = 0.62;
 // 표식 종류(텍스처 아틀라스 칸 번호). 0=! 1=? 2=공격 쐐기
 const MARK_NONE = -1, MARK_EX = 0, MARK_Q = 1, MARK_ATK = 2;
+// ── ★공격 쐐기(머리 위 삼각형) 스위치 (오너 지시 2026-08-13) ──
+// "고블린 머리위에 삼각형 표시뜨는거 없애줘."
+// 9차 A-3 이 넣은 예고 삼종(자세·번득임·머리 쐐기) 중 **머리 쐐기 한 갈래만** 끈다.
+//   · 끄는 것은 시각물 하나뿐이다. 예고 시계(ATK_WIND 0.30 + 타격 0.575 = 0.875초)·
+//     예비 자세·호박 번득임·경직·넉백은 한 줄도 안 건드렸다 = 밸런스 무변경.
+//   · e.wndT 자체도 그대로다. 자세·번득임·공격 취소가 전부 이 시계를 읽는다.
+//   · 인지 표식(! / ?)은 남는다. 은신이 성립하려면 "쟤가 나를 놓쳤다"가 보여야 한다.
+// 되살리려면 이 한 줄을 true 로. 아틀라스 칸 수(MARK_N)·markOf 분기·UV 가 같이 돌아온다.
+const MARK_ATK_ON = false;
+// 아틀라스 칸 수. 쐐기를 끄면 칸을 굽지도 않는다(빈 칸을 남기면 그게 부스러기다).
+const MARK_N = MARK_ATK_ON ? 3 : 2;
 // 상태별 표시 시간
 const MARK_FOUND = 1.4;         // 발견(!) 이 떠 있는 시간
 const MARK_LOST_FADE = 0.9;     // 포기(? 페이드)
@@ -455,6 +466,8 @@ const ATK_HIT_T = (33 - 8) / 30 / ATK_TS;  // 타격까지 0.575초 (= 예고 �
 //   1) 자세: 발을 멈추고 몸을 뒤로 젖히며 살짝 커진다(실루엣이 변한다)
 //   2) 번득임: 구간 끝 45% 에서 호박빛 자체발광이 올라온다(피격 흰빛과 색을 갈랐다)
 //   3) 머리 표식: 붉은 쐐기(아래 MARK_ATK). 겹쳐 있어도 **누구인지**가 읽힌다
+//      ★★이 셋째 갈래는 오너 지시로 꺼졌다(2026-08-13, MARK_ATK_ON = false).
+//        예고 시계는 그대로라 1)·2)가 그 일을 계속 한다 = 시간·판정은 무변경이다.
 // 0.30초인 이유: 단순 시각 반응 0.25초가 하한이고, 0.35 를 넘기면 예고만 보고
 // 걸어서 빠져나갈 수 있어 근접이 무해해진다. 총 예고 = 0.30 + 0.575 = 0.875초.
 const ATK_WIND = 0.30;
@@ -1414,13 +1427,13 @@ export function createEnemySystem(opts) {
   //   맵의 정보가 새지 않는다(표식은 이미 나를 아는 놈에게만 붙는다).
   // -------------------------------------------------------------------------
   // 표식 글자는 파일로 안 만든다. 캔버스에 구우면 404·CSP·경로 문제가 통째로 없다.
-  // 아틀라스 = 128px 칸 3개: [0] ! · [1] ? · [2] 공격 쐐기
+  // 아틀라스 = 128px 칸 MARK_N 개: [0] ! · [1] ? · [2] 공격 쐐기(MARK_ATK_ON 일 때만)
   function makeMarkTexture() {
     const S = 128;
     const cv = document.createElement('canvas');
-    cv.width = S * 3; cv.height = S;
+    cv.width = S * MARK_N; cv.height = S;
     const g = cv.getContext('2d');
-    g.clearRect(0, 0, S * 3, S);
+    g.clearRect(0, 0, S * MARK_N, S);
     g.textAlign = 'center'; g.textBaseline = 'middle';
     // ★획이 굵어야 34m 에서 남는다. 먹 테두리(18px)를 두르고 속을 종이색으로 채운다.
     //   테두리가 없으면 밝은 흙바닥 위에서 글자가 통째로 사라진다.
@@ -1436,11 +1449,14 @@ export function createEnemySystem(opts) {
     glyph('!', 0);
     glyph('?', 1);
     // 공격 쐐기. 아래(= 그 놈 머리)를 가리키는 삼각형이라 "이놈이 친다"가 읽힌다.
-    const cx = S * 2 + S / 2;
-    g.beginPath();
-    g.moveTo(cx - 40, 30); g.lineTo(cx + 40, 30); g.lineTo(cx, 104); g.closePath();
-    g.strokeStyle = 'rgba(8,7,10,0.96)'; g.lineWidth = 20; g.stroke();
-    g.fillStyle = '#f6f0e2'; g.fill();
+    // ★오너 지시로 꺼져 있다(MARK_ATK_ON). 칸 자체를 안 굽는다.
+    if (MARK_ATK_ON) {
+      const cx = S * 2 + S / 2;
+      g.beginPath();
+      g.moveTo(cx - 40, 30); g.lineTo(cx + 40, 30); g.lineTo(cx, 104); g.closePath();
+      g.strokeStyle = 'rgba(8,7,10,0.96)'; g.lineWidth = 20; g.stroke();
+      g.fillStyle = '#f6f0e2'; g.fill();
+    }
     const t = new THREE.CanvasTexture(cv);
     t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
@@ -1772,18 +1788,21 @@ export function createEnemySystem(opts) {
   const GLYPH_OF_CELL = (69 + DIG_W[0].ol) / DIG_CH;
 
   // 표식 색조. 발견은 주홍(경보), 수색·놓침은 종이색(중립), 공격은 진홍(임박).
+  // ★2번(공격 쐐기)은 MARK_ATK_ON = false 라 지금은 아무도 안 읽는다. 되살릴 때 쓰라고 남긴다.
   const MK_TINT = [
     [1.00, 0.44, 0.32],     // 0 = !
     [0.96, 0.93, 0.85],     // 1 = ?
-    [1.00, 0.30, 0.22],     // 2 = 공격 쐐기
+    [1.00, 0.30, 0.22],     // 2 = 공격 쐐기(꺼짐)
   ];
 
   // 이 놈에게 지금 무슨 표식을 붙일까. 우선순위가 곧 "제일 급한 정보"의 순서다.
-  //   ① 공격 예고(쐐기)  ② 수색(?)  ③ 쫓는 중인데 못 봄(? 깜빡)
+  //   ① 공격 예고(쐐기 — ★MARK_ATK_ON 으로 꺼짐)  ② 수색(?)  ③ 쫓는 중인데 못 봄(? 깜빡)
   //   ④ 방금 발견(! 팝)  ⑤ 포기(? 페이드)
+  // ★쐐기가 꺼져 있으면 이 분기 자체를 안 탄다 = 예고 중인 놈은 판을 한 장도 안 쓴다
+  //   (알파 0 으로 그리는 게 아니라 아예 안 담는다).
   const _mk = { slot: 0, a: 0, sc: 1 };
   function markOf(e) {
-    if (e.wndT > 0) {
+    if (MARK_ATK_ON && e.wndT > 0) {
       _mk.slot = MARK_ATK; _mk.a = 1;
       _mk.sc = 1.0 + 0.30 * (1 - e.wndT / ATK_WIND);
       return _mk;
@@ -1832,6 +1851,20 @@ export function createEnemySystem(opts) {
     }
   }
 
+  // ★쐐기 제거의 증거 창구(진단 전용, 매 프레임 경로 아님).
+  //   winding = 지금 예비 자세를 잡고 있는 놈 수 · slots = 지금 붙어 있는 표식 칸 번호들
+  //   "winding 이 0 을 넘는데 slots 에 2 가 한 번도 안 뜬다" = 예고는 도는데 삼각형은 없다.
+  function markCensus() {
+    let winding = 0; const slots = [];
+    for (let i = 0; i < live.length; i++) {
+      const e = live[i];
+      if (e.wndT > 0) winding++;
+      const m = markOf(e);
+      if (m && m.a > 0.01) slots.push(m.slot);
+    }
+    return { winding, slots };
+  }
+
   // 이 거리 밖의 놈은 판을 안 그린다. 34m 카메라에서 화면 대각이 대략 이만큼이다.
   const PLATE_MAX_D = 28;
   let plateCount = { pip: 0, mark: 0 };
@@ -1877,7 +1910,7 @@ export function createEnemySystem(opts) {
         // ★머리에 더 붙인다. 처음엔 발밑에서 1.99m 였는데 실사에서 "누구 것인지"가
         //   한 박자 늦게 읽혔다(고블린 키가 1.30m 라 머리 위 0.69m 는 몸 하나 반이다).
         putPlate(mPos, mUv, o, e.pos.x, headY + MARK_SZ * 0.50 + PIP_H * 1.5, e.pos.z,
-          hw, hw, mk.slot / 3, (mk.slot + 1) / 3);
+          hw, hw, mk.slot / MARK_N, (mk.slot + 1) / MARK_N);
         const c = MK_TINT[mk.slot];
         for (let k = 0; k < 4; k++) {
           mkA[o + k] = mk.a;
@@ -3440,8 +3473,12 @@ export function createEnemySystem(opts) {
     //   이 배열이 곧 "왜 숫자가 올라갔나"의 전부다. onScreen=false 면 화면 밖 처치다.
     get killLog() { return killLog.slice(); },
     // 머리 위 판이 실제로 몇 장 서 있나(눈 없이 회귀를 잡는 창구)
+    // ★atkMark/cells/winding/slots 은 쐐기 제거의 증거다. winding > 0 인데 slots 에 2 가
+    //   한 번도 안 들어오면 "예고는 도는데 삼각형은 없다"가 코드로 증명된다.
     get plates() { return { pip: plateCount.pip, mark: plateCount.mark,
-                            tex: !!markMat.uniforms.uTex.value }; },
+                            tex: !!markMat.uniforms.uTex.value,
+                            atkMark: MARK_ATK_ON, cells: MARK_N,
+                            ...markCensus() }; },
     // ── ★숫자 아틀라스 실측 창구 (읽기 전용) ──
     // 겹의 두께를 눈이 아니라 픽셀로 잰다. d 칸의 세로 v 자리 가로줄을 훑어
     // 마스크 채널이 이어지는 길이를 돌려준다:
