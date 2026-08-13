@@ -165,10 +165,7 @@ const DIS_H = 0.55;
 // ── 처치 순간 먹 파열 (v84 QA S9) ──
 // 한 마리에 8조각. 상한 40이면 3연타로 네 마리를 같이 베어도(32) 안 밀린다.
 const INK_MAX = 40;
-// ★8 -> 13 (17차 처치 팝). 여덟 점은 34m 쿼터뷰에서 한 뭉치로 뭉쳐 "터졌다"가 아니라
-//   "얼룩이 하나 생겼다"로 읽혔다. 상한(INK_MAX 40)이 세 번의 처치를 담으므로 13이면
-//   연속 처치에서도 앞선 것이 안 밀린다. 색·수명·크기는 그대로다(생존 중 먹 튀김과 같은 집안).
-const INK_PER_KILL = 13;
+const INK_PER_KILL = 8;
 const INK_TTL = 0.46;
 // 고블린 오브젝트(뼈+믹서) 상한. 살아 있는 놈 + 시체가 각각 하나씩 들고 있다.
 const MAX_VIS = MAX_ENEMIES + MAX_CORPSES;
@@ -188,10 +185,7 @@ const MAX_VIS = MAX_ENEMIES + MAX_CORPSES;
 const PIP_W = 0.22;             // 칸 하나 폭(m)
 // ★0.105 -> 0.145. 첫 실사 스크린샷에서 칸 높이가 7px 이라 속(찬 칸/빈 칸)을 나누는
 //   띠가 3px 밖에 안 나왔다 = 찼는지 비었는지 구별이 안 됐다. 9px 이면 속이 5px 다.
-// ★0.145 -> 0.175 (17차 UI 통일). 카드 문법은 **1px 헤어라인**이 형태를 정의하는데,
-//   9px 짜리 바에서 위아래 헤어라인 2px 을 빼면 속이 7px 이라 그러데이션이 안 선다.
-//   11px 이면 속이 9px 이라 채움이 띠로 읽힌다.
-const PIP_H = 0.175;            // 칸 높이(m)
+const PIP_H = 0.145;            // 칸 높이(m)
 // 피격 뒤 이만큼만 떠 있는다. 상시로 두면 40개 바가 화면을 덮어 롤 HUD 가 아니라
 // MMO 가 된다. "때린 놈만 잠깐"이 이 게임의 밀도에 맞는다.
 const PIP_SHOW = 1.2;
@@ -219,30 +213,9 @@ const MARK_LOST_FADE = 0.9;     // 포기(? 페이드)
 //   대상 평면의 화면 높이 = 2 * 24 * tan(12도) = 10.20m → 720px 화면에서 **1m = 70.6px**
 //   칸 높이 0.62m = 44px, 그 안의 글자 획이 대략 0.49m = **35px**
 //   → 지시서의 "게임 거리에서 28~40px" 대역 한가운데다. 처치타는 1.35배(=47px).
-// ── ★크기 재조정 (17차. 이펙트 비평가) ──
-// 지적 그대로: "데미지 숫자 100 이 참격보다 크다 — 고블린 머리의 3배, 그게 동시에 넷."
-// 자를 대고 확인했다. 고블린 전체 키 GOB_H = 1.30m 이고 머리는 그중 대략 0.30m 다.
-//   옛 값 0.62m = 머리의 2.07배, 처치타는 x1.35 = 0.84m = **머리의 2.8배**.
-//   세 자리("100")가 가로로 늘어서면 몸통보다 넓은 판이 되어 참격 획을 덮는다.
-// 새 계약: **명중 = 머리 1.13배 · 처치 = 머리 1.47배**(오너 지시 "1~1.5배 수준").
-//   0.34m = 머리의 1.13배. 720px 화면(1m = 70.6px)에서 칸 24px · 글자 획 약 19px.
-//   지시서의 옛 대역(28~40px)보다 작지만 그 대역은 "숫자가 주인공"이던 시절 값이고,
-//   지금 계약은 **참격이 주인공**이다.
-// ★수치 체계(전부 100)는 오너 판정 대기 중이라 한 글자도 안 건드렸다. 크기만이다.
-const DMG_H = 0.34;             // 숫자 한 칸의 세로 크기(m). 이 한 숫자가 크기 손잡이다
-const DMG_KILL_SC = 1.30;       // 처치타는 더 크다(메이플 크리티컬 문법). 0.442m = 머리 1.47배
-// ★0.30 -> 0.46 (17차). 이펙트·UI 비평이 같이 지적한 "숫자가 참격 리본을 덮는다".
-//   숫자는 벤 자리에 떠야 한다는 계약(아래 spawnDmgPop 주석)은 그대로 두고, 칼날이
-//   지나간 평면에서 16cm(화면 10px)만 위로 뺀다. 자리의 뜻은 안 바뀌고 리본만 비운다.
-const DMG_ANCHOR_Y = 0.46;      // 명중 지점보다 이만큼 위에서 시작한다
-// ── ★뜨는 시각을 한 박자 늦춘다 (17차) ──
-// 같은 지적의 나머지 절반은 **타이밍**이다. 여태 숫자는 칼이 닿은 그 프레임에 떠서
-// 참격 획(feel.js SW_N = 4/24 = 0.167초)의 첫 프레임부터 위에 얹혔다.
-// ★이 시계는 게임시간이다. 즉 히트스톱(70~112ms) 동안에는 **거의 안 흐른다.**
-//   그래서 이 한 줄이 "멈춘 임팩트 프레임에는 숫자가 없다"를 만든다 —
-//   정지 화면에는 벤 자세와 획만 남고, 시간이 풀리면서 숫자가 튀어오른다.
-//   벽시계로는 타격 후 약 140~180ms 다(정지 + 이 지연).
-const DMG_DELAY = 0.07;
+const DMG_H = 0.62;             // 숫자 한 칸의 세로 크기(m). 이 한 숫자가 크기 손잡이다
+const DMG_KILL_SC = 1.35;       // 처치타는 더 크다(메이플 크리티컬 문법)
+const DMG_ANCHOR_Y = 0.30;      // 명중 지점보다 이만큼 위에서 시작한다
 // 모션 세 마디. 톡 튀어오르고(0.10) · 잠깐 서고(0.30) · 흐려지며 오른다(0.30).
 const DMG_RISE = 0.10, DMG_HOLD = 0.30, DMG_FADE = 0.30;
 const DMG_TTL = DMG_RISE + DMG_HOLD + DMG_FADE;
@@ -251,10 +224,7 @@ const DMG_UP2 = 0.55;           // 흐려지며 더 오르는 높이(m)
 const DMG_MAX_POP = 20;         // 동시에 떠 있는 숫자 뭉치 상한
 const DMG_MAX_DIGITS = 5;       // 한 뭉치 최대 자릿수(99999)
 // 이 반경 안에 이미 떠 있는 뭉치 수만큼 옆·위로 비킨다(다중 명중 겹침 방지)
-// ★1.6 -> 2.2 (17차). 광역타로 넷을 한 번에 베면 네 뭉치가 서로 1.6~2.1m 떨어진 자리에
-//   떠서 **서로를 이웃으로 안 세고** 넷 다 ox=0 에 겹쳐 섰다(비평가 "동시 4개").
-//   무리 하나가 서는 폭이 대략 2m 라 반경을 그 위로 올려야 같은 사건으로 묶인다.
-const DMG_NEAR = 2.2;
+const DMG_NEAR = 1.6;
 // ── ★화면에 띄우는 수는 무엇인가 ──
 // 이 게임의 잡몹 체력 단위는 **핍**이다(maxHp 1~3, 한 대에 1). 화면에 "1"을 띄우면
 // 큰 글자의 값어치가 없으므로 100 배 해서 띄운다. 이건 각색이 아니라 **단위 환산**이다
@@ -467,14 +437,7 @@ const ATK_WIND = 0.30;
 //   · 클립 재생속도를 STUN_TS 로 눌러 "맞은 자세로 멎었다"를 만든다
 // 0.13초인 이유: 3연타 사이 간격이 0.28초라 그보다 짧아야 다음 타가 새 반응을
 // 만들 수 있고, 0.10 아래면 60fps 에서 8프레임도 안 돼서 눈에 안 남는다.
-// ★0.13 -> 0.18 (17차). 실측으로 왜 "반응이 안 보인다"고 읽혔는지 갈랐다:
-//   ① 잡몹 60% 가 1체력이라(maxHp = leader?3:(hash<0.4?2:1)) **이 경로 자체를 안 탄다.**
-//      한 대에 죽으면 경직도 넉백도 없고 곧장 시체다 = 신규유저의 "벤다가 아니라 지운다".
-//      체력 분포는 밸런스라 안 건드린다(오너 판정 영역). 대신 **탈 때 확실히 보이게** 한다.
-//   ② FLASH_R/G/B = 0(오너 지시)이라 색 신호가 통째로 없다. 그러니 남은 신호는
-//      경직·넉백·스쿼시 셋뿐인데 그게 다 60~130ms 라 히트스톱(55ms)에 거의 다 먹혔다.
-//   0.18 은 3연타 간격(0.28초)보다 여전히 짧아서 다음 타가 새 반응을 만든다.
-const HIT_STUN = 0.18;
+const HIT_STUN = 0.13;
 const STUN_TS = 0.08;           // 경직 중 클립 재생속도(0 이면 완전 정지라 뻣뻣하다)
 // 피격 번쩍임 색. ★흰색 전체 가산 금지 - 실루엣이 통째로 지워져 "형태 파괴"가 된다
 //   (건틀릿 캐릭터 심사관이 보스의 전신 플랫 주황을 같은 이유로 지적했다).
@@ -912,20 +875,8 @@ const _sc = new THREE.Vector3();
 // 벽 충돌 결과를 받는 그릇. level.js 도 자기 것을 재사용하지만, 여기서 우리 것을
 // 넘겨야 한 프레임 안에서 여러 번 불러도 값이 서로 안 덮인다.
 const _mv = { x: 0, z: 0, hit: false };
-// 경직 반동 시간. ★60 -> 100ms (17차). 60ms 는 60fps 에서 3.6프레임인데, 그 3.6프레임이
-// 통째로 히트스톱(55~112ms) 안에 들어가 **멈춘 화면에 눌린 자세 한 장**으로만 남았다.
-// 정지가 풀린 뒤에도 반동이 남아 있어야 "눌렸다가 돌아온다"가 움직임으로 읽힌다.
-// 0.10 위로는 "고무"라는 옛 판정이 맞다(스쿼시가 클립보다 오래 살면 몸이 젤리가 된다).
-const SQUASH_T = 0.10;
-// ── ★처치 팝 (17차) ──
-// 신규유저 지적: "적이 한 방에 사라져 저항감 0 — 벤다가 아니라 지운다."
-// 실측으로 보면 정확한 지적이었다. 안 죽은 놈은 밀리고(0.43m) 눌리는데, **죽은 놈은
-// 그 자리에 서서 쓰러지기만** 했다(updateCorpses 가 c.pos 를 한 번도 안 옮겼다).
-// 처치가 피격보다 반응이 약하니 "지웠다"로 읽힐 수밖에 없다. 세 가지를 붙인다.
-const CORPSE_KB = 5.7;          // 시체가 밀려나는 속도(m/s). k^2 로 흘러 총 0.42m
-const CORPSE_KB_T = 0.22;       // 밀리는 시간(초)
-const CORPSE_POP = 0.14;        // 처치 순간 부푸는 비율(+14%)
-const CORPSE_POP_T = 0.12;      // 부풀었다 앉는 시간(초). 히트스톱 112ms 와 겹친다
+// 경직 반동 시간. 60ms. 이보다 길면 "맞았다"가 아니라 "고무"가 된다.
+const SQUASH_T = 0.06;
 const _lean = new THREE.Vector3(1, 0, 0);
 // 요괴 몸통 반경(scale 1 기준). 몸이 0.42 라 0.34 면 벽에 살짝 겹치는 자리에서 멈춘다.
 // 34m 카메라에서 몇 센티 겹치는 건 안 읽히고, 크게 잡으면 무리가 문에 낀다.
@@ -1186,8 +1137,6 @@ export function createEnemySystem(opts) {
       fallAxis: new THREE.Vector3(1, 0, 0),
       pos: new THREE.Vector3(), yaw: 0, size: 1,
       life: 0, ttl: 1.55,
-      // ★처치 팝 (17차). kick = 밀려나는 방향(단위). 시체가 그쪽으로 미끄러진다.
-      kick: new THREE.Vector3(),
     });
   }
   let corpseRing = 0;
@@ -1610,57 +1559,21 @@ export function createEnemySystem(opts) {
       varying vec2 vU; varying float vN; varying float vHp; varying float vA;
       void main(){ vU = uv; vN = aN; vHp = aHp; vA = aA;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    // ── ★카드 문법으로 갈아 끼움 (17차. 17-UI마감 제안) ──
-    // 여태 이 바 하나만 게임에서 **다른 언어**였다: 먹 테두리 + 종이색 칸.
-    // 그 사이 계기판·스킬칩·플레이어 머리 위 바(#uiHpFloat)가 전부 한 벌로 통일됐다
-    //   딥 네이비 트랙 + 1px 창백한 헤어라인 + 컷코너 + 세로 그러데이션 채움.
-    // 블라인드 비평도 같은 자리를 짚었다: "회색 돌바닥 위에서 회색 사각이라 안 보인다."
-    // 그 값을 그대로 옮긴다(ui.js #uiHpFloat .track / HP_INK).
-    //   · 트랙   rgba(2,5,11,.92)              -> 딥 네이비
-    //   · 헤어라인 inset 0 0 0 1px rgba(214,240,255,.72)
-    //   · 컷코너  --c: 3px (판 높이의 약 0.30)
-    //   · 채움   HP_INK 초록 #2ee08a~#7ff0c0. 여기서는 가로가 아니라 **세로** 그러데이션
-    //            (가로는 칸 경계와 싸운다)
-    //   · 처치 직전(남은 칸 1) 한 칸은 붉게 — HP_INK 의 25% 이하 색 #e04a2e
-    // ★색은 전부 **선형 HDR**이다(FLASH_R 선언부의 파이프라인 주석 참조. ACES 무릎 +
-    //   블룸 임계 1.02). 그래서 sRGB 표기를 그대로 못 넣는다 - ACES 를 되짚어 넣은 값이다.
-    //   0.95 가 상한선이다. 그 위로 올리면 바가 블룸으로 번져 실루엣 밖까지 샌다.
     fragmentShader: `
       varying vec2 vU; varying float vN; varying float vHp; varying float vA;
       void main(){
         // ★!(a > x) 꼴. a <= x 로 쓰면 NaN 이 통과해서 블룸이 화면을 검게 만든다
         //   (LOG.md 의 '검은 번쩍' 함정. 알파 문턱은 전부 이 꼴로 쓴다).
         if (!(vA > 0.01)) discard;
-        // 판을 **세로 높이 1** 로 정규화한 좌표로 옮긴다. 헤어라인 두께·컷코너를
-        // 가로세로 같은 크기로 그리려면 이 환산이 있어야 한다(칸 수마다 판 폭이 다르다).
-        float ar = max(0.001, vN * ${PIP_W.toFixed(3)} / ${PIP_H.toFixed(3)});
-        float U = vU.x * ar, V = vU.y;
-        // 가장자리까지의 거리(높이 단위). 네 모서리는 45도로 잘린다 = 컷코너.
-        float CUT = 0.25;                           // --c: 3px / 12px 와 같은 비율
-        float d = min(min(U, ar - U), min(V, 1.0 - V));
-        d = min(d, (U + V - CUT) * 0.70710678);
-        d = min(d, (ar - U + V - CUT) * 0.70710678);
-        d = min(d, (U + 1.0 - V - CUT) * 0.70710678);
-        d = min(d, (ar - U + 1.0 - V - CUT) * 0.70710678);
-        if (d < 0.0) discard;                       // 잘려 나간 모서리
-        float HAIR = 0.115;                         // 1px (판 높이 11px 기준)
-        vec3 hair  = vec3(0.55, 0.72, 0.92);        // 창백한 청백. 형태를 정의하는 선
-        vec3 track = vec3(0.022, 0.032, 0.058);     // 딥 네이비
-        if (d < HAIR) { gl_FragColor = vec4(hair, vA); return; }
-        // ── 속 ──
         float x = vU.x * vN;
         float cell = floor(x);
         float fx = fract(x);
-        bool has = cell < vHp - 0.5;
-        // 칸 사이 홈. 트랙 하나 안에 칸이 나뉜 그림이라 홈은 **트랙 색**이다.
-        bool gap = (vN > 1.5) && (fx < 0.10 || fx > 0.90);
-        if (!has || gap) { gl_FragColor = vec4(track, vA); return; }
-        // 세로 그러데이션. 위가 밝고 아래가 어둡다(유리에 담긴 액체의 문법).
-        // ★남은 칸이 하나면 = 다음 한 대에 죽는다. 그 칸만 붉게(오너 언어: 처치 직전).
-        float g = clamp((V - 0.16) / 0.68, 0.0, 1.0);
-        vec3 lo = (vHp < 1.5) ? vec3(0.34, 0.05, 0.03) : vec3(0.03, 0.30, 0.14);
-        vec3 hi = (vHp < 1.5) ? vec3(0.95, 0.22, 0.13) : vec3(0.16, 0.90, 0.46);
-        gl_FragColor = vec4(mix(lo, hi, g), vA);
+        if (fx < 0.09 || fx > 0.91) discard;          // 칸 사이 여백
+        // 먹 테두리 안에 속을 채운다. 찬 칸 = 종이색 / 빈 칸 = 옅은 먹
+        float inner = (fx > 0.21 && fx < 0.79 && vU.y > 0.22 && vU.y < 0.78) ? 1.0 : 0.0;
+        vec3 ink = vec3(0.050, 0.042, 0.052);
+        vec3 fill = cell < vHp - 0.5 ? vec3(0.94, 0.90, 0.80) : vec3(0.20, 0.17, 0.19);
+        gl_FragColor = vec4(mix(ink, fill, inner), vA);
       }`,
   });
   const pipMesh = plateMesh(MAX_ENEMIES, pipMat,
@@ -1946,17 +1859,12 @@ export function createEnemySystem(opts) {
       if (dx * dx + dy * dy + dz * dz < R2) near++;
     }
     const p = dmgPops[slot];
-    // ★t 가 음수로 시작한다 = 아직 안 뜬 상태(위 DMG_DELAY). 0 을 넘는 순간 튀어오른다.
-    p.on = true; p.t = -DMG_DELAY;
+    p.on = true; p.t = 0;
     p.x = x; p.y = y; p.z = z;
     p.kill = !!kill;
     p.sc = kill ? DMG_KILL_SC : 1;
-    // ★비키는 폭 (17차). 글자가 0.62 -> 0.34m 로 작아졌으니 옆으로 비키는 거리도 같이
-    //   줄여야 "흩어진 네 뭉치"가 아니라 "한 사건의 네 숫자"로 읽힌다. 다만 세로는
-    //   반대로 **키운다** — 가로로만 벌리면 세 자리씩 넷이 화면을 가로지른다.
-    //   가로 0.30/0.24 -> 0.24/0.19 · 세로 0.13 -> 0.20.
-    p.ox = near === 0 ? 0 : ((near & 1) ? 1 : -1) * (0.24 + 0.19 * ((near - 1) >> 1));
-    p.oy = 0.20 * near;
+    p.ox = near === 0 ? 0 : ((near & 1) ? 1 : -1) * (0.30 + 0.24 * ((near - 1) >> 1));
+    p.oy = 0.13 * near;
     // ★자리별 세로 지터의 씨앗. 띄운 순번 + 값이라 뭉치마다 다르고, 같은 뭉치는
     //   사는 동안 안 바뀐다. Math.random 을 쓰면 프레임마다 다시 뽑혀 글자가 떤다.
     p.seed = (dmgSpawned * 7 + v) % 9973;
@@ -1979,9 +1887,7 @@ export function createEnemySystem(opts) {
       if (!p.on) continue;
       p.t += dt;
       // ★!(t < TTL) 꼴. NaN 이 끼면 여기서 즉시 거둬진다(영원히 떠 있는 판이 없다).
-      //   ★음수 t(지연 대기)는 NaN 이 아니므로 이 문턱을 통과한다 - 의도한 대로다.
       if (!(p.t < DMG_TTL)) { p.on = false; continue; }
-      if (p.t < 0) continue;                       // 아직 뜰 시각이 아니다(안 센다)
       alive++;
     }
     if (!camera || !dmgMat.uniforms.uTex.value || alive === 0) {
@@ -1995,7 +1901,7 @@ export function createEnemySystem(opts) {
     let dn = 0;
     for (let i = 0; i < DMG_MAX_POP; i++) {
       const p = dmgPops[i];
-      if (!p.on || p.t < 0) continue;              // 지연 대기 중인 뭉치는 안 그린다
+      if (!p.on) continue;
       const ddx = p.x - cx0, ddz = p.z - cz0;
       if (ddx * ddx + ddz * ddz > PLATE_MAX_D * PLATE_MAX_D) continue;
       // ── 모션 세 마디 ──
@@ -2417,11 +2323,6 @@ export function createEnemySystem(opts) {
     // 쓰러지는 축 = 밀려나는 방향에 수직인 수평축. 칼이 지나간 쪽으로 넘어간다.
     if (Math.abs(kickX) + Math.abs(kickZ) < 1e-4) c.fallAxis.set(1, 0, 0);
     else c.fallAxis.set(-kickZ, 0, kickX).normalize();
-    // ★밀려나는 방향도 따로 남긴다(17차). 여태 시체는 **그 자리에 서서** 쓰러지기만
-    //   했다 — 살아 있는 놈은 0.59m 밀리는데 죽은 놈은 안 밀리니, 처치가 피격보다
-    //   반응이 약한 이상한 그림이었다(신규유저: "한 방에 사라져 저항감 0").
-    c.kick.set(kickX, 0, kickZ);
-    if (c.kick.lengthSq() > 1e-8) c.kick.normalize(); else c.kick.set(0, 0, 0);
     // 뼈를 공유하는 두 번째 메시를 붙인다. 지오메트리·스켈레톤 공유라 새로 세우는 건
     // Mesh 껍데기 하나뿐이다(뼈 계산은 원본 것 한 번만 돈다).
     if (!c.twin) {
@@ -2473,23 +2374,7 @@ export function createEnemySystem(opts) {
       _q1.setFromEuler(_e1.set(0, c.yaw, 0, 'YXZ'));
       _q2.setFromAxisAngle(c.fallAxis, u * u * 1.45);
       grp.quaternion.copy(_q2).multiply(_q1);
-      // ── ★처치 팝 한 박자 (17차) ──
-      // 세 가지가 같은 0.2초 안에 겹친다: **밀린다 · 부푼다 · 먹이 튄다**(먹은 spawnCorpse).
-      //   밀림 : kick 방향으로 CORPSE_KB(m/s)를 k^2 로 흘린다. 총 CORPSE_KB x 0.22/3 = 0.42m.
-      //          살아 있는 놈의 넉백(0.59m)보다 조금 작다 — 죽은 몸이 더 멀리 날면 가볍다.
-      //          ★벽 통과는 LV.slide 를 지난다(살아 있는 놈의 넉백과 같은 규칙).
-      //   부풂 : 첫 0.12초 동안 +14% 로 부풀었다 앉는다. 히트스톱(112ms)에 걸쳐 있어서
-      //          **멈춘 화면에 부푼 실루엣 한 장**이 서고, 풀리면서 원래대로 돌아온다.
-      const kb = Math.max(0, 1 - c.life / CORPSE_KB_T);
-      if (kb > 0 && c.kick.lengthSq() > 1e-8) {
-        const kk = kb * kb * CORPSE_KB * dt;
-        const st = LV.slide(c.pos.x, c.pos.z, c.kick.x * kk, c.kick.z * kk, ENEMY_R * c.size);
-        c.pos.x = st.x; c.pos.z = st.z;
-      }
       grp.position.set(c.pos.x, c.pos.y - u * 0.12 * c.size, c.pos.z);
-      const popK = Math.max(0, 1 - c.life / CORPSE_POP_T);
-      const popS = 1 + CORPSE_POP * Math.sin(popK * Math.PI * 0.85);
-      grp.scale.setScalar(K_H * c.size * popS);
       grp.updateMatrixWorld(true);
       const sep = Math.min(1, c.life / 0.30) * 0.22 * c.size;
       // ★알파 페이드는 **꼬리 0.20초만** 남긴다. 소멸의 주역은 아래 uDis(먹 흩어짐)다.
@@ -2605,17 +2490,9 @@ export function createEnemySystem(opts) {
           despawn(i);
         } else {
           // 안 죽었으면 살짝 뒤로 밀린다. 이게 없으면 때린 느낌이 안 난다.
-          // ── ★밀림 실측 (17차) ──
-          // 옛 값 4.2 · 0.13초. 감쇠가 pow(0.02, dt) 라 시간상수가 0.256초이므로
-          //   실제 이동거리 = 4.2 x (1 - e^(-3.912 x 0.13)) / 3.912 = **0.43m**.
-          //   24m 카메라에서 27px. 있긴 있는데 0.13초 안에 끝나고 그 0.13초가
-          //   히트스톱과 겹쳐서 "밀렸다"가 화면에 남는 구간이 사실상 없었다.
-          // 새 값 5.2 · 0.15초 -> 5.2 x (1 - e^(-0.5868)) / 3.912 = **0.59m (37px)**.
-          //   히트스톱이 풀린 뒤에도 반 이상 남아 있어서 밀리는 장면이 실제로 보인다.
-          //   그 이상(0.7m+)은 작은 고블린이 날아가는 그림이 돼서 무게가 사라진다.
-          e.kb.set(kx, 0, kz).multiplyScalar(5.2);
-          e.kbT = 0.15;
-          // 경직 반동. 100ms 동안 납작해졌다가 돌아온다(y 0.85 / x 1.12).
+          e.kb.set(kx, 0, kz).multiplyScalar(4.2);
+          e.kbT = 0.13;
+          // 경직 반동. 60ms 동안 납작해졌다가 돌아온다(y 0.85 / x 1.12).
           // ★클립이 아니라 **루트 오브젝트 스케일**로 한다. glb 안의 스케일을 안
           //   건드리므로 "glb 스케일 오염" 함정과 무관하고, 클립 없는 개체에도 먹는다.
           e.sqT = SQUASH_T;
@@ -3290,17 +3167,12 @@ export function createEnemySystem(opts) {
         e.sqT -= dt;
         const q = Math.max(0, e.sqT / SQUASH_T);          // 1 -> 0
         const k = Math.sin(q * Math.PI * 0.85);           // 붙었다 풀린다
-        // ★반동 깊이 (17차). 0.12/0.15 -> 0.17/0.21. 34m 쿼터뷰에서 고블린 실루엣 세로가
-        //   80px 남짓이라 15% 는 12px 이고, 그게 100ms 안에 들어갔다 나온다 = 거의 안 보인다.
-        //   21% 면 17px 이라 눌린 프레임이 실루엣으로 읽힌다. 몸집(base)에 곱해지므로
-        //   큰 놈일수록 크게 눌린다(무게 차이가 저절로 난다).
-        v.grp.scale.set(base * (1 + 0.17 * k), base * (1 - 0.21 * k), base * (1 + 0.17 * k));
-        // 젖힘: 밀려나는 방향(kb)으로 상체가 넘어간다. ★0.22 -> 0.32rad(약 18도).
-        //   실루엣이 기우는 건 스케일보다 훨씬 멀리서도 읽힌다.
+        v.grp.scale.set(base * (1 + 0.12 * k), base * (1 - 0.15 * k), base * (1 + 0.12 * k));
+        // 젖힘: 밀려나는 방향(kb)으로 상체가 넘어간다. 최대 0.22rad.
         const kl = Math.hypot(e.kb.x, e.kb.z);
         if (kl > 1e-4) {
           v.grp.rotation.set(0, e.yaw, 0);
-          v.grp.rotateOnWorldAxis(_lean.set(-e.kb.z / kl, 0, e.kb.x / kl), 0.32 * k);
+          v.grp.rotateOnWorldAxis(_lean.set(-e.kb.z / kl, 0, e.kb.x / kl), 0.22 * k);
         }
       } else if (wu > 0) {
         // 세로 +11% / 가로 -5% 로 "치켜든다". 그리고 뒤로 0.16rad 젖힌다.
@@ -3499,22 +3371,15 @@ export function createEnemySystem(opts) {
     // ── 데미지 숫자 창구 ──
     // 950프레임 안정성 판정이 이걸 본다. bad 는 NaN·음수라 **버린** 요청 수다(0 이어야 한다).
     // nan 은 지금 떠 있는 뭉치 중 좌표·나이가 깨진 것(정의상 늘 0 이어야 한다).
-    // ★17차: 나이 하한이 0 이 아니라 -DMG_DELAY 다. 숫자가 참격 획을 덮지 않게 한 박자
-    //   늦춰 띄우면서 **뜨기 전 구간의 t 가 음수**가 됐기 때문이다(위 DMG_DELAY 주석).
-    //   여기를 안 고치면 950 안정성 판정이 정상 대기 중인 뭉치를 nan 으로 센다
-    //   (실제로 nan 2 가 나왔다 — 코드가 아니라 자가 틀린 경우였다).
-    //   waiting 을 따로 내줘서 "그래서 몇 개가 대기 중인가"를 눈으로 볼 수 있게 둔다.
     get dmg() {
-      let alive = 0, nan = 0, digits = 0, maxT = 0, waiting = 0;
+      let alive = 0, nan = 0, digits = 0, maxT = 0;
       for (const p of dmgPops) {
         if (!p.on) continue;
         alive++; digits += p.n;
-        if (p.t < 0) waiting++;
-        if (!(isFinite(p.x) && isFinite(p.y) && isFinite(p.z)
-              && p.t >= -DMG_DELAY - 1e-3)) nan++;
+        if (!(isFinite(p.x) && isFinite(p.y) && isFinite(p.z) && p.t >= 0)) nan++;
         if (p.t > maxT) maxT = p.t;
       }
-      return { alive, digits, plates: dmgShown, nan, waiting, delay: DMG_DELAY,
+      return { alive, digits, plates: dmgShown, nan,
                spawned: dmgSpawned, bad: dmgBad,
                maxT: +maxT.toFixed(3), ttl: DMG_TTL,
                h: DMG_H, killSc: DMG_KILL_SC, adv: +digAdv.toFixed(3),

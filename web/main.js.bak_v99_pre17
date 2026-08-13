@@ -334,7 +334,6 @@ function resetRun() {
   if (B && B.restart) B.restart();
   attacking = false; heavy = false; atkClip = null; atkStruck = false; atkHitT = -99;
   stepLeft = 0; stepDist = 0;
-  coastLeft = 0; punchLeft = 0; hsLeft = 0;   // ★관성·카메라 펀치·히트스톱도 판을 넘기면 안 된다
   dashLeft = 0; dashGone = 0; dashReadyT = -99; dashIfUntil = -99;
   restoreDashTs();
   vy = 0; grounded = true; jumping = false;
@@ -2402,36 +2401,6 @@ function groundFeet() {
 //   그대로 지나가 **히트스톱 중에 3연타가 씹힌다.** dt 를 멈추는 것과 시계를 멈추는 것을
 //   같이 해야 한다(2026-08-10 히트스톱 도입 때 이것 하나 때문에 설계가 갈렸다).
 let gameT = 0;
-// ---------------------------------------------------------------------------
-// ★히트스톱 한 겹 더 (17차 타격감 팩)
-// ---------------------------------------------------------------------------
-// feel.js 에 이미 히트스톱이 있다(명중 55ms · 처치 105ms, 배율 0.05). 그건 그대로
-// 두고 여기서 **덮는 층**을 하나 더 깐다. 이유 둘:
-//   1) 오너 요구가 "명중 순간 60~80ms" 인데 feel.js 는 이번 판 소유가 아니라 못 고친다.
-//   2) 다타(3연타)는 타마다 짧게 · 처치타는 조금 길게 — 이 배분을 main.js 가 쥐어야
-//      스윙 번호(enemy.swing)를 보고 예산을 나눌 수 있다.
-// ★두 겹은 **안 더해진다.** 아래 tick 에서 min(feel 배율, 이 배율) 로 더 멈춘 쪽만 쓴다.
-//   그래서 최종 정지 길이는 max(feel, 여기) 가 되고 겹쳐도 늘어지지 않는다.
-// ★게임시계(gameT)도 같이 멎으므로 콤보 창·커밋·버퍼가 전부 함께 선다(위 주석의 그 계약).
-const HS_SCALE = 0.04;        // 멈춘 동안의 시간 배율. 0 이 아닌 이유는 feel.js STOP_SCALE 주석과 같다
-const HS_HIT = 0.070;         // 안 죽인 명중. 60~80ms 대역의 한가운데
-const HS_KILL = 0.112;        // 처치. 명중보다 한 박자 길다
-const HS_BUDGET = 0.150;      // 한 스윙에 여러 마리를 베어도 합쳐서 이 이상은 안 멈춘다
-let hsLeft = 0, hsBudget = 0, hsSwing = -1;
-function addHitStop(sec, swing) {
-  if (swing !== undefined && swing !== hsSwing) { hsSwing = swing; hsBudget = 0; }
-  const use = Math.min(sec, Math.max(0, HS_BUDGET - hsBudget));
-  if (use <= 0) return 0;
-  hsBudget += use;
-  if (use > hsLeft) hsLeft = use;     // 겹치면 긴 쪽으로(더하면 3연타가 늘어진다)
-  return use;
-}
-function stepHitStop(rawDt) {
-  if (hsLeft <= 0) return 1;
-  hsLeft -= rawDt;
-  if (hsLeft < 0) hsLeft = 0;
-  return HS_SCALE;
-}
 let attacking = false, attackEnd = 0, comboStep = 0, comboWindow = 0;
 // ── 입력 버퍼 (2026-08-10 9차. 건틀릿 손맛 1위 격차) ──
 // 심사 실측: "200ms 간격으로 Z 를 세 번 눌렀는데 두 번만 나갔다." 원인이 둘이었다.
@@ -2673,11 +2642,6 @@ const SNAP_BACK_DEG = 110;
 //   2.9 는 리치(3.2) 바로 안쪽이라 정말 아슬아슬한 거리에서만 최대 0.30m 붙는다.
 const STEP_MAX = 0.40, STEP_KEEP = 2.90, STEP_DUR = 0.14;
 let stepLeft = 0, stepDist = 0;
-// ── 감속 코스트 (17차) ──
-// 키를 뗀 뒤 남은 속도를 흘려보내는 시간. 0.16초면 반 걸음(약 0.29m) 미끄러지고 선다.
-// 더 길면 조작이 미끄럽다고 읽히고, 0.10 아래면 여전히 스냅으로 보인다.
-const COAST_T = 0.16;
-let coastVX = 0, coastVZ = 0, coastLeft = 0, coastRun = false;
 const stepEase = t => 1 - (1 - t) * (1 - t);   // ease-out. 앞이 빠르고 끝에서 멎는다 = 한 발 내딛는 그림
 function stepDistFor(d) {
   return Math.max(0, Math.min(STEP_MAX, d - STEP_KEEP));
@@ -3195,7 +3159,7 @@ function activateChar(name) {
   for (const k in c.swords) swordMesh[k] = c.swords[k];
   // 상태 초기화(전 캐릭터의 공격/점프가 남으면 새 캐릭터가 굳는다)
   attacking = false; jumping = false; heavy = false;
-  atkClip = null; stepLeft = 0; coastLeft = 0;
+  atkClip = null; stepLeft = 0;
   trailBuf.length = 0; spray.length = 0; _lowHist.length = 0;
   if (Object.keys(c.swords).length) {
     for (const k in GLOW) {
@@ -3796,13 +3760,6 @@ let hurtDirT = 0;
 function hurtFrom(sx, sz) {
   const p = root.position;
   const sa = screenAngle(p.x, p.y + charH * 0.5, p.z, sx - p.x, 0, sz - p.z);
-  // ── ★맞았을 때의 화면 반응 (17차) ──
-  // 신규유저 지적: "맞을 때도 붉은 비네트뿐이라 위협감이 없다." 비네트는 **어디서**
-  // 맞았는지만 말하고 **맞았다**는 말을 안 한다. 그래서 카메라를 때린 놈 반대쪽으로
-  // 한 번 민다 — 몸이 밀리는 넉백(enemy.js PLAYER_KB)과 같은 방향이라 한 사건으로 읽힌다.
-  // ★sa.ang 은 '나 -> 때린 놈' 방향이므로 π 를 더해 반대로. 5.5px 은 처치(4.6)보다
-  //   살짝 크다. 내가 맞는 건 더 큰 사건이어야 한다.
-  camPunchScreen(5.5, sa.ang + Math.PI, 0.26);
   // CSS linear-gradient 의 0deg 는 "아래에서 위로"다. 화면 각(오른쪽 0, 위 +90)에서
   // 90 을 빼면 그대로 맞는다.
   const deg = 90 - sa.ang * 180 / Math.PI;
@@ -3866,104 +3823,12 @@ const fwd = new THREE.Vector3(), rightv = new THREE.Vector3(), move = new THREE.
 const swordA = new THREE.Vector3(), swordB = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
 
-// ---------------------------------------------------------------------------
-// ★카메라 오프셋 레이어 (17차 타격감 팩)
-// ---------------------------------------------------------------------------
-// 카메라의 자리를 **두 층으로 갈랐다.**
-//   camBase        = 이동·추적이 정하는 자리. 여기만 보간한다.
-//   camPunch/흔들림 = 손맛이 그 위에 얹는 오프셋. camBase 를 절대 안 건드린다.
-//
-// ★왜 갈랐나 — 실측으로 잡은 버그다(renders/history/v99_wave17/hitfeel/).
-//   예전 코드는 `camera.position.lerp(want, k)` 로 보간하고 **그 결과에 흔들림을
-//   더했다.** 다음 프레임의 lerp 출발점이 곧 '흔들린 자리'라서, 흔들림이 보간 루프
-//   안으로 새어 들어가 1차 IIR 저역통과(극 0.8)를 탄다. 그 필터가 뭉갠 것이
-//   히트스톱이었다: 세계는 멈췄는데(게임 dt 17ms -> 0.85ms) 카메라만 계속 흘러서
-//   **멈춘 프레임의 화소 차분이 안 멈춘 프레임의 295%** 로 나왔다(배경 띠 0.86 -> 7.9).
-//   비평가의 "히트스톱 0 · 카메라 반응 0.00" 두 지적이 같은 뿌리에서 나온 것이다.
-//
-// ★이 층은 이동 카메라 로직과 **절연**이다. 이동·추적을 고치는 사람은 camBase 만
-//   보면 되고(_camWant 를 어떻게 만들든 자유), 손맛은 camPunch 만 만진다. 둘은
-//   placeCamera 마지막 두 줄에서 합쳐진다.
-const _camWant = new THREE.Vector3();
-const camBase = new THREE.Vector3();      // 오프셋이 안 얹힌 '이동 카메라'의 자리
-let camBaseInit = false;
-// 지금 화면에 걸린 펀치 오프셋(월드 m)과 그 방향·크기·수명.
-const camPunch = new THREE.Vector3();
-const _punchDir = new THREE.Vector3();
-const _pRt = new THREE.Vector3(), _pUp = new THREE.Vector3();
-let punchAmp = 0, punchLeft = 0, punchDur = 0.001;
-// 화면 px 를 카메라 거리 평면의 m 로. fov·dist·캔버스 높이가 다 반영된다.
-function pxToMeters(px) {
-  const h = (cv && (cv.clientHeight || cv.height)) || 640;
-  return px * (2 * Math.tan(camera.fov * Math.PI / 360) * dist) / h;
-}
-// ── 카메라 펀치 ──
-// px = 화면 픽셀 / ang = 화면 각도(screenAngle 이 주는 그 각. 오른쪽 0, 위 +) /
-// dur = 되돌아오는 시간(초).
-// ★귀에 걸리는 흔들림이 아니라 **한 번 밀렸다 앉는 변위**다. 15Hz 로 떠는 흔들림은
-//   차분에서는 크게 잡히지만 눈에는 "잡음"으로 읽히고, 방향이 없어서 "어디를 베었나"를
-//   말해 주지 못한다. 베기 방향으로 한 번 미는 쪽이 같은 진폭에서 훨씬 세게 읽힌다.
-function camPunchScreen(px, ang, dur) {
-  const m = pxToMeters(px);
-  if (!(m > 0)) return;
-  // 진행 중인 펀치보다 약하면 무시(약한 게 강한 걸 덮으면 김이 샌다. feel.shake 와 같은 규칙)
-  const cur = punchLeft > 0 ? punchAmp * (punchLeft / punchDur) : 0;
-  if (m < cur) return;
-  _pRt.setFromMatrixColumn(camera.matrixWorld, 0);
-  _pUp.setFromMatrixColumn(camera.matrixWorld, 1);
-  // screenAngle 은 x 를 aspect 로 늘려서 각을 낸다. 되돌릴 때 그만큼 나눠야 방향이 맞는다.
-  const asp = camera.aspect || 1;
-  _punchDir.copy(_pRt).multiplyScalar(Math.cos(ang) / asp)
-           .addScaledVector(_pUp, Math.sin(ang));
-  if (_punchDir.lengthSq() < 1e-12) return;
-  _punchDir.normalize();
-  punchAmp = m; punchDur = Math.max(0.02, dur); punchLeft = punchDur;
-}
-// ── 흔들림 붙들기 ──
-// ★feel.updateShake(0) 으로는 흔들림이 안 선다. feel.js 의 오프셋 식이 누적 시간이
-//   아니라 **performance.now() 를 직접 읽기** 때문이다(`const t = performance.now()*0.001`).
-//   dt 를 0 으로 줘도 벽시계는 흐르므로 sin 값이 매 프레임 바뀐다 — 실측에서 히트스톱
-//   동안 카메라가 17~23px 씩 계속 떨었다. feel.js 는 이번 판 소유가 아니라 못 고친다.
-//   그래서 **멈추기 직전 프레임의 오프셋을 붙들어** 쓴다. 0 으로 죽이지 않는 이유는
-//   그러면 정지가 시작되는 프레임에 카메라가 흔들림 폭만큼 튀기 때문이다.
-// ── ★흔들림 보정 게인 ──
-// 위 절연(보간 되먹임 제거)에는 부작용이 하나 딸려 온다. 예전에는 흔들림이 보간
-// 루프 안으로 새면서 1차 IIR(극 0.87)을 타서 **화면에 나가는 진폭이 0.62배로 눌려**
-// 있었다. 되먹임을 끊으면 같은 feel.shake(amp) 가 그대로 1.0 배로 나간다 = 오너가
-// 한 번도 승인한 적 없는 세기다(실측: 프레임간 카메라 이동 최대 7px -> 18px).
-// 그래서 옛 화면 세기를 그대로 복원하는 게인을 곱한다. 이 판에서 새로 늘어나는 것은
-// **방향성 펀치 하나뿐**이고, 흔들림은 예전 그림 그대로다("과대 금지", 오너).
-// ★feel.js 의 shake(amp,dur) 값을 바꾸는 게 아니다. 화면에 얹는 자리에서만 곱한다
-//   (feel.js 는 이번 판 소유가 아니다).
-const SHAKE_GAIN = 0.65;
-const _shakeHold = new THREE.Vector3();
-const _shakeOut = new THREE.Vector3();
-let shakeHeld = false;
-function shakeOffsetFrozen(frozen) {
-  if (frozen) {
-    if (!shakeHeld) { _shakeHold.copy(feel.shakeOffset()).multiplyScalar(SHAKE_GAIN); shakeHeld = true; }
-    return _shakeHold;
-  }
-  shakeHeld = false;
-  return _shakeOut.copy(feel.shakeOffset()).multiplyScalar(SHAKE_GAIN);
-}
-// frozen = 히트스톱 중. 멈춘 동안에는 펀치도 **그 자리에 붙들려 있어야** 한다.
-// (여기서 계속 되돌아오면 '멈춘 프레임'이 다시 움직이는 프레임이 된다)
-function updateCamPunch(rawDt, frozen) {
-  if (punchLeft <= 0) { camPunch.set(0, 0, 0); return; }
-  if (!frozen) punchLeft -= rawDt;
-  if (punchLeft <= 0) { punchLeft = 0; camPunch.set(0, 0, 0); return; }
-  const k = punchLeft / punchDur;                 // 1 -> 0
-  // smoothstep. k=1 근처가 평평해서 **정점에서 한 박자 머물렀다가** 부드럽게 앉는다.
-  camPunch.copy(_punchDir).multiplyScalar(punchAmp * k * k * (3 - 2 * k));
-}
-
 // ── 카메라 놓기 ──
 // ★한 군데서만 놓는다. 루프도, 검증 프로브도 이 함수를 지난다. 두 벌이 되면
 //   "프로브가 재는 카메라"와 "화면에 보이는 카메라"가 갈라진다.
 // lerpK <= 0 이면 보간 없이 그 자리에 딱 놓는다(프로브·스크린샷용).
-// hold = true 면 camBase 도 흔들림도 **한 픽셀도 안 옮긴다**(히트스톱. 배경이 진짜로 선다).
-function placeCamera(lerpK, hold) {
+const _camWant = new THREE.Vector3();
+function placeCamera(lerpK) {
   // 바라보는 지점을 캐릭터보다 lead 만큼 **앞으로** 민다. 카메라가 보는 방향의
   // 수평 성분이 (-sin yaw, 0, -cos yaw) 라 그 쪽으로 밀면 캐릭터가 화면 아래로 내려간다.
   camTarget.set(root.position.x - Math.sin(yaw) * lead,
@@ -3972,16 +3837,11 @@ function placeCamera(lerpK, hold) {
   _camWant.set(camTarget.x + Math.sin(yaw) * Math.cos(pitch) * dist,
                camTarget.y + Math.sin(pitch) * dist,
                camTarget.z + Math.cos(yaw) * Math.cos(pitch) * dist);
-  if (!camBaseInit) { camBase.copy(_camWant); camBaseInit = true; }
-  else if (hold) { /* 히트스톱: 이동 보간을 통째로 세운다 */ }
-  else if (lerpK > 0 && lerpK < 1) camBase.lerp(_camWant, lerpK);
-  else camBase.copy(_camWant);
-  camera.position.copy(camBase);
+  if (lerpK > 0 && lerpK < 1) camera.position.lerp(_camWant, lerpK);
+  else camera.position.copy(_camWant);
   camera.lookAt(camTarget);
-  // 오프셋은 lookAt **뒤에** 얹는다. 앞에 얹으면 미는 만큼 시선이 되돌아와 상쇄된다.
-  // ★그리고 camBase 에는 안 더한다 — 다음 프레임 보간이 이 오프셋을 먹으면
-  //   손맛이 이동 카메라 안으로 새어 들어간다(위 절연 주석).
-  camera.position.add(camPunch).add(shakeOffsetFrozen(hold));
+  // 흔들림은 lookAt **뒤에** 얹는다. 앞에 얹으면 흔드는 만큼 시선이 되돌아와 상쇄된다.
+  camera.position.add(feel.shakeOffset());
   camera.updateMatrixWorld();
   // ★project/unproject 가 쓰는 역행렬까지 여기서 맞춰 둔다. 렌더러가 render() 안에서
   //   갱신하기 때문에, 이걸 안 하면 프로브가 **한 프레임 전 카메라**를 재고
@@ -4394,7 +4254,6 @@ const enemies = createEnemySystem({
     vy = 0; grounded = true; jumping = false;
     attacking = false; heavy = false;
     atkClip = null; stepLeft = 0;   // 커밋·전진 스텝도 끊는다(죽은 자리의 관성이 남으면 안 된다)
-    coastLeft = 0; punchLeft = 0; hsLeft = 0;   // ★감속 관성·카메라 펀치·히트스톱도 같이
     dashLeft = 0; dashReadyT = -99; dashIfUntil = -99;   // 대시도 같이(쿨은 풀어 준다)
     clearBuffer();               // 죽는 순간 눌러 둔 입력이 부활 프레임에 튀어나오면 안 된다
     resetCombo(null);            // 죽고 되살아나면 누적 명중 수도 끊는다
@@ -4410,16 +4269,7 @@ const enemies = createEnemySystem({
     // ★"N HIT" 은 여기서만 뜬다. 칼이 실제로 닿은 프레임이다.
     showHit();
     logHitAngle(h.x, h.z);           // 각도 게이트 검증(?dev 에서만 쌓인다)
-    // ── ★손맛 세 박자 (17차) ──
-    // 순서에 뜻이 있다: **민다(펀치) -> 선다(히트스톱) -> 소리 -> 그림.**
-    //   · 펀치는 이 프레임에 바로 화면에 나간다(placeCamera 가 이 tick 끝에 돈다)
-    //   · 히트스톱은 다음 프레임부터 먹는다(feel.step 은 프레임 머리에서 이미 지났다)
-    //   그래서 사람 눈에는 "한 프레임 밀리고 -> 그 자리에 멈춘다" 로 이어진다.
-    // ★px 는 오너 기준 "절제". 명중 3px · 처치 4.6px(24m·fov24·640px 기준 0.048/0.073m).
-    //   이보다 키우면 34m 쿼터뷰에서 맵이 통째로 흔들리는 그림이 된다.
     if (h.kill) {
-      camPunchScreen(4.6, sa.ang, 0.24);
-      addHitStop(HS_KILL, h.swing);
       feel.kill(h.swing);
       sfx.kill();
       // ★5번째 인자 kind. 안 넘기면 feel.js 가 window.__dbg 를 훔쳐보며 기술을 **추측**한다.
@@ -4439,8 +4289,6 @@ const enemies = createEnemySystem({
       // ★2~5번째 인자(v91). 안 죽인 한 대에도 **작은 참격 한 획**이 그어진다.
       //   각도·자리는 처치와 같은 sa 를 쓴다. 크기·알파는 feel.js 가 줄인다
       //   (임팩트 프레임과 찢김선은 안 붙는다 - 그건 처치의 몫이다).
-      camPunchScreen(3.0, sa.ang, 0.17);
-      addHitStop(HS_HIT, h.swing);
       feel.hit(h.swing, sa.ang, sa.x, sa.y, heavy ? 'water' : 'kill');
       sfx.hit(1);
       // ★안 죽인 명중은 감청 고정이다. 붉은색은 처치·피격 전용(오너 지시).
@@ -4481,24 +4329,6 @@ window.__pos = () => ({ x: +root.position.x.toFixed(2), y: +root.position.y.toFi
 // 읽기 전용이다. "지금 커밋 구간인가 / 언제부터 끊을 수 있나"를 숫자로 봐야
 // 정지 시간을 실측할 수 있다. ?dev 없이도 열어 두는 이유는 __pos 와 같다
 // (실제 60fps 로 도는 판에서 재야 의미가 있다).
-// ── 타격감 창구 (17차) ──
-// 읽기 전용. "지금 몇 ms 멈춰 있나 / 펀치가 몇 px 걸려 있나"를 눈이 아니라 숫자로 본다.
-// ?dev 없이도 열어 둔다(__pos·__atk 과 같은 이유 — 실제 60fps 판에서 재야 의미가 있다).
-window.__hitfeel = () => {
-  const h = (cv && (cv.clientHeight || cv.height)) || 640;
-  const mPerPx = (2 * Math.tan(camera.fov * Math.PI / 360) * dist) / h;
-  return {
-    stop: +hsLeft.toFixed(4), stopBudget: +hsBudget.toFixed(4), stopSwing: hsSwing,
-    punchLeft: +punchLeft.toFixed(4), punchDur: +punchDur.toFixed(3),
-    punchPx: +(camPunch.length() / mPerPx).toFixed(2),
-    punchAmpPx: +(punchAmp / mPerPx).toFixed(2),
-    shakePx: +(feel.shakeOffset().length() * SHAKE_GAIN / mPerPx).toFixed(2),
-    camBase: [+camBase.x.toFixed(4), +camBase.y.toFixed(4), +camBase.z.toFixed(4)],
-    coast: +coastLeft.toFixed(3),
-    px: { hit: 3.0, kill: 4.6, hurt: 5.5 },
-    ms: { hit: HS_HIT * 1000, kill: HS_KILL * 1000, budget: HS_BUDGET * 1000 },
-  };
-};
 window.__atk = () => ({
   clip: atkClip, attacking,
   since: atkClip ? +(gameT - atkStartT).toFixed(3) : -1,
@@ -4624,19 +4454,7 @@ function tick() {
   const _wall = performance.now();
   bootGate((_wall - lastFrameWall) / 1000);
   lastFrameWall = _wall;
-  // ★시간 배율은 두 층이다(feel.js 히트스톱·슬로모 / 여기 히트스톱). **더 멈춘 쪽**만
-  //   쓴다 — 곱하면 두 겹이 서로 배가돼서 명중 한 번에 세상이 400배 느려진다.
-  // ★사망 슬로모가 걸리면 내 히트스톱은 즉시 버린다. feel.js 의 death() 도 같은 이유로
-  //   자기 stopT 를 0 으로 민다 — "마지막 한 마리를 베면서 같이 죽는" 프레임에서
-  //   히트스톱이 남아 있으면 사망 슬로모가 최대 112ms 뒤로 밀린다(죽은 줄 늦게 안다).
-  // ★feel.state 는 매번 객체를 새로 짓는 진단 창구다. 히트스톱이 걸려 있는 프레임에서만
-  //   본다(평시에는 이 줄이 비교 한 번으로 끝난다).
-  if (hsLeft > 0 && feel.state.death > 0) { hsLeft = 0; hsBudget = 0; }
-  const _tScale = Math.min(feel.step(rawDt), stepHitStop(rawDt));
-  // 이 프레임이 '히트스톱으로 멈춘 프레임'인가. 사망 슬로모(0.30)·전멸 슬로모(0.35)는
-  // 아니다 — 그 둘은 카메라가 계속 흘러야 늘어지는 맛이 산다.
-  const hitFrozen = _tScale <= 0.12;
-  const dt = rawDt * _tScale;
+  const dt = rawDt * feel.step(rawDt);
   gameT += dt;
   const now = gameT;                 // 게임 안의 모든 "지금"은 이 시계를 본다
   for (const m of glowMats) m.userData.u.uT.value = now;
@@ -4693,9 +4511,6 @@ function tick() {
     rightv.set(Math.cos(yaw), 0, -Math.sin(yaw));
     move.set(0, 0, 0).addScaledVector(fwd, mz).addScaledVector(rightv, mx).normalize();
     const spd = running ? curCfg.run.spd : curCfg.walk.spd;
-    // ★코스트(관성)를 매 프레임 새로 채운다. 키를 떼는 순간의 속도·방향이 그대로 남는다.
-    coastVX = move.x * spd; coastVZ = move.z * spd;
-    coastLeft = COAST_T; coastRun = running;
     // ★벽에 부딪히면 멈추는 게 아니라 미끄러진다(level.js slide). 이동을 통째로
     //   취소하면 벽을 스치며 걸을 때마다 딱딱 멈춰서 조작이 답답해진다.
     //   몸이 향하는 방향(targetYaw)은 밀려난 결과가 아니라 **입력**으로 정한다.
@@ -4709,26 +4524,6 @@ function tick() {
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
     root.rotation.y += d * Math.min(1, dt * 14);
-  } else if (coastLeft > 0) {
-    // ── ★감속 코스트 (17차. 모션 비평가 "달리기 종료가 1프레임 스냅") ──
-    // 키를 떼면 속도가 **한 프레임에 5.5m/s -> 0** 이었다. 클립은 0.18초에 걸쳐
-    // 크로스페이드되는데 몸은 그 자리에 못이 박혀서, 발만 움직이고 세상은 딱 서는
-    // 그림이 됐다. 남은 속도를 k^2 로 0.16초 동안 흘려보낸다.
-    //   총 이동거리 = v x COAST_T / 3 = 달리기 기준 약 0.29m (반 걸음)
-    // ★공격·대시·점프가 시작되면 즉시 버린다(그쪽 이동과 겹치면 두 배로 미끄러진다).
-    // ★벽 통과는 이동·대시·전진스텝과 **같은 level.slide** 를 지난다.
-    // ★17-이동신뢰성 담당자에게: 이 블록은 '입력이 없을 때'만 돈다. 이동 로직을
-    //   새로 짜면 coastVX/VZ 를 채워 주는 한 줄(위 moving 블록)만 옮기면 된다.
-    if (attacking || dashLeft > 0 || jumping) { coastLeft = 0; }
-    else {
-      coastLeft = Math.max(0, coastLeft - dt);
-      const ck = coastLeft / COAST_T;                  // 1 -> 0
-      const cs = ck * ck;
-      const st = level.slide(root.position.x, root.position.z,
-                             coastVX * cs * dt, coastVZ * cs * dt, level.PLAYER_RADIUS);
-      root.position.x = st.x;
-      root.position.z = st.z;
-    }
   }
 
   // ── 대시 (9차) ──
@@ -4803,11 +4598,6 @@ function tick() {
     else if (dashLeft > 0) { /* 대시 클립 유지. 안 막으면 아래 play('Idle') 이 매 프레임 덮는다 */ }
     else if (jumping) { /* Jump 유지 */ }
     else if (moving) play(running ? 'Run' : 'Walk');
-    // ★코스트 앞 절반은 걷기/달리기 클립을 붙들고 있는다. 몸이 아직 0.2m 쯤
-    //   미끄러지는 중인데 클립만 Idle 로 넘기면 그게 발 미끄러짐이다.
-    //   뒤 절반에서 Idle 로 넘기면 남은 크로스페이드(0.18초)와 남은 코스트가 겹쳐
-    //   "속도가 줄면서 자세가 선다" 한 문장이 된다.
-    else if (coastLeft > COAST_T * 0.5) play(coastRun ? 'Run' : 'Walk');
     else play('Idle');
     mixer.update(dt);
     if (jumping && !actions.Jump) {
@@ -5036,20 +4826,10 @@ function tick() {
   }
 
   // 카메라
-  // ★★17차에 여기서 방향이 뒤집혔다. 옛 설계는 "세계는 멈춰도 카메라는 안 멈춘다"
-  //   였다(feel.js 머리말). 그런데 실측해 보니 그 흔들림이 **히트스톱을 통째로 지우고
-  //   있었다**: 멈춘 프레임의 화소 차분이 안 멈춘 프레임의 295%, 배경 띠 0.86 -> 7.9.
-  //   세계가 멎어도 그림이 매 프레임 3~6px 씩 밀리면 사람은 멈춤을 못 본다.
-  //   그래서 히트스톱 동안에는 **카메라도 같이 선다**(보간·흔들림 둘 다).
-  //   대신 멈추기 직전 프레임에 베기 방향으로 한 번 민 펀치가 그 자리에 붙들려 있어서,
-  //   "쳤다(1프레임 변위) -> 섰다(60~110ms 정지) -> 앉는다" 세 박자가 된다.
-  //   ★사망·전멸 슬로모는 hitFrozen 이 아니므로 예전 그대로 흔들리며 흐른다.
-  //   ★흔들림 타이머(shakeT)는 계속 실제 dt 로 늙힌다. 멈춘 동안 안 늙히면 정지가
-  //     끝난 뒤 흔들림만 뒤늦게 남아서 "다 끝나고 카메라가 떤다"가 된다.
-  //     화면에 나가는 오프셋만 placeCamera 안에서 붙들어 둔다(shakeOffsetFrozen).
+  // ★카메라 흔들림(피격·처치)은 **실제 dt** 로 돈다. 히트스톱으로 세계가 멈춘
+  //   45~120ms 동안에도 화면은 계속 떨려야 "멈춘 것"이 아니라 "때린 것"으로 읽힌다.
   feel.updateShake(rawDt);
-  updateCamPunch(rawDt, hitFrozen);
-  placeCamera(rawDt * 12, hitFrozen);
+  placeCamera(rawDt * 12);
   // 화면 겹(붓질 슬래시·속도선)도 실제 dt. 카메라와 같은 시계를 쓴다.
   feel.updateOverlay(rawDt);
 
