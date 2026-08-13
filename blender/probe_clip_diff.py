@@ -82,3 +82,22 @@ for name in sorted(set(DA) | set(DB)):
     print("%-8s %6d %6d | %14.8f %14.8f   %s"
           % (name, len(ra), len(rb), dp, dr,
              "차이 0" if (dp < 1e-7 and dr < 1e-5) else "★변경됨"))
+    # ★BONE=1 이면 **어느 뼈가** 변했는지까지 찍는다(2026-08-13 17-점프왼손에서 신설).
+    #   "왼팔 계열만 고쳤다"는 주장은 클립 최대차 한 줄로는 증명이 안 된다.
+    if os.environ.get("BONE") == "1" and not (dp < 1e-7 and dr < 1e-5):
+        per = {}
+        for a, b in zip(ra, rb):
+            for bn, ma in a.items():
+                mb = b.get(bn)
+                if mb is None:
+                    continue
+                X = ma.to_3x3().normalized().inverted() @ mb.to_3x3().normalized()
+                p0, r0 = per.get(bn, (0.0, 0.0))
+                per[bn] = (max(p0, (ma.translation - mb.translation).length),
+                           max(r0, math.degrees(X.to_quaternion().angle)))
+        ch = sorted(((v[1], v[0], k) for k, v in per.items()), reverse=True)
+        print("      뼈별(변한 것만): " + " / ".join(
+            "%s 회전 %.4f도·위치 %.7f" % (k, r, p) for r, p, k in ch
+            if r > 1e-5 or p > 1e-7))
+        print("      안 변한 뼈 %d/%d" % (
+            sum(1 for r, p, _ in ch if r <= 1e-5 and p <= 1e-7), len(ch)))

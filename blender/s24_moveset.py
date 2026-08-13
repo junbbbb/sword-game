@@ -93,6 +93,14 @@
   Attack 169도 · Heavy 161도까지 꺾였다(사람 한계 60~70도). 자루에서 역산해
   손뼈 회전만 다시 쓴다. 자세한 표와 근거는 아래 [왼손 손목] 절에 있다.
 
+★★검 놓은 왼손 주먹 방향 (HAND_FREE. 기본 켬) — 2026-08-13 오너 지시
+  "점프했을때 검안쥔손 주먹이 왜 하늘을향하고있냐"
+  위 [왼손 손목] 교정은 **자루를 쥔 손**만 잡는다(가중치가 파지 게이트다).
+  손을 놓는 순간 그 가중치가 0 이 되는데, **놓은 뒤의 손 방향을 정하는 코드가
+  없었다.** 그래서 체공 내내 소스(양손검)의 손 회전이 남아 주먹 앞면이 고도
+  +82~+90도, 곧 **거의 정확히 하늘**을 보고 있었다. 손 방향을 팔뚝에서 다시
+  정한다. 자세한 표와 근거는 아래 [놓은 손 주먹 방향] 절에 있다.
+
 ★★검 든 오른팔 내리기 (SWORD_DOWN. 기본 Jump) — 2026-08-12 오너 지시 2차
   "점프할 때 한 손으로 검을 앞으로 들고 있는데 넌 그게 말이 된다 생각하냐?"
   1차는 왼손만 풀었고 오른팔은 소스 그대로 **검을 앞으로 겨눈** 자세였다.
@@ -146,6 +154,9 @@
   SWD_TABLE  점프 칼 위상표 직접 주입 "t,E,Wd,A,F,EB;..." (튜닝용. 비면 파일 값)
   HAND_GRIP 1(기본) 왼손목 방향을 자루에서 역산 / 0 옛 판(리타게팅 그대로) 재현
   WRIST_LIM 왼손목 기하각 상한(도)     기본 60  (레스트 중립이 16.8도인 잣대다)
+  HAND_FREE 1(기본) 검 놓은 손(균형 팔) 주먹 방향을 팔뚝에서 다시 쓴다
+            / 0 이면 옛 판(주먹이 하늘) 재현. md5 aa60d350 이 그대로 나온다
+  FST_TABLE 놓은 손 위상표 직접 주입 "t,ROLL,BEND;..." (튜닝용. 비면 파일 값)
   KEEP_ORIG 1 이면 타깃 원본 액션을 Orig* 이름으로 같이 내보낸다(기본 0)
   VERIFY    1(기본) 결과 glb 재임포트해 파지·접지 실측
   RENDER    1(기본) 렌더 / 0 생략
@@ -1420,6 +1431,97 @@ def apply_hand_grip(pose, Rw, C, w):
     return g0, g1, tg, w
 
 
+# ------------------------------------------------------- 놓은 손 주먹 방향 (17차)
+# ★오너 지시(2026-08-13): **"점프했을때 검안쥔손 주먹이 왜 하늘을향하고있냐"**
+#
+# 무엇이 하늘을 보고 있었나 (실측 blender/probe_jump_lhand.py · committed aa60d350)
+#   주먹 메시에는 손가락·엄지·너클이 없다(13-손목에서 광선 스캔으로 확인). 방향은
+#   셋으로 잰다 — **팔축**(손목원점->주먹중심. 주먹의 앞면, 손가락 마디 골이 보이는
+#   쪽이다) · 구멍축(마디가 늘어선 방향) · 손등축. 체공 구간의 팔축 월드 고도:
+#       f5 +72 · f7 **+87** · f9 **+90** · f13 **+82** · f15 +77   (+90 = 똑바로 하늘)
+#   주먹 앞면이 거의 정확히 수직으로 하늘을 봤다. **손등은 밖(+0.97)이라 맞았다** —
+#   틀린 것은 손목이다. 왼손목 기하각(팔꿈치->손목 vs 손목->주먹중심)이 체공 내내
+#   **128~132도**였다(레스트 중립 16.8도, 사람 굴곡·신전 한계 60~70도).
+#   팔뚝은 -38~-43도로 내려가 있는데 손만 팔뚝 위로 접혔으니 주먹은 자동으로 하늘이다.
+#   ★13차의 "손등 하늘"과는 **다른 병**이다. 그때는 주먹 구멍축이 90도 어긋난
+#     것(칼이 손바닥에서 손등으로 꿰뚫음)이었고, 이번은 축은 맞는데 손목이 접혔다.
+#     그래서 이번 처방은 메시 회전이 아니라 **손뼈 방향**이다.
+#
+# 왜 아무도 안 잡고 있었나 — 13-손목의 교정이 체공에서 **꺼진다**
+#   apply_hand_grip 의 가중치는 wh = 파지게이트 x (1 - 균형가중치)^2 다. 체공은
+#   균형가중치가 1 이라 wh = 0 이다. 그건 맞다(놓은 손이 허공의 자루를 쥐면 안 된다).
+#   문제는 **놓은 뒤의 손 방향을 정하는 코드가 없었다**는 것이다. 그래서 소스
+#   (양손검 점프)의 리타게팅 손 회전이 그대로 남고, 그 손은 '자루를 쥔 손' 모양이라
+#   팔이 벌어지면 주먹이 하늘로 돌아간다. 17-점프기하는 오른팔·칼만 다뤘고 여기는
+#   못 봤다(그 판의 무회귀 표에도 왼손 항목이 없다).
+#
+# 어떻게 고치나 — 손 방향을 **팔뚝에서** 정한다 (팔·칼·오른손은 한 톨도 안 건드린다)
+#   자연스러운 점프에서 벌린 팔의 손은 팔뚝을 거의 그대로 잇고(손목 15~20도),
+#   손등이 바깥·위를 본다. 그 둘을 그대로 목표로 준다:
+#     · 팔축   -> 팔뚝 방향에서 **손바닥 쪽으로 BEND 도** 기운 방향
+#                 = 주먹 앞면이 아래·안쪽. ★손목 기하각이 정확히 BEND 로 나온다
+#                   (상한을 따로 둘 필요가 없다. 각을 직접 주는 구조다)
+#     · 손등축 -> 팔뚝에 수직인 '바깥쪽'을 팔뚝 둘레로 ROLL 도 돌린 방향
+#                 (ROLL 0=바깥 · +90=앞 · -90=뒤. 이게 곧 아래팔 회내/회외다)
+#   두 목표가 서로 수직이라 회전 하나로 정확히 만족한다([왼손 손목]과 같은 구조).
+#   ★기준을 '월드 위'가 아니라 **'가슴 바깥'** 으로 잡은 근거: 체공에서 팔뚝이
+#     -38~-43도로 거의 아래를 보므로 '위'를 기준으로 잡으면 투영이 무너진다.
+#     균형 팔은 벌림 12~30도 안에 있어 팔뚝이 늘 아래를 향하니, 가슴 바깥축은
+#     팔뚝과 60도 이상 벌어진 채로 유지된다(안정적이다).
+#   ★가중치는 균형 팔과 **같은 bal_weight** 다. 손을 놓는 그 비율만큼만 손도 돈다.
+#     apply_hand_grip(파지 손) 뒤에 이어 붙이므로 전환 구간에서 두 목표가 섞인다.
+FST_KEYS = [                 # (위상 t, 손등 롤 ROLL도(0=바깥/+90=앞), 손목 굽힘 BEND도)
+    (0.00,  0, 16),          # f1  웅크림. 가중치 0이라 안 쓰인다(연속성용)
+    (0.18,  8, 18),          # f5  도약. 손을 놓으며 주먹이 팔뚝을 따라 내려온다
+    (0.27, 12, 16),          # f7  ★상승 내내 이 자세로 멈춘다
+    (0.55, 12, 16),          # f13 ★하강 내내 이 자세로 멈춘다
+    (0.70,  6, 20),          # f16 착지 흡수
+    (1.00,  0, 22),          # f23 회복. Idle 로 크로스페이드되며 다시 쥔다
+]
+HAND_FREE = os.environ.get("HAND_FREE", "1") == "1"      # 0 이면 옛 판 재현
+_fst_tab = os.environ.get("FST_TABLE", "").strip()
+if _fst_tab:
+    FST_KEYS = [tuple(float(x) for x in row.split(","))
+                for row in _fst_tab.split(";") if row.strip()]
+
+
+def apply_hand_free(pose, Rw, t):
+    """검을 놓은 왼손의 주먹 방향을 팔뚝에서 다시 쓴다.
+
+    반환 (전 주먹면 고도, 후 주먹면 고도, 후 손목 기하각, 가중치). 안 건드리면 None.
+    """
+    if FF_L is None or not HAND_FREE or t is None:
+        return None
+    w = bal_weight(t)
+    if w <= 1e-4:
+        return None
+    _, ax_l, _, bak_l = FF_L                    # 팔축 · 손등축(둘은 서로 수직이다)
+    W = wpos(pose, HAND_L)
+    E = wpos(pose, L_ARM[1])
+    f = (W - E).normalized()                    # 팔뚝 방향(팔꿈치 -> 손목)
+    a0 = (Rw[HAND_L] @ ax_l).normalized()
+    e0 = math.degrees(math.asin(max(-1.0, min(1.0, a0.z))))
+    ROLL, BEND = _key_at(FST_KEYS, t)
+    out = torso_frame(pose) @ Vector((1, 0, 0))  # 가슴 X = 왼쪽 = **왼손의 바깥쪽**
+    o0 = out - f * out.dot(f)
+    if o0.length < 1e-4:                        # 팔을 옆으로 완전히 뻗은 경우(안 온다)
+        return None
+    o0.normalize()
+    rl, bd = math.radians(ROLL), math.radians(BEND)
+    b0 = (o0 * math.cos(rl) + f.cross(o0) * math.sin(rl)).normalized()   # 손등 목표
+    n = (f * math.cos(bd) - b0 * math.sin(bd)).normalized()              # 팔축 목표
+    b = (b0 - n * b0.dot(n)).normalized()       # 손등 목표를 팔축에 수직으로 다시 세운다
+    # 손 로컬 (팔축, 손등축, 그 외적) -> 월드 (n, b, 그 외적). 둘 다 정규직교라
+    # 행렬 하나가 곧 회전이다(det=+1 이 보장된다). [왼손 손목]과 같은 수법.
+    Ml = Matrix((ax_l, bak_l, ax_l.cross(bak_l))).transposed()
+    Mt = Matrix((n, b, n.cross(b))).transposed()
+    q = Rw[HAND_L].to_quaternion().slerp((Mt @ Ml.inverted()).to_quaternion(), w)
+    Rw[HAND_L] = q.to_matrix()
+    a1 = (Rw[HAND_L] @ ax_l).normalized()
+    return (e0, math.degrees(math.asin(max(-1.0, min(1.0, a1.z)))),
+            math.degrees(f.angle(a1)), w)
+
+
 def new_action(name):
     arm.animation_data_clear()
     arm.animation_data_create()
@@ -1505,7 +1607,13 @@ def bake(name):
                   % (t, f0 + int(round(t * (nf - 1))), E, Wd, A, F, EB,
                      _key_at(SWD_W, t)[0]))
 
-    lows, maxerr, befs, afts, swds, wrs = [], 0.0, [], [], [], []
+    if rel and HAND_FREE:
+        print("   놓은 손 위상표(t / 손등 롤(0=바깥,+90=앞) / 손목 굽힘 / 가중치):")
+        for t, RL, BD in FST_KEYS:
+            print("      t %.2f (f%-2d)  롤 %+3d도  굽힘 %+3d도   w %.2f"
+                  % (t, f0 + int(round(t * (nf - 1))), RL, BD, bal_weight(t)))
+
+    lows, maxerr, befs, afts, swds, wrs, frs = [], 0.0, [], [], [], [], []
     jtips, jhnds, jhips, jchs = [], [], [], []
     for i, f in enumerate(range(f0, f1 + 1)):
         sc.frame_set(f)
@@ -1527,6 +1635,12 @@ def bake(name):
             r = apply_hand_grip(pose, Rw, Ch, wh)
             if r:
                 wrs.append(r)
+                pose, basis = build(Rw, pw)
+            # ★17차 신설: 손을 **놓은 뒤**의 주먹 방향(파지 교정 다음에 온다.
+            #   가중치가 서로 여집합이라 전환 구간에서 두 목표가 섞인다)
+            rf = apply_hand_free(pose, Rw, phase(i))
+            if rf:
+                frs.append(rf)
                 pose, basis = build(Rw, pw)
         for bn in ORDER:
             arm.pose.bones[bn].matrix_basis = basis[bn]
@@ -1591,6 +1705,15 @@ def bake(name):
                   " -> 후 %.0f~%.0f(중앙 %.0f) / 구멍축-자루축 후 %.0f~%.0f (상한 %.0f도)"
                   % (len(on), nf, b0[0], b0[-1], b0[len(b0) // 2],
                      b1[0], b1[-1], b1[len(b1) // 2], tg[0], tg[-1], WRIST_LIM))
+    if frs:
+        on = [r for r in frs if r[3] > 0.5]
+        if on:
+            e0 = sorted(r[0] for r in on)
+            e1 = sorted(r[1] for r in on)
+            g1 = sorted(r[2] for r in on)
+            print("   ★놓은 손 주먹면 고도(+90 = 똑바로 하늘): 전 %+.0f~%+.0f"
+                  " -> 후 %+.0f~%+.0f / 손목 기하각 후 %.0f~%.0f도 (%d/%d 프레임)"
+                  % (e0[0], e0[-1], e1[0], e1[-1], g1[0], g1[-1], len(on), nf))
     if swd and swds:
         act_f = [(i, d, wr, nt, er) for i, (d, wr, w, nt, er) in enumerate(swds)
                  if w > 1e-4]
@@ -1647,6 +1770,8 @@ def bake(name):
             _, _, _, _, Ch, wh = apply_grip(pose, Rw, gts[i], phase(i))
             pose, basis = build(Rw, pw)
             if apply_hand_grip(pose, Rw, Ch, wh):       # ★1차와 같은 순서로
+                pose, basis = build(Rw, pw)
+            if apply_hand_free(pose, Rw, phase(i)):
                 pose, basis = build(Rw, pw)
         for bn in ORDER:
             arm.pose.bones[bn].matrix_basis = basis[bn]
