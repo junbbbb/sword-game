@@ -191,6 +191,17 @@ const FLIP_H_SIN = 0.42;     // sin 0.42 = 약 25도
 //   본 획(4장)보다 짧게 살아야 "획에 딸린 결"로 읽힌다.
 const SPD_N = 3;             // 3/24 = 0.125초
 const SPD_N_LONG = 5;        // 5/24 = 0.208초 (전멸)
+// ── 임팩트 프레임(전면 백색 패널) 스위치 ── ★오너 지시로 껐다(2026-08-13, 17차)
+//   "몬스터 다잡아갈때 무슨 이펙트에 화면 번쩍이는거 넣어놨냐? 그거빼"
+// 정체: 처치·전멸 순간 화면 전체를 종이색(0xf4eee0)으로 뒤집고 먹 실루엣만 남기는
+//   한 장짜리 만화 컷이다(아래 '임팩트 프레임' 절 참조). 실측한 그 한 장은
+//   **화면 평균 휘도 50 -> 203 · 200 이상 화소 90.8%** 였고, 다음 프레임이면 사라진다.
+//   의도는 "애니가 칼 닿는 순간에 끼워 넣는 극단 대비 컷"이었지만, 60fps 에서 한 장은
+//   그림으로 안 읽히고 **흰 점멸**로만 남는다(16차 블라인드 이펙트 비평도 같은 지적:
+//   "이 컷이 칼이 닿는 순간을 오히려 가린다"). 사람 눈에는 연출이 아니라 모니터 결함이다.
+// ★1 로 되돌리면 v91~17차의 그 컷이 그대로 살아난다. 코드는 통째로 남겨 뒀다
+//   (셰이더·실루엣·병합 창까지 전부 그대로. 켜는 문은 이 상수 하나뿐이다).
+const IMPACT_CUT = 0;
 // 임팩트 프레임 장 수. 처치 1장, 전멸·보스 2장(오너 지시 그대로)
 const IMP_N_KILL = 1;
 const IMP_N_WIPE = 2;
@@ -546,10 +557,13 @@ export function createFeel(opts) {
   scene.add(lineMesh);
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 임팩트 프레임 (v91)
+  // 임팩트 프레임 (v91) — ★지금은 꺼져 있다(IMPACT_CUT = 0, 17차 오너 지시).
+  // 아래 규칙과 셰이더는 되살릴 때를 위해 그대로 둔다. 켜는 문은 그 상수 하나다.
   //
   // 무엇인가: 애니에서 칼이 닿는 그 순간에 딱 **한 장** 끼워 넣는 극단 대비 컷이다.
   //   화면이 종이색으로 뒤집히고 그 위에 먹 실루엣만 남는다. 다음 프레임에 사라진다.
+  // ★규칙 3 이 "페이드가 있으면 플래시가 된다"고 적어 뒀는데, 실측해 보니 페이드가
+  //   없어도 플래시였다. 60fps 한 장은 그림으로 안 읽히고 밝기 계단으로만 남는다.
   //
   // ★규칙 세 가지. 하나라도 어기면 이건 연출이 아니라 **버그로 보인다.**
   //   1) 정확히 1프레임(전멸·보스는 2). 시간(ms)이 아니라 **렌더 프레임 수**로 센다.
@@ -1581,7 +1595,12 @@ export function createFeel(opts) {
   }
 
   // 임팩트 프레임을 n 장 예약한다. **렌더 프레임 수**다(1 = 딱 한 장).
+  // ★IMPACT_CUT 이 0 이면 여기서 끝난다(오너 지시. 위 스위치 주석 참조).
+  //   예약 자체를 안 하므로 impLeft·impN·impOn 이 전부 0 으로 남는다 = 계측 창구가
+  //   "컷이 한 번도 안 떴다"를 그대로 증언한다. lastPanelT 도 안 건드리니
+  //   panelWanted() 는 늘 참이고 panelMerged 도 0 에 머문다(가짜 병합 기록 방지).
   function impact(n) {
+    if (!IMPACT_CUT) return;
     n = n | 0;
     if (n >= 2) impBig = 1;                 // 두 장짜리(전멸·보스)는 컷도 크게 찢는다
     impLeft = Math.max(impLeft, n);
@@ -2157,7 +2176,9 @@ export function createFeel(opts) {
       if (o.paper !== undefined) impMat.uniforms.uPaper.value.setHex(o.paper);
       if (o.ink !== undefined) impMat.uniforms.uInk.value.setHex(o.ink);
       if (o.line !== undefined) lineMat.uniforms.uCol.value.setHex(o.line);
-      if (o.imp !== undefined) impact(o.imp);         // 지금 그 자리에서 한 장 껴 본다
+      // 지금 그 자리에서 컷을 한 장 껴 본다. ★IMPACT_CUT 이 0 이면 아무 일도 안 난다
+      //   (스위치가 이겨야 한다. 디버그 창구로 오너가 끈 연출이 되살아나면 안 된다).
+      if (o.imp !== undefined) impact(o.imp);
       return { paper: '#' + impMat.uniforms.uPaper.value.getHexString(),
                ink: '#' + impMat.uniforms.uInk.value.getHexString(),
                line: '#' + lineMat.uniforms.uCol.value.getHexString() };
