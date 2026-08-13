@@ -387,9 +387,10 @@ addEventListener('keydown', e => {
     return;
   }
   // 방향키 조작으로 바꾸면서 Space 를 점프에 내줬다. 베기는 Z 로.
-  // ★9차: 이동키를 누른 채면 **대시(회피)**, 아니면 예전대로 점프다.
-  //   두 동작이 한 키를 나눠 쓰지만 조건이 배타적이라 헷갈릴 여지가 없다
-  //   (제자리에서 회피할 이유가 없고, 달리면서 점프할 이유도 이 게임엔 없다).
+  // ★9차: 이동키를 누른 채면 **대시(회피)**, 아니면 예전대로 점프였다.
+  // ★★17차(오너 지시): **Space 는 이동 중이든 아니든 언제나 점프**다. 이 줄은 안 바꾼다 -
+  //   회피 스위치(DASH_ON=false)가 tryDash 첫 줄에서 false 를 돌려주므로 갈래가 하나로
+  //   합쳐진다. 스위치를 켜면 옛 조작(이동 중 = 회피)이 이 줄 그대로 돌아온다.
   if (e.code === 'Space') { e.preventDefault(); if (!tryDash()) tryJump(); }
   if (e.code === 'KeyZ') { e.preventDefault(); tryAttack(); }
   if (e.code === 'KeyQ' || e.code === 'KeyX') { e.preventDefault(); tryHeavy(); }
@@ -2640,6 +2641,18 @@ function canCancelAttack(now) {
 //                 **자리 이동으로만** 피한다(보스 장판은 명중 순간 좌표를 다시 재므로
 //                 창구 없이도 100% 피해진다 — 그게 이번 파도의 증명 대상이다).
 //   쿨 1.2s   : 후려치기 경직 1.30초보다 짧다. "한 대 피하고 붙어서 한 대"가 성립한다.
+// ── ★회피 스위치 (17차. 오너: 「회피 스킬 일단 없애줘 스페이스바는 그냥 점프여」) ──
+// **로직은 한 줄도 안 지운다.** 이 한 줄이 꺼짐이고, 되살리는 것도 이 한 줄이다(true).
+//   꺼지면 같이 죽는 것: 대시 이동 · 무적 0.20s · 후딜 캔슬로 나가는 회피 · 쿨 1.2s ·
+//   계기판 회피 칸(아래 mountSpaceChip 이 그 자리에 점프 칸을 세운다).
+// ★무적을 전제로 쓰인 자리 둘은 **죽어도 안 깨진다** - 둘 다 "무적이 아니다"로 흐른다:
+//   (가) 보스 피해 통로의 `gameT < dashIfUntil` (dashIfUntil 이 -99 로 남는다)
+//   (나) enemies.setIframe (호출 자체가 안 일어난다. enemy.js 는 손대지 않는다)
+// ★★밸런스: 보스 판정(boss.js tryLand)은 **x·z 만 본다.** 점프로는 어떤 패턴도 안 피해진다.
+//   회피가 메우던 구멍 둘이 다시 열린다 - ①칼을 휘두르는 중(최대 1.19초 묶인다)
+//   ②내려찍기 원(반경 3.6m) 한복판에 서 있었을 때. 나머지 셋은 boss.js 가 "제일 느린
+//   걸음으로도 예고 안에 빠져나올 수 있게" 잡아 둔 값이라 회피 없이도 성립한다.
+const DASH_ON = false;
 const DASH_DIST = 3.5, DASH_DUR = 0.18, DASH_IFRAME = 0.20, DASH_CD = 1.2;
 let dashLeft = 0, dashDX = 0, dashDZ = 0, dashGone = 0;
 let dashReadyT = -99;              // 이 게임시간이 지나면 다시 쓸 수 있다
@@ -2725,8 +2738,10 @@ function moveDirFromKeys() {
   return _mvDir;
 }
 
-// Space = 이동키를 누르고 있으면 대시, 아니면 점프.
+// Space = 이동키를 누르고 있으면 대시, 아니면 점프. ★지금은 스위치가 꺼져 있어(DASH_ON)
+// 첫 줄에서 바로 false 를 돌려준다 = 부르는 쪽은 전부 "회피가 안 나갔다"로 흐른다.
 function tryDash() {
+  if (!DASH_ON) return false;                  // ★17차 오너 지시. 갈림은 이 한 줄뿐이다
   if (isCleared() || preview.on) return false;
   if (enemies.dead) return false;
   if (!grounded) return false;                 // 공중 대시는 없다(점프와 구분이 안 된다)
@@ -3844,22 +3859,26 @@ function deny(kind) {
   el.classList.add('deny');
 }
 
-// ── 대시 칩 ──
+// ── Space 칸 ──
 // ★ui.js 가 만든 #uiSkills 안에 한 장을 더 붙인다(구조·CSS 를 그쪽 것과 공유한다).
-//   ui.js 의 updateSkills 는 Heavy/Wide 두 노드만 만지므로 서로 안 밟는다.
+//   ui.js 의 updateSkills 는 Basic/Heavy/Wide 세 노드만 만지므로 서로 안 밟는다.
 //   ui.js 가 아직 칩을 안 만들었을 수 있어 잠깐 기다렸다 붙인다(없으면 조용히 포기).
+// ★17차: 회피가 잠겼으므로(DASH_ON) 같은 자리에 **점프 칸**을 세운다. 이름표만 바꾸는 게
+//   아니라 data-k 를 Jump 로 준다 - 그래야 ui.js 의 회피 전용 처리(쿨 덮개·남은 초)가
+//   이 칸을 아예 안 건드린다(그쪽은 [data-k="Dash"] 만 찾는다). 점프는 쿨이 없으니
+//   덮개도 숫자도 안 얹고 늘 밝다(ui.js 의 베기 칸과 같은 규칙).
+// ★구조는 ui.js 의 slotHtml 과 1:1 로 맞춘다(첫 자식 <i class="cd">, 그 다음 <b class="cds">).
 let dashChip = null;
-(function mountDashChip(tries = 0) {
+(function mountSpaceChip(tries = 0) {
   const host = document.getElementById('uiSkills');
-  if (!host) { if (tries < 40) setTimeout(() => mountDashChip(tries + 1), 150); return; }
+  if (!host) { if (tries < 40) setTimeout(() => mountSpaceChip(tries + 1), 150); return; }
   const d = document.createElement('div');
   d.className = 'sk rdy';
-  d.dataset.k = 'Dash';
-  // ★첫 자식은 쿨다운 표시다(ui.js 가 <i class="cd"> 라디얼을 쓰면 그 규칙을 그대로 탄다).
-  //   ui.js 가 표기 방식을 바꾸면 여기도 같이 봐야 한다 - handoff_combat.md 에 적어 두었다.
-  d.innerHTML = '<i class="cd"></i><span class="key">Space</span><span class="nm">회피</span>';
+  d.dataset.k = DASH_ON ? 'Dash' : 'Jump';
+  d.innerHTML = '<i class="cd"></i><b class="cds"></b><span class="key">Space</span>'
+    + '<span class="nm">' + (DASH_ON ? '회피' : '점프') + '</span>';
   host.appendChild(d);
-  dashChip = d;
+  if (DASH_ON) dashChip = d;      // 매 프레임 쿨을 칠할 대상. 점프 칸에는 칠할 것이 없다
 })();
 
 // ---------- 루프 ----------
@@ -5293,7 +5312,8 @@ function tick() {
     hurtDirT -= rawDt;
     if (hurtDirT <= 0) hurtDirEl.classList.remove('on');
   }
-  if (dashChip) {
+  // ★회피가 잠긴 동안에는 dashChip 이 null 이다(점프 칸에는 칠할 쿨이 없다).
+  if (DASH_ON && dashChip) {
     const ready = dashReady(now);
     // 대시 중에도 "불가"로 보여야 한다(쿨이 이미 돌기 시작했다)
     dashChip.classList.toggle('rdy', ready);

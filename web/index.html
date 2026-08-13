@@ -53,10 +53,11 @@
   #help { left:clamp(10px,1.06vw,16px); top:clamp(10px,1.47vh,14px);
     font-size:clamp(10.4px,min(.68vw + 4.2px,1.45vh + 1.2px),13px); line-height:1.5; }
   #help .hRow { display:flex; align-items:baseline; gap:.62em; padding:0; }
-  /* ★키 열 폭은 **가장 긴 줄**(「이동+ [Space]」)에 맞춘다. 모자라면 그 줄만 왼쪽으로
-       삐져나와 판 밖으로 흐른다(flex-basis 고정이라 줄어들지도 늘어나지도 않는다).
-     ★nowrap: 좁은 창에서 키캡 글자가 「Spa / ce」로 접히는 것을 막는다. */
-  #help .ks { flex:0 0 6.9em; display:flex; gap:.3em; justify-content:flex-end;
+  /* ★키 열 폭은 **가장 긴 줄**(회피를 걷은 뒤로는 「방향키」 캡 하나)에 맞춘다. 모자라면
+       그 줄만 왼쪽으로 삐져나와 판 밖으로 흐른다(flex-basis 고정이라 줄지도 늘지도 않는다).
+     ★nowrap: 좁은 창에서 키캡 글자가 「Spa / ce」로 접히는 것을 막는다.
+     ★ui.js 에 같은 값이 한 벌 더 있다(그쪽이 나중에 붙어 이긴다). 고치면 둘 다 고칠 것. */
+  #help .ks { flex:0 0 5em; display:flex; gap:.3em; justify-content:flex-end;
     white-space:nowrap; }
   /* ★키캡은 어두운 유리 + 시안 헤어라인이다.
        진짜 값은 ui.js 가 나중에 덮는다. 여기 한 벌은 ui.js 가 붙기 전 한 프레임을 위한 것이다 */
@@ -188,12 +189,10 @@
        「됨」으로 끝나서 서술이 안 닫힌다. 다른 줄과 같은 동작형으로 맞춘다. -->
   <div class="hRow"><span class="ks"><span class="k">방향키</span></span><span class="t">이동 (WASD로도 가능)</span></div>
   <div class="hRow"><span class="ks"><span class="k">Shift</span></span><span class="t">달리기</span></div>
-  <!-- ★Space 한 키가 두 동작이다(방향 입력 유무로 갈린다). 안내도 두 줄로 가른다.
-       「이동+」는 키가 아니라 조건이라 키캡을 안 씌우고 .kx 로 둔다. -->
-  <div class="hRow"><span class="ks"><span class="k">Space</span></span><span class="t">점프 (제자리)</span></div>
-  <!-- ★「쿨」은 게임 은어다(판정 S13). 이 안내는 처음 켠 사람이 읽는 자리라
-       한 번에 뜻이 서는 말이어야 한다. -->
-  <div class="hRow"><span class="ks"><span class="kx">이동+</span><span class="k">Space</span></span><span class="t">회피 (재사용 1.2초)</span></div>
+  <!-- ★17차(오너 지시): 회피를 잠갔다(main.js DASH_ON). Space 한 키가 두 동작으로
+       갈리던 시절의 두 줄(「점프 (제자리)」 · 「이동+ Space · 회피」)을 한 줄로 합친다.
+       이제 이동 중이든 아니든 Space 는 점프 하나라, 조건을 말할 것이 없다. -->
+  <div class="hRow"><span class="ks"><span class="k">Space</span></span><span class="t">점프</span></div>
   <div class="hSep"></div>
   <div class="hRow"><span class="ks"><span class="k">Z</span></span><span class="t">베기, 연속으로 3연타</span></div>
   <div class="hRow"><span class="ks"><span class="k">X</span></span><span class="t">수면참, 크게 한 번</span></div>

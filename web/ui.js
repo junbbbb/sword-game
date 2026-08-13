@@ -572,9 +572,14 @@ body.uiDeathOn #stVig{opacity:.05!important}
   transition:opacity .42s ease,transform .42s ease}
 #help b{color:var(--ui-txt);font-weight:800}
 #help .hRow{gap:.62em;padding:0}
-/* ★키 열은 **가장 긴 줄(「이동+ Space」)이 들어가는 최소값**이다. 더 줄이면 그 줄만
-   판 밖 왼쪽으로 흘러나간다(flex-basis 고정이라 줄지도 늘지도 않는다). */
-#help .ks{flex:0 0 6.9em;gap:.3em}
+/* ★키 열은 **가장 긴 줄이 들어가는 최소값**이다. 더 줄이면 그 줄만 판 밖 왼쪽으로
+   흘러나간다(flex-basis 고정이라 줄지도 늘지도 않는다).
+   ★★17차: 그 「가장 긴 줄」이던 「이동+ Space」가 회피와 함께 사라졌다(main.js DASH_ON).
+     남은 최장은 「방향키」 캡 하나다 - 실측 60.9px(--hf 13px 기준 4.69em). 6.9em 을 그대로
+     두면 열이 2.2em(약 29px) 비어서 판이 그만큼 넓게 남는다. **4.69 + 여유 0.3 = 5.0em.**
+     값은 em 이라 --hf 를 따라 네 분기가 같이 줄어든다(직접 재려면 dash_remove/dr_probe 의
+     도움말.needPx). index.html 에 같은 값이 한 벌 더 있다 - 고치면 둘 다 고칠 것. */
+#help .ks{flex:0 0 5em;gap:.3em}
 /* 키캡. 어두운 유리 + 헤어라인 + 컷코너(작은 판이라 4px) */
 /* ★컷코너는 위 「컷코너 한 벌」 표가 --c 로 잡는다(예전에는 이 자리에 4px 을 손으로
    박아 둔 clip-path 가 한 벌 더 있었다 - 빗변 헤어라인을 못 받는 유일한 이유였다). */
@@ -891,15 +896,15 @@ body.uiCleared #bHud{opacity:0;transition:opacity .45s ease}
   background:radial-gradient(ellipse at 50% 50%,rgba(4,10,20,.34) 0%,rgba(0,2,6,.72) 84%)}
 body.uiCleared #uiClearDim{opacity:1}
 
-/* ══ 7) 스킬 슬롯 (X 수면참 · C 횡일섬 · Space 회피 + 잠긴 칸 둘) ══════════════
+/* ══ 7) 스킬 슬롯 (Z 베기 · X 수면참 · C 횡일섬 · Space 점프 + 잠긴 칸 둘) ═══════
    롤 문법 그대로다 - **정사각에 가까운 칸**, 칸 하나가 기술 하나.
    컨셉(parts.png)의 슬롯 구조를 그대로 옮겼다. 위에서 아래로 세 층이다.
      [키캡]      슬롯 **안** 위 가운데. ★13차는 슬롯 밖 아래에 걸려 있어서
                  계기판 높이를 15px 더 먹었다. 안으로 들이면 띠가 그만큼 낮아진다
      [획]        기술을 말하는 획(세로 호 · 가로 호 · 속도선). 시안
      [이름]      슬롯 안 아래
-   ★자리 순서는 **CSS order** 가 정한다. 회피 슬롯은 main.js(mountDashChip)가 나중에
-     붙기 때문에 DOM 순서로는 잠긴 칸 뒤에 선다. order 로 잡아 두면 누가 언제 붙어도
+   ★자리 순서는 **CSS order** 가 정한다. Space 칸(지금은 점프)은 main.js(mountSpaceChip)가
+     나중에 붙기 때문에 DOM 순서로는 잠긴 칸 뒤에 선다. order 로 잡아 두면 누가 언제 붙어도
      열이 안 흐트러진다.
    ★★clip-path 를 걸었으므로 슬롯 **밖으로 나가는 조각을 두면 잘린다.** 키캡을 안으로
      들인 것이 그 때문이기도 하다. 새 조각을 붙일 때 이 규칙을 먼저 볼 것. */
@@ -910,11 +915,12 @@ body.uiCleared #uiClearDim{opacity:1}
 /* ★★17차 비평 2 「신규 유저가 **공격 키를 몰라 두 번 죽었다**」. 16차 계기판에는
      X·C·Space 만 있었다 - 정작 이 게임의 기본기인 **Z 베기**가 화면 어디에도 없었다
      (도움말 판에만 있고 그 판은 8초 뒤 접힌다). 같은 타일 문법으로 맨 왼쪽에 세운다.
-     ★자리 순서는 배우는 순서다 - 베기 → 수면참 → 횡일섬 → 회피 → 잠긴 칸. */
+     ★자리 순서는 배우는 순서다 - 베기 → 수면참 → 횡일섬 → Space(점프) → 잠긴 칸. */
 #uiSkills .sk[data-k="Basic"]{order:0}
 #uiSkills .sk[data-k="Heavy"]{order:1}
 #uiSkills .sk[data-k="Wide"]{order:2}
-#uiSkills .sk[data-k="Dash"]{order:3}
+/* Space 칸. 지금은 점프(Jump), 회피가 돌아오면 Dash - 자리는 같다(main.js 의 스위치 하나) */
+#uiSkills .sk[data-k="Dash"],#uiSkills .sk[data-k="Jump"]{order:3}
 #uiSkills .skLock{order:4}
 /* 칸 한 벌 */
 #uiSkills .sk,#uiSkills .skLock{
@@ -925,8 +931,9 @@ body.uiCleared #uiClearDim{opacity:1}
   overflow:visible;display:block;
   transition:background .16s ease,box-shadow .16s ease,filter .16s ease}
 /* ★17차 비평 6: 회피 칸만 84px 이라 열의 박자가 어긋났다. 넓었던 이유는 「이동+」
-   라는 조건 글자를 캡 옆에 세웠기 때문인데, 그 조건은 도움말 판이 이미 한 줄로
-   말한다(「이동+ Space · 회피」). **칸 폭을 통일하고 조건 글자는 뺀다.** */
+   라는 조건 글자를 캡 옆에 세웠기 때문이다. **칸 폭을 통일하고 조건 글자는 뺀다.**
+   ★★그 뒤 회피 자체가 잠기면서(main.js DASH_ON) 조건이라는 것이 사라졌다 - Space 는
+     이동 중이든 아니든 점프 하나다. 도움말 판의 「이동+」 줄도 같이 걷었다. */
 #uiSkills .skLock{width:34px}
 
 /* 키캡. 슬롯 **안** 위 가운데. 컷코너 작은 판 */
@@ -977,12 +984,26 @@ body.uiCleared #uiClearDim{opacity:1}
   border-bottom:4px solid var(--sk-accent);
   border-radius:0 0 100% 100%/0 0 100% 100%;
   transform:rotate(-4deg)}
-/* 회피 = 획이 아니라 **속도선** 셋. 베는 기술이 아니라는 것을 형태가 먼저 말한다 */
+/* 회피 = 획이 아니라 **속도선** 셋. 베는 기술이 아니라는 것을 형태가 먼저 말한다.
+   ★지금은 안 쓰인다(main.js DASH_ON=false). 회피가 돌아오면 이 칸이 그대로 선다. */
 #uiSkills .sk[data-k="Dash"]::after{
   top:27px;width:26px;height:0;margin-left:-13px;
   border-top:3px solid var(--sk-accent);
   box-shadow:0 6px 0 0 var(--sk-accent),0 -6px 0 0 var(--sk-accent);
   transform:skewX(-20deg) scaleX(.86)}
+/* 점프 = 솟았다 내려오는 **아치** + 발밑 바닥선. 베는 기술이 아니라는 것을 형태가 먼저
+   말하고(획이 아니라 궤적), 바닥선이 「땅에서 떠오른다」를 한 겹 더 말한다.
+   ★횡일섬(납작한 사발)과 위아래로 뒤집힌 꼴이라 폭을 좁혀(30 -> 22) 서로 안 헷갈리게 한다.
+   ★띠 표(키캡 4~19 · 획 20~36 · 이름 40~53) 안에 둘 다 들어간다 - 아치 21~33, 바닥선 34. */
+#uiSkills .sk[data-k="Jump"]::before{content:'';position:absolute;left:50%;z-index:1;
+  top:34px;width:24px;height:0;margin-left:-12px;
+  border-top:2px solid var(--sk-accent);opacity:.45;
+  filter:drop-shadow(0 0 3px rgba(86,216,255,.45));
+  transition:opacity .16s ease}
+#uiSkills .sk[data-k="Jump"]::after{
+  top:21px;width:22px;height:12px;margin-left:-11px;
+  border-top:3px solid var(--sk-accent);
+  border-radius:100% 100% 0 0/100% 100% 0 0}
 /* 이름. 슬롯 안 아래.
    ★★line-height 를 못박는다. normal 로 두면 글자 상자 높이가 서체마다 달라져서
      「획과 안 겹친다」를 분기마다 계산할 수가 없다(13차 QA 가 5px 물림으로 두 번 걸렸다).
@@ -1007,7 +1028,8 @@ body.uiCleared #uiClearDim{opacity:1}
 #uiSkills .sk.off .key{color:rgba(210,232,252,.38);--cut-ink:rgba(150,190,225,.24);
   background:var(--cut-lines),rgba(10,16,28,.9);
   box-shadow:inset 0 0 0 1px rgba(150,190,225,.24)}
-#uiSkills .sk.off[data-k="Basic"]::before{opacity:.14;filter:none}
+#uiSkills .sk.off[data-k="Basic"]::before,
+#uiSkills .sk.off[data-k="Jump"]::before{opacity:.14;filter:none}
 /* 쿨다운 덮개. JS 가 conic-gradient 를 20Hz 로 다시 쓴다(페인트만 도는 일이다).
    ★슬롯이 clip-path 로 잘리므로 여기서는 모서리를 안 잡아도 된다. */
 #uiSkills .sk .cd{position:absolute;inset:0;border-radius:0;z-index:4;
@@ -1169,12 +1191,23 @@ body.uiCleared #uiClearDim{opacity:1}
    ★바깥 그림자(0 2px 6px)는 애초에 clip-path 가 통째로 잘라 먹고 있었다 -
      한 번도 그려진 적이 없는 겹이라 지운다(살리려면 filter 인데, 매 프레임
      transform 이 도는 조각에 filter 를 걸 수는 없다). 흰 테가 그 일을 대신한다. */
-#uiHpFloat .track{--c:3px;--cut-ink:rgba(214,240,255,.72);
+/* ★★★오너 지시(17차): 「내 캐릭터 머리 위에 체력바 테두리 좀 넣어줘」.
+   실측하면 테는 이미 있었는데(위 17차 수리) **한 겹뿐이라 만체력에서 안 읽혔다** -
+   창백한 선(214,240,255) 위아래가 밝은 초록 채움이라 색차가 거의 없었다
+   (채움 (60,230,150) vs 테 (171,237,226) = 밝기 차 10% 미만. hp_full 실측).
+   그래서 **두 겹**으로 간다 - 바깥 1px 은 먹선, 그 안 1px 이 창백한 헤어라인이다:
+     · 먹선은 밝은 지형·밝은 채움 **양쪽**에 대고 윤곽을 세운다(바 밖에서 보는 선)
+     · 창백한 선은 판의 언어를 지킨다(카드 헤어라인. 계기판 타일과 같은 색)
+   ★두 겹의 순서는 box-shadow 목록 순서다 - **먼저 적은 것이 위에 그려진다.**
+     먹선(1px)이 0~1 을, 창백선(2px)이 0~2 를 덮되 0~1 은 먹선에 가려 1~2 만 남는다.
+   ★빗변(모서리 45도)은 --cut-ink 한 색이라 거기서는 창백선 한 겹이다. 3px 짜리
+     모서리라 눈으로는 안 끊겨 보인다(끊겨 보이면 --cw 를 올리는 한 줄이다). */
+#uiHpFloat .track{--c:3px;--cut-ink:rgba(214,240,255,.78);
   position:absolute;inset:0;overflow:hidden;border:0;border-radius:0;
   background:rgba(2,5,11,.92)}
 #uiHpFloat .track::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:2;
   background:var(--cut-lines);
-  box-shadow:inset 0 0 0 1px rgba(214,240,255,.72)}
+  box-shadow:inset 0 0 0 1px rgba(2,5,11,.92),inset 0 0 0 2px rgba(214,240,255,.86)}
 #uiHpFloat .track i{top:0;bottom:0;left:0;border-radius:0}
 /* 잔상. 방금 깎여 나간 만큼이 잠깐 남았다가 따라 줄어든다(폭은 JS 가 매 프레임 쓴다).
    ★채움보다 **뒤에** 깔린다(문서 순서). 그래야 줄어든 구간에서만 보인다. */
@@ -1196,7 +1229,9 @@ body.uiCleared #uiClearDim{opacity:1}
    ★남은 쪽 밝기는 1.2 를 넘기지 않는다. 1.45 로 두니 옅은 쪽 끝이 흰색으로 타서
      초록 바가 통째로 청백색으로 읽혔다(f08 실측 (191,255,255)). 색이 곧 뜻이다. */
 #uiHpFloat.hit .track{--cut-ink:#fff;--cw:1.5px}
-#uiHpFloat.hit .track::after{box-shadow:inset 0 0 0 1.5px #fff}
+/* ★맞은 순간에도 **먹선은 남긴다.** 두 겹 중 안쪽만 흰색으로 태운다(바깥까지 흰색이면
+   밝은 지형 위에서 그 프레임만 윤곽이 사라진다). */
+#uiHpFloat.hit .track::after{box-shadow:inset 0 0 0 1px rgba(2,5,11,.92),inset 0 0 0 2.5px #fff}
 #uiHpFloat.hit .fl{filter:saturate(1.06) brightness(1.2);transition:none}
 #uiHpFloat.hit .gh{background:rgba(255,247,240,.95);transition:none}
 
@@ -1233,6 +1268,9 @@ body.uiCleared #uiClearDim{opacity:1}
   #uiSkills .sk[data-k="Wide"]::after{top:22px;width:26px;height:8px;margin-left:-13px;border-bottom-width:3px}
   #uiSkills .sk[data-k="Dash"]::after{top:25px;width:22px;margin-left:-11px;
     border-top-width:3px;box-shadow:0 5px 0 0 var(--sk-accent),0 -5px 0 0 var(--sk-accent)}
+  #uiSkills .sk[data-k="Jump"]::before{top:31px;width:20px;margin-left:-10px;border-top-width:2px}
+  #uiSkills .sk[data-k="Jump"]::after{top:19px;width:19px;height:10px;margin-left:-9.5px;
+    border-top-width:3px}
   #uiSkills .sk .nm{font-size:10.5px;bottom:5px}
   #uiSkills .sk .cds{font-size:17px;margin-top:-10px;height:20px;line-height:20px}
   #uiSkills .skLock .lk{width:10px;height:8px;margin-left:-5px}
@@ -1262,6 +1300,9 @@ body.uiCleared #uiClearDim{opacity:1}
   #uiSkills .sk[data-k="Wide"]::after{top:21px;width:22px;height:7px;margin-left:-11px;border-bottom-width:3px}
   #uiSkills .sk[data-k="Dash"]::after{top:23px;width:18px;margin-left:-9px;
     border-top-width:3px;box-shadow:0 5px 0 0 var(--sk-accent),0 -5px 0 0 var(--sk-accent)}
+  #uiSkills .sk[data-k="Jump"]::before{top:29px;width:17px;margin-left:-8.5px;border-top-width:2px}
+  #uiSkills .sk[data-k="Jump"]::after{top:17px;width:17px;height:10px;margin-left:-8.5px;
+    border-top-width:3px}
   #uiSkills .sk .nm{font-size:9.5px;bottom:4px}
   #uiSkills .sk .cds{font-size:15px;margin-top:-9px;height:18px;line-height:18px}
   #uiSkills .skLock .lk{width:9px;height:7px;margin-left:-4.5px}
@@ -1292,6 +1333,10 @@ body.uiCleared #uiClearDim{opacity:1}
   #uiSkills .sk[data-k="Wide"]::after{top:20px;height:7px}
   #uiSkills .sk[data-k="Dash"]::after{top:22px;
     box-shadow:0 5px 0 0 var(--sk-accent),0 -5px 0 0 var(--sk-accent)}
+  /* ★이 분기는 이름 위끝이 32.5 다. 아치를 1px 낮추고 바닥선을 1px 올려 다른 칸과
+     같은 여유(2.5px)로 맞춘다 - 한 칸만 더 붙어 있으면 그 칸부터 물린다. */
+  #uiSkills .sk[data-k="Jump"]::before{top:28px}
+  #uiSkills .sk[data-k="Jump"]::after{top:18px;height:9px}
   #eBar{height:18px}
   #stHud{bottom:76px}
   #uiHpFloat{width:68px;height:10px}
@@ -1809,12 +1854,15 @@ export function initUI() {
     paintCd(node, busy && lf ? lf.r : 0, (busy && lf && mine) ? lf.sec : 0);
   }
   // ── 회피 슬롯 ──
-  // ★★이 칸은 **소유가 다르다.** DOM 도 main.js(mountDashChip)가 만들고, 쿨다운 덮개와
+  // ★17차: 회피가 잠긴 동안(main.js DASH_ON=false) 그 자리에는 [data-k="Jump"] 칸이 선다.
+  //   아래 dashNode 는 [data-k="Dash"] 만 찾으므로 **점프 칸은 이 블록이 아예 안 건드린다**
+  //   (점프는 쿨이 없어서 덮개도 남은 초도 없는 게 참말이다 - 베기 칸과 같은 규칙).
+  // ★★이 칸은 **소유가 다르다.** DOM 도 main.js(mountSpaceChip)가 만들고, 쿨다운 덮개와
   //   rdy/off 도 main.js 가 **매 프레임** 직접 쓴다(main.js 의 「대시 칩」 블록).
   //   그래서 여기서 같은 것을 또 쓰면 60Hz 와 20Hz 가 서로 다른 색을 번갈아 칠한다
   //   (첫 판에서 실제로 두 색이 깜빡였다 - 라디얼 색이 내 값이 아니라 main.js 값으로
   //   찍혀 나오는 것을 보고 잡았다).
-  //   ★그래서 이 파일이 이 칸에 더하는 것은 **남은 초 글자 한 칸뿐**이다.
+  //   ★그래서 이 파일이 그 칸(회피)에 더하는 것은 **남은 초 글자 한 칸뿐**이다.
   //     덮개 색도 main.js 와 같은 값을 쓴다(아래 CD_INK) - 안 그러면 X·C 와 Space 의
   //     쿨다운이 서로 다른 색으로 보인다.
   let skDash = null;
@@ -2555,7 +2603,8 @@ export function initUI() {
                      return [Math.round(r.width), Math.round(r.height)]; })(),
                  } : null;
                  return { Z: one(skBasic), X: one(skHeavy), C: one(skWide),
-                          Space: one(skills.querySelector('[data-k="Dash"]')),
+                          // Space 칸은 회피(Dash)일 수도 점프(Jump)일 수도 있다(main.js 스위치)
+                          Space: one(skills.querySelector('[data-k="Dash"],[data-k="Jump"]')),
                           lock: skills.querySelectorAll('.skLock').length,
                           // 남은 초가 **몇 칸에** 떠 있는가(17차: 둘이면 거짓말이다)
                           secShown: Array.from(skills.querySelectorAll('.cds'))
