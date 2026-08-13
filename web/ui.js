@@ -826,11 +826,15 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
                   inset 0 0 70px 8px rgba(24,120,70,.30)}
 #stVig.loud{box-shadow:inset 0 0 190px 62px rgba(10,5,0,.74),
                        inset 0 0 70px 8px rgba(150,96,16,.34)}
-/* 콤보 숫자(평타 「1타」). ★transform 은 main.js 가 inline 으로 쓴다(여기서 절대 잡지 말 것) */
+/* #combo 판 자체. ★18차부터 여기 실리는 것은 **기술 이름 콜아웃 하나뿐**이다 -
+   평타 「1타」·「2타」 는 main.js 의 COMBO_UI_ON=false 로 꺼졌다(오너 지시).
+   ★transform 은 main.js 가 inline 으로 쓴다(여기서 절대 잡지 말 것) */
 #combo{font-weight:800;color:#eaf6ff;letter-spacing:.02em;
   font-variant-numeric:tabular-nums;
   text-shadow:0 0 18px rgba(86,216,255,.55),0 2px 6px rgba(0,0,0,.7)}
-/* 누적 명중 수. 한 번에 여럿을 벤 그 사실만 조용히 알리는 자리라 크기를 확 낮춘다 */
+/* 누적 명중 수(「명중 5」). ★18차 이후 이 <i> 는 화면에 안 뜬다 - main.js 가 안 만든다.
+   그래도 **지우지 않는다.** COMBO_UI_ON 을 true 로 되돌리면 그 순간 다시 필요한
+   옷이라, 여기를 지우면 스위치가 "한 글자도 안 다르게 복원"을 못 지킨다. */
 #combo i{font-style:normal;font-weight:700;
   font-size:.32em;letter-spacing:.04em;color:var(--ui-dim);margin-left:.55em;
   vertical-align:middle;text-shadow:none}
@@ -1170,7 +1174,8 @@ body.uiCleared #uiClearDim{opacity:1}
 /* 型 번호. 카드를 설명하는 작은 말이라 한 단 물린다 */
 #combo .uiCall .ty{display:block;font-size:10.5px;font-weight:700;letter-spacing:.14em;
   padding-left:.14em;color:var(--ui-dim);margin-top:5px;text-shadow:none;-webkit-text-stroke:0}
-/* 누적 명중 수는 판 **밖**에 그대로 남는다(main.js 가 붙이는 <i> 와 같은 자리) */
+/* 누적 명중 수는 판 **밖**에 그대로 남는다(main.js 가 붙이는 <i> 와 같은 자리).
+   ★18차 이후로는 안 붙는다(위 #combo i 주석 참고). 스위치 복원용으로 남겨 둔다. */
 #combo .uiCall + i{vertical-align:middle}
 
 /* ── 11) 머리 위 체력바 (오너 지시: 「체력바는 캐릭터 머리 위로, 롤처럼」) ──────
@@ -2327,7 +2332,9 @@ export function initUI() {
   //   같은 창을 영원히 다시 씌우는 무한 루프가 된다.
   //   **내가 마지막으로 써 넣은 innerHTML 을 그대로 기억해 두고 비교한다.** 서명이
   //   같으면 그건 내 글씨이므로 아무것도 안 한다 - 어떤 순서로 배달돼도 안 돈다.
-  // ★평타 「1타」·「3타」 는 안 건드린다. 표에 있는 이름으로 시작할 때만 씌운다.
+  // ★표에 있는 이름으로 시작할 때만 씌운다. (평타 「1타」·「3타」 는 원래 표에 없어서
+  //   안 씌워졌고, 18차부터는 main.js 가 아예 안 쓴다 - COMBO_UI_ON=false. 그래서
+  //   이제 #combo 에 글자를 넣는 쪽은 showSkill 하나뿐이다.)
   const comboEl = document.getElementById('combo');
   let comboSig = '';
   function skillOf(t) {
