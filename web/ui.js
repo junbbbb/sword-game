@@ -53,14 +53,14 @@
 // ★예외가 딱 하나 있다: **나침반 글리프(鬼·符·門)**. 그건 표기가 아니라 아이콘이다
 //   (한 글자가 목표 종류를 말한다). 정보로서 잘 작동해 온 자산이라 그대로 둔다.
 const FLOOR = {
-  head: '알림',                     // 창 머리
+  head: '던전 진입',                // 창 머리
   no: '탑 1층',                     // 큰 글자
   name: '풀에 덮인 절터',           // 층 이름
-  lore: '해를 삼킨 탑, 그 첫걸음.', // 아래 한 줄
+  lore: '생존 조건이 갱신되었습니다.', // 아래 한 줄
 };
 
 const BOSS_CARD = {
-  head: '경고',                     // 창 머리(붉은 변주)
+  head: '위험 감지',                // 창 머리(붉은 변주)
   tag: '탑 1층 · 수문장',           // 윗줄(작게)
   name: '각귀',                     // 큰 글자
 };
@@ -69,17 +69,17 @@ const DEATH = {
   // ★17차: 보스 경고창도 '경고'였다. 같은 말이 두 창의 머리에 걸리면 머리말이
   //   창을 구별하는 일을 못 한다(비평 7). 사망 쪽을 상태 낱말로 내린다 -
   //   '경고'는 앞으로 다가올 일이고, 이건 이미 일어난 일이다.
-  head: '쓰러짐',                   // 창 머리(붉은 변주)
-  glyph: '落',                      // 한 글자. ★도장 노릇이라 남긴다(정보 설계 유지)
+  head: '생존 실패',                // 창 머리(붉은 변주)
+  glyph: '敗',                      // 한 글자 도장
   line: '다시 일어선다',            // 카운트 뒤에 붙는 말 ("3초 뒤 다시 일어선다")
   soon: '곧 다시 일어선다',         // 남은 시간이 1초 밑일 때
 };
 
 // 결과창(클리어). ★패널 DOM 은 boss.js 것이라 못 바꾼다. 머리 낱말만 여기서 얹는다.
-const CLEAR_HEAD = '결과';
+const CLEAR_HEAD = '층 돌파';
 
 // 기술 콜아웃 창 머리.
-const SKILL_HEAD = '스킬';
+const SKILL_HEAD = '각성 기술';
 
 // 한자 나침반 판이 처음 뜰 때 딱 한 번 밑에 붙는 작은 말.
 // ★두 번째부터는 안 붙는다. 한 번 배우면 글자만으로 읽힌다.
@@ -221,6 +221,12 @@ const CSS = `
   --ui-red:#ff5a4a;
   /* 뜻이 걸린 색. 스킨이 바뀌어도 이 뜻은 안 바뀐다 */
   --ui-green:#3ddc84;
+  /* 완성된 게이지 색도 토큰이다. 머리 위 바와 하단 바가 같은 테마 값을 쓴다. */
+  --ui-hp-high-fill:linear-gradient(180deg,#4bd193,#1fa96c 44%,#0d7248);
+  --ui-hp-mid-fill:linear-gradient(180deg,#eccb55,#c9991f 44%,#7f5a0c);
+  --ui-hp-low-fill:linear-gradient(180deg,#f97f66,#dc4330 44%,#84190f);
+  --ui-hp-ghost-fill:rgba(255,120,92,.60);
+  --ui-exp-fill:linear-gradient(90deg,#a06a12,#ffbb3d);
   --rb-token:#ffbb3d;   /* 증표 */
   --rb-ok:#3ddc84;      /* 은신 */
   /* 그림자 한 겹. 입체 오프셋(0 4px 0 …)은 이 벌에 하나도 없다 */
@@ -722,9 +728,9 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
   background:linear-gradient(180deg,rgba(9,15,29,.96),rgba(3,6,14,.96))}
 #eFill{position:relative;filter:none;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(0,0,0,.30)}
-#eBar.hpHi  #eFill{background:linear-gradient(180deg,#4bd193,#1fa96c 44%,#0d7248)!important}
-#eBar.hpMid #eFill{background:linear-gradient(180deg,#eccb55,#c9991f 44%,#7f5a0c)!important}
-#eBar.hpLo  #eFill{background:linear-gradient(180deg,#f97f66,#dc4330 44%,#84190f)!important}
+#eBar.hpHi  #eFill{background:var(--ui-hp-high-fill)!important}
+#eBar.hpMid #eFill{background:var(--ui-hp-mid-fill)!important}
+#eBar.hpLo  #eFill{background:var(--ui-hp-low-fill)!important}
 /* 채움의 앞머리. 「여기까지 차 있다」를 발광 한 줄이 말한다(둥근 캡 금지 규칙과 짝) */
 #eFill::after{content:'';position:absolute;top:0;bottom:0;right:0;width:5px;
   pointer-events:none;
@@ -790,7 +796,7 @@ body.uiHelpOff #uiHelpChip{opacity:1;pointer-events:auto}
   box-shadow:inset 0 0 0 1px rgba(255,200,110,.28)}
 #uiDock .dkExp i{position:absolute;left:0;top:0;bottom:0;right:0;display:block;
   transform:scaleX(0);transform-origin:0 50%;border-radius:0;
-  background:linear-gradient(90deg,#a06a12,var(--ui-gold));
+  background:var(--ui-exp-fill);
   box-shadow:0 0 10px rgba(255,187,61,.6);
   transition:transform .3s cubic-bezier(.22,.8,.3,1)}
 
@@ -1179,6 +1185,12 @@ body.uiCleared #uiClearDim{opacity:1}
    ★18차 이후로는 안 붙는다(위 #combo i 주석 참고). 스위치 복원용으로 남겨 둔다. */
 #combo .uiCall + i{vertical-align:middle}
 
+/* 레벨업은 게임 수치를 바꾸지 않는 표시 전용 피드백이다. 세부 외형은 선택된
+   테마 파일이 맡고, 여기서는 다른 테마에서도 화면을 막지 않도록 뼈대만 둔다. */
+#uiLevelUp{position:fixed;left:50%;top:39%;z-index:9;pointer-events:none;user-select:none;
+  opacity:0;transform:translate(-50%,-50%) scale(.94);visibility:hidden}
+#uiLevelUp.on{opacity:1;visibility:visible}
+
 /* ── 11) 머리 위 체력바 (오너 지시: 「체력바는 캐릭터 머리 위로, 롤처럼」) ──────
    롤 문법 그대로다. 캐릭터 머리 위에 **월드를 따라다니는** 작은 트랙 하나.
    ★아래 계기판의 체력 줄·숫자는 **그대로 둔다.** 롤도 머리 위 바와 하단 HUD 를
@@ -1217,7 +1229,7 @@ body.uiCleared #uiClearDim{opacity:1}
 #uiHpFloat .track i{top:0;bottom:0;left:0;border-radius:0}
 /* 잔상. 방금 깎여 나간 만큼이 잠깐 남았다가 따라 줄어든다(폭은 JS 가 매 프레임 쓴다).
    ★채움보다 **뒤에** 깔린다(문서 순서). 그래야 줄어든 구간에서만 보인다. */
-#uiHpFloat .gh{background:rgba(255,120,92,.60);transition:background .2s ease}
+#uiHpFloat .gh{background:var(--ui-hp-ghost-fill);transition:background .2s ease}
 /* 채움. 색(초록/노랑/빨강)은 enemy.js 의 규칙을 그대로 쓴다 - 뜻이 걸린 색이라 안 바꾼다 */
 #uiHpFloat .fl{filter:saturate(1.06);transition:filter .2s ease}
 /* 레벨 뱃지. 같은 transform 노드 안에서 트랙 왼쪽에 붙는다 */
@@ -1505,7 +1517,32 @@ export function initUI() {
   const pipCap = pip.querySelector('.cap');
   pipCap.textContent = PIP_HINT;
 
-  document.body.append(bg, title, banner, death, chip, dim, nav, pip);
+  // 표시 전용 각성 피드백. 처치 5회마다 오르는 기존 HUD 레벨을 크게 한 번 읽어 준다.
+  const levelUp = el('div', 'uiLevelUp');
+  levelUp.innerHTML = '<i class="sigil"></i><span class="eyebrow">각성</span>'
+    + '<strong>LEVEL UP</strong><span class="level">LEVEL 1</span>';
+  const levelUpValue = levelUp.querySelector('.level');
+
+  document.body.append(bg, title, banner, death, chip, dim, nav, pip, levelUp);
+
+  let levelUpTimer = 0;
+  function showLevelUp(level) {
+    // 입장·경고·사망·결과처럼 화면을 소유하는 카드가 우선이다.
+    // 같은 틱에 처치 수와 클리어 상태가 함께 바뀌어도 각성 문구를 겹치지 않는다.
+    if (document.body.matches('.uiTitleOn,.uiBossIn,.uiCine,.uiDeathOn,.uiCleared')) return;
+    clearTimeout(levelUpTimer);
+    levelUpValue.textContent = 'LEVEL ' + level;
+    levelUp.classList.remove('on');
+    void levelUp.offsetWidth;
+    levelUp.classList.add('on');
+    levelUpTimer = setTimeout(() => levelUp.classList.remove('on'), 1900);
+  }
+
+  function hideLevelUp() {
+    clearTimeout(levelUpTimer);
+    levelUpTimer = 0;
+    levelUp.classList.remove('on');
+  }
 
   // -------------------------------------------------------------------------
   // 계기판 도킹 (16차: 세 층 쌓기 -> **화면 하단 전폭 가로 띠 한 줄**)
@@ -1620,6 +1657,7 @@ export function initUI() {
 
   let titleTimer = 0;
   function showTitle(short) {
+    hideLevelUp();
     clearTimeout(titleTimer);
     // 애니를 다시 틀려면 클래스를 뺐다가 **레이아웃을 한 번 강제로 계산한 뒤** 붙여야 한다.
     // 같은 프레임에 뺐다 붙이면 브라우저가 변화를 못 보고 그냥 넘어간다.
@@ -1670,6 +1708,7 @@ export function initUI() {
   let bannerTimer = 0;
   let bannerDone = false;
   function showBanner() {
+    hideLevelUp();
     bannerDone = true;
     clearTimeout(bannerTimer);
     banner.classList.remove('on');
@@ -1696,6 +1735,7 @@ export function initUI() {
   let cineTimer = 0;
   let bossDeadSeen = false;
   function startCine(ms) {
+    hideLevelUp();
     clearTimeout(cineTimer);
     document.body.classList.add('uiCine');
     cineTimer = setTimeout(() => document.body.classList.remove('uiCine'), ms);
@@ -1720,6 +1760,7 @@ export function initUI() {
   let deathHold = 0;                 // 이 시각까지는 리스폰해도 창을 안 내린다
   const DEATH_MIN = 2000;
   function showDeath() {
+    hideLevelUp();
     deadAt = performance.now();
     deathHold = deadAt + DEATH_MIN;
     death.classList.add('on');
@@ -2258,10 +2299,12 @@ export function initUI() {
     const kills = Math.max(0, Number(en.kills) || 0);
     const level = 1 + Math.floor(kills / 5);
     if (level !== hpLevelSeen) {
+      const previousLevel = hpLevelSeen;
       hpLevelSeen = level;
       hpLevel.textContent = String(level);
       // 16차: 같은 수를 계기판 왼쪽 뱃지에도 쓴다(머리 위 뱃지와 **같은 값**이다).
       lvBadge.textContent = String(level);
+      if (previousLevel > 0 && level > previousLevel) showLevelUp(level);
     }
     // 성장 띠. **머리 위 뱃지와 같은 셈**을 그림으로 편 것뿐이다(새 정보가 아니다).
     // 이게 없으면 뱃지가 5마리째에 갑자기 바뀌는 것처럼 보인다.
@@ -2398,9 +2441,9 @@ export function initUI() {
   const HP_HOLD = 0.14;          // 맞고 나서 잔상이 버티는 시간(초)
   const HP_FLASH = 180;          // 맞은 순간 밝아지는 시간(ms)
   // ★색은 enemy.js 의 규칙을 그대로 옮긴 것이다. 뜻이 걸린 색이라 여기서 안 바꾼다.
-  const HP_INK = ['linear-gradient(90deg,#e04a2e,#f08f7f)',    // 25% 이하
-                  'linear-gradient(90deg,#e0c22e,#f0e07f)',    // 50% 이하
-                  'linear-gradient(90deg,#2ee08a,#7ff0c0)'];   // 그 위
+  const HP_INK = ['var(--ui-hp-low-fill)',     // 25% 이하
+                  'var(--ui-hp-mid-fill)',     // 50% 이하
+                  'var(--ui-hp-high-fill)'];   // 그 위
 
   let fltModel = null, fltH = 0;                 // 지금 몸 · 그 키(m)
   function playerH() {
@@ -2522,6 +2565,7 @@ export function initUI() {
       // 결과창이 뜨면 등장 클래스를 얹는다(opacity 는 boss.js 것이라 안 건드린다)
       const clearEl = document.getElementById('bClear');
       const cleared = !!boss.cleared;
+      if (cleared && !document.body.classList.contains('uiCleared')) hideLevelUp();
       if (clearEl) {
         clearEl.classList.toggle('uiIn', cleared);
         // ★예전에는 .hint 한 줄만 갈아 끼웠다. 그래서 표 안의 「남쪽 문으로 반출」이
@@ -2584,7 +2628,7 @@ export function initUI() {
   // -------------------------------------------------------------------------
   // 검증용 창구. 보스 앞까지 걸어가지 않고도 경고창·알림창을 화면에 세울 수 있어야 한다.
   const api = {
-    showTitle, showBanner, toggleHelp,
+    showTitle, showBanner, showLevelUp, toggleHelp,
     setHelp,
     get state() {
       return { helpOff, bannerDone, dead: wasDead, floor: FLOOR.name,
@@ -2638,6 +2682,8 @@ export function initUI() {
                cine: document.body.classList.contains('uiCine'),
                bossIn: document.body.classList.contains('uiBossIn'),
                titleOn: document.body.classList.contains('uiTitleOn'),
+               levelUp: { on: levelUp.classList.contains('on'),
+                          value: levelUpValue.textContent },
                // 기술 이름 콜아웃: 시스템 팝이 씌워졌는가 · 무슨 型 인가(판정 S14)
                callout: (() => {
                  const c = comboEl && comboEl.querySelector('.uiCall');
