@@ -58,6 +58,11 @@ RENAME = [
 ]
 
 UP_R, UP_L = "Bip001 R UpperArm", "Bip001 L UpperArm"
+# ★18차 신설. 17-점프왼팔 함정 1 의 걷기판: **"얼마나 벌어졌나"를 손목으로 재면 틀린다.**
+#   팔꿈치를 굽히면 손목은 어깨->팔꿈치 선에서 벗어나므로, 손목 기준 벌림(abd)과
+#   위팔 벌림(uabd)이 갈린다. 오너가 보는 것은 **위팔**이다(겨드랑이가 벌어진 그림).
+#   그래서 어깨->팔꿈치로 재는 표를 따로 찍는다. 옛 표는 한 글자도 안 건드렸다.
+ELB_R, ELB_L = "Bip001 R Forearm", "Bip001 L Forearm"
 HAND_R, HAND_L = "Bip001 R Hand", "Bip001 L Hand"
 TORSO, NECK = "Bip001 Spine", "Bip001 Neck"
 CLAV_L, CLAV_R = "Bip001 L Clavicle", "Bip001 R Clavicle"
@@ -209,16 +214,26 @@ for nm in CLIPS:
         # 접지: 이 프레임 가장 낮은 발 본 (게임 groundFeet 근사)
         foot = min(pw(b)[0].z for b in FEET if B(b) in arm.pose.bones)
         row["foot"] = foot
-        for side, ub, hb in (("R", UP_R, HAND_R), ("L", UP_L, HAND_L)):
+        for side, ub, eb, hb in (("R", UP_R, ELB_R, HAND_R),
+                                 ("L", UP_L, ELB_L, HAND_L)):
             S = pw(ub)[0]
             W = pw(hb)[0]
             d = Ci @ (W - S)
             dn = -d.y                             # 아래 성분
             fwd = d.z                             # 앞 성분
             out = (-d.x if side == "R" else d.x)  # 몸 바깥
+            # ★18차: 같은 잣대를 **어깨->팔꿈치**에도 댄다(위팔 벌림 uabd·위팔 스윙 usw).
+            E = pw(eb)[0]
+            e = Ci @ (E - S)
+            edn = -e.y
+            eout = (-e.x if side == "R" else e.x)
+            flex = math.degrees((E - S).angle(W - E)) if (W - E).length > 1e-9 else 0.0
             row[side] = dict(
                 swing=math.degrees(math.atan2(fwd, dn)),
                 abd=math.degrees(math.atan2(out, dn)),
+                usw=math.degrees(math.atan2(e.z, edn)),
+                uabd=math.degrees(math.atan2(eout, edn)),
+                flex=flex,                        # 팔꿈치 굽힘(0=곧게 편 팔)
                 hx=out * K, hy=d.y * K, hz=fwd * K,
                 hw=W.z,                           # 손목 월드 z(블렌더 단위)
             )
@@ -246,6 +261,16 @@ for nm in CLIPS:
               % (nm, "오른" if side == "R" else "왼", fmax, bmax, mid, amp,
                  sab[len(sab) // 2], max(ab, key=abs),
                  ("%.2f" % (fmax / -bmax)) if bmax < -0.01 else "-"))
+    # ★18차 신설 표: **위팔**(어깨->팔꿈치) 기준. 오너가 보는 벌림은 이쪽이다.
+    for side in ("R", "L"):
+        ua = [r[side]["uabd"] for r in rows]
+        us = [r[side]["usw"] for r in rows]
+        fx = [r[side]["flex"] for r in rows]
+        sua = sorted(ua)
+        print("        [위팔] %-4s 벌림 중앙 %+6.1f (%+.1f~%+.1f) · 스윙 %+6.1f~%+6.1f"
+              " · 팔꿈치굽힘 %5.1f~%5.1f도"
+              % ("오른" if side == "R" else "왼", sua[len(sua) // 2], min(ua), max(ua),
+                 min(us), max(us), min(fx), max(fx)))
     if TIPLOC:
         # ★s27 measure 와 같은 잣대: (칼최저 - 발본) * 환산 + 1.75*0.045
         cl = [(r["tip"] - ground) * K + GAME_H * SOLE for r in rows]

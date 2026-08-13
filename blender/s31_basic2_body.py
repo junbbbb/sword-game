@@ -11,7 +11,11 @@
 2026-08-12 14-베기수정에서도 손대기 전에 committed md5 d7bb257c… 를 여섯 줄로
 재현해 확인했다 — 그 다음에야 2번 줄의 ANIM_SPEC 을 고쳤다. 새 md5 cc7a26dd…
 2026-08-13 15-모션수제에서도 손대기 전에 committed md5 cc7a26dd… 를 여섯 줄로
-재현해 확인했다 — 그 다음에야 2번 줄을 HAND 로 갈았다.)
+재현해 확인했다 — 그 다음에야 2번 줄을 HAND 로 갈았다.
+2026-08-13 18차(걷기 팔꿈치·검도 X·Idle 칼 세우기)에서도 손대기 전에
+committed md5 fc74fee3 을 여섯 줄로 재현해 확인했다. 새 md5 **fa19aa9d**.
+★그 판을 다시 뽑는 스위치는 세 개다:
+    KENDO_X=0 ELB_R=0 LIFT_TABLE= TIP_TABLE= WRIST_WIDE=0 SWING_R_REF=hand IDLE_GUARD=0)
 ★★6번(s34)을 빼먹으면 1번 칼이 옛 카타나로 남아 md5 가 안 맞는다. 여기 다섯 줄만
   적혀 있어서 실제로 한 번 헛돌았다. 6번은 blender/s34_sword1_swap.py 헤더에 있다.
 
@@ -44,6 +48,13 @@
     #        ANIM_SPEC="Attack=left_slash:14-16@0.5+left_slash:16-22@1.0+left_slash:22-23@0.16+left_slash:23-30@1.30+left_slash:30-37@0.55+left_slash:37-46@1.25+left_slash:46-47@0.25;Heavy=sword_slash:6-11@0.75+sword_slash:11-17.5@1.35+sword_slash:17.5-20.2@0.55+sword_slash:20.2-20.35@0.04;Wide=sword_slash:14.5-16@0.20+sword_slash:16-21@0.75+sword_slash:21-21.4@0.08"
     #      오너가 두 번 다 "안 고쳐짐" 으로 기각했다. 소스가 한 손 과장 연기라
     #      **자르는 일로는 끝이 없다**는 것이 두 번의 결론이다.
+    #    ★★2026-08-13 18차 두 건이 **기본값으로** 켜져 있다(둘 다 스위치 한 줄로 되돌린다):
+    #      KENDO_X=1    X(Heavy) 를 **검도 정면베기**로 새로 짰다(오너 "위에서 아래로 딱
+    #                   써는 모션 새로. 기존꺼 그냥 잊고"). 대본은 s24 의 HAND_SPEC_KENDO.
+    #                   KENDO_X=0 이면 16차 Heavy 대본이 그대로 굽힌다
+    #      IDLE_GUARD=1 서 있을 때 **칼을 세운다**(오너 "칼각도 너무 눞혀져있다").
+    #                   IDLE_E=70 IDLE_AZ=35 가 기본. 손목에만 회전을 먹이므로 팔은
+    #                   한 도도 안 움직인다. IDLE_GUARD=0 이면 옛 Idle 그대로
     SRC_GLB=web/slayer.glb DST_GLB=web/basic2_body.glb OUT_GLB=web/basic2_moves.glb \
       DST_SWORD=SW_baekah.001 SWORD_FIT=0 GRIP_K=1.0 KEEP_ORIG=1 \
       HAND=Attack,Heavy,Wide \
@@ -62,9 +73,24 @@
     #                       칼 방향호는 한 도도 안 변한다
     #        SWING_L=-2 + GF/GB  왼팔은 앞 이득 0.80 / 뒤 이득 0.58 (걷기만)
     #        TIP_FLAT=0.02  손목 보정 후보를 고를 때 칼끝 고도 **진폭**도 본다
+    #    ★★2026-08-13 18차 오너 지시 **"걸을때 칼든손 왜이렇게 벌리고 걸음?"** 으로
+    #      아래 다섯 손잡이가 붙었다(전부 걷기만. 달리기는 한 도도 안 변한다).
+    #      13-걷기팔이 "ARM_LIFT 를 줄이는 대신 팔꿈치를 굽히는 손잡이"라고 처방까지
+    #      적어 두고 못 만든 그 채널이다. 다섯을 다 빼면 15차 판이 그대로 나온다.
+    #        ELB_R=70 ELB_DIR=-20   팔꿈치를 70도 더 굽힌다(방향 0=앞 / 음수=앞바깥.
+    #                       안쪽으로 굽히면 칼이 허벅지를 파고든다 — 실측 관통 0.055)
+    #        LIFT_TABLE=Walk:-10    걷기만 벌림을 28 -> -10 도로(위팔 외전 56 -> 19도)
+    #        TIP_TABLE=Walk:-24     달리기 목표(-24)와 같은 값을 걷기에도 명시
+    #        WRIST_WIDE=Walk        손목 보정 후보를 **구면 균등**으로 넓힌다
+    #                       (팔꿈치가 칼 방향 다발을 기울여서 옛 3축 격자에는 답이 없다)
+    #        SWING_R_REF=elbow SWING_R_REF_CLIPS=Walk
+    #                       오른팔 스윙을 **위팔**로 잰다(손목으로 재면 팔꿈치를 굽힌
+    #                       만큼 위팔이 뒤로 밀려 노 젓는 자세가 된다 — 실측 -53도)
     DST_GLB=web/basic2_moves.glb OUT_GLB=web/basic2.glb CLIPS=Walk,Run \
       SW_NAME=SW_nokseun TIP_K=1.7806 TIP_ELEV=-24 TIP_FLAT=0.02 \
       LIFT_MODE=abd ARM_LIFT=28 \
+      ELB_R=70 ELB_DIR=-20 ELB_CLIPS=Walk LIFT_TABLE=Walk:-10 TIP_TABLE=Walk:-24 \
+      WRIST_WIDE=Walk SWING_R_REF=elbow SWING_R_REF_CLIPS=Walk \
       SWING_R=2 SWING_L=-2 SWING_GF=0.80 SWING_GB=0.58 SWING_L_CLIPS=Walk \
       NAT_DIR=incoming/meshy4/Meshy_AI_game_character_8k_biped \
       NAT_STEM=Meshy_AI_game_character_8k_biped \

@@ -218,6 +218,33 @@ LIFT_CLIPS = [c.strip() for c in os.environ.get(
 DAMP_BONES = ["Bip001 R Clavicle", "Bip001 R UpperArm",
               "Bip001 R Forearm", "Bip001 R Hand"]
 
+# ★2026-08-13 18차 오너 지시: **"걸을때 칼든손 왜이렇게 벌리고 걸음?"**
+#   13-걷기팔이 남긴 그대로다 — 그 판은 팔을 뒤로 안 빼는 대신 **옆으로** 벌어야
+#   손목 높이를 벌 수 있었다(ARM_LIFT=28 이 순수 벌림이다). 그때 적어 둔 처방이
+#   "ARM_LIFT 를 줄이는 대신 팔꿈치를 굽히는 손잡이(지금 없다)" 였고, 이번에 만든다.
+#   ARM_LIFT 만 줄이면 칼끝이 그만큼 내려간다(28->20 에서 여유 +0.150 -> +0.035).
+#     ELB_R      오른 팔꿈치를 몇 도 더 굽히나(0 = 옛 판 재현). 팔뚝·손·칼이 함께 돈다
+#     ELB_DIR    굽는 방향(도). 0 = 손이 **앞으로**(시상면 굴곡) · +90 = 손이 **안쪽으로**
+#                ★★이 각이 이 작업의 전부다. 칼은 손의 강체 자식이라 팔꿈치를 굽히면
+#                  **칼도 같은 회전을 먹는다.** 그런데 걷기의 칼은 거의 정면(앞)을
+#                  겨누고 있어서, 굽히는 축이 '가슴 앞축'에 가까울수록(ELB_DIR=90)
+#                  칼은 자기 축 둘레로 돌 뿐 **방향이 거의 안 변한다.**
+#                  ELB_DIR=0(앞으로 굽힘)으로 크게 굽히면 칼끝 고도가 굽힌 만큼 올라가
+#                  손목 보정이 그 각을 통째로 되갚아야 한다(손목이 꺾인다).
+#     ELB_CLIPS  굽힘을 걸 클립(기본 = CLIPS). 달리기는 이미 75~88도 굽어 있다
+ELB_R = float(os.environ.get("ELB_R", "0"))
+ELB_DIR = float(os.environ.get("ELB_DIR", "60"))
+ELB_CLIPS = [c.strip() for c in os.environ.get(
+    "ELB_CLIPS", ",".join(CLIPS)).split(",") if c.strip()]
+# 클립별 ARM_LIFT 덮어쓰기 "Walk:6,Run:28". 빈 값이면 전 클립 ARM_LIFT.
+#   ★달리기는 한 도도 안 건드려야 해서(오너 지시 범위는 걷기) 표로 갈랐다.
+LIFT_TABLE = {}
+for _row in os.environ.get("LIFT_TABLE", "").split(","):
+    _row = _row.strip()
+    if _row:
+        _k, _v = _row.split(":")
+        LIFT_TABLE[_k.strip()] = float(_v)
+
 # ★팔 스윙 자연화 (2026-08-12 오너 지시). 아래 [팔 스윙] 절 참조.
 #   빈 값이면 그 팔을 안 건드린다(옛 판 재현 스위치).
 SWING_R = os.environ.get("SWING_R", "").strip()      # 오른팔 목표 중립 스윙각(도)
@@ -227,6 +254,14 @@ SWING_GB = float(os.environ.get("SWING_GB", "1.0"))  # 왼팔 뒤 스윙 이득
 SWING_H = float(os.environ.get("SWING_H", "12"))     # 두 이득이 갈리는 폭(도)
 SWING_R_CLIPS = [c.strip() for c in os.environ.get(
     "SWING_R_CLIPS", ",".join(CLIPS)).split(",") if c.strip()]
+# ★18차: 오른팔 스윙을 **무엇으로 재나**. 기본 hand(옛 판) / elbow(위팔로 잰다).
+#   ★17-점프왼팔 함정 1 의 걷기판이다. 팔꿈치를 굽히면 손목은 어깨->팔꿈치 선에서
+#     벗어나므로, 손목을 목표에 맞추면 **위팔이 그만큼 뒤로 밀린다**(실측: 팔꿈치를
+#     82도 굽히고 손목 중립을 +2 로 맞췄더니 위팔이 뒤로 30~53도 = 노 젓는 자세).
+#     팔이 앞뒤로 어디 있나는 사람 눈에 **위팔**로 보인다. 그래서 기준을 고를 수 있게 했다.
+SWING_R_REF = os.environ.get("SWING_R_REF", "hand").strip().lower()
+SWING_R_REF_CLIPS = [c.strip() for c in os.environ.get(
+    "SWING_R_REF_CLIPS", ",".join(CLIPS)).split(",") if c.strip()]
 SWING_L_CLIPS = [c.strip() for c in os.environ.get(
     "SWING_L_CLIPS", ",".join(CLIPS)).split(",") if c.strip()]
 
@@ -905,16 +940,126 @@ def lift_arm(act, deg):
     return n, ax.normalized()
 
 
-if ARM_LIFT:
-    print("\n[오른팔 들기] %+.1f 도 (어깨에서. 손·칼은 강체로 따라온다) 축=%s"
-          % (ARM_LIFT, LIFT_MODE))
+# ------------------------------------------------------------- 팔꿈치 굽힘(18차)
+# ★2026-08-13 오너 지시 "걸을때 칼든손 왜이렇게 벌리고 걸음?"
+#   실측(probe_armswing, committed fc74fee3): 걷기 오른팔은 **위팔 외전 56.3도**에
+#   **팔꿈치 굽힘 10~15도** = 벌린 채 곧게 편 팔이다. 왼팔(=이 리그의 자연 보행)은
+#   위팔 외전 23.3도다. 그 33도를 어디서 갚느냐가 이 절이다.
+#     손목 높이 = 어깨높이 - |어깨->손목| x cos(팔각).  |어깨->손목| 0.614m 이라
+#     외전을 56 -> 21 도로 내리면 손목이 **0.217m** 내려간다(칼끝도 같이 내려간다).
+#   팔꿈치를 굽히면 손목이 어깨 쪽으로 당겨져 그 높이를 되번다. 벌림과 달리
+#   **몸 옆으로 벌어지는 그림이 아니다** — 그래서 오너 지적이 사라진다.
+FORE_R = "Bip001 R Forearm"
+
+
+def arm_report(act, label):
+    """굽는 자리에서 **실제로 나온** 오른팔 각을 찍는다(목표가 아니라 결과).
+
+    ★probe_armswing.py 와 **같은 잣대**다: 가슴 좌표계, 0=수직 아래.
+      위팔 벌림 = 어깨->**팔꿈치**  (17-점프왼팔 함정 1: 손목으로 재면 틀린다)
+      손목 벌림 = 어깨->손목        (13-걷기팔이 40.6->50.7 로 적은 그 값)
+    """
+    use(armK, act)
+    lat, up, fwd = chest_axes(act)
+    f0, f1 = int(round(act.frame_range[0])), int(round(act.frame_range[1]))
+    ua, wa, fx, hz, wr = [], [], [], [], []
+    for f in range(f0, f1 + 1):
+        sc.frame_set(f)
+        bpy.context.view_layer.update()
+        S, E, W = bwpos(UPPER_R), bwpos(FORE_R), bwpos(HAND_R)
+        for v, out in ((E - S, ua), (W - S, wa)):
+            out.append(math.degrees(math.atan2(-v.dot(lat), -v.dot(up))))
+        fx.append(math.degrees((E - S).angle(W - E)))
+        hz.append(W.z)
+        # 손목 꺾임 **기하각**: 팔뚝 방향 vs 손뼈 방향(뼈 로컬 Y 가 뼈를 따라간다).
+        # ★13-손목 함정: 손목 보정을 **비틀림 축**으로 주면 이 각이 안 늘어난다.
+        hm = (armK.matrix_world @ armK.pose.bones[HAND_R].matrix).to_3x3()
+        hm.normalize()
+        wr.append(math.degrees((hm @ Vector((0, 1, 0))).angle(W - E)))
+    ua.sort()
+    wa.sort()
+    print("  %-10s 위팔벌림 중앙 %+5.1f (%+.1f~%+.1f) · 손목벌림 중앙 %+5.1f"
+          " · 팔꿈치 %.1f~%.1f · 손목꺾임 %.1f~%.1f도 · 손목높이 %.3f~%.3f"
+          % (label, ua[len(ua) // 2], ua[0], ua[-1], wa[len(wa) // 2],
+             min(fx), max(fx), min(wr), max(wr), min(hz), max(hz)))
+    return ua[len(ua) // 2], wa[len(wa) // 2]
+
+
+def bend_elbow(act, deg, dirdeg):
+    """오른 팔꿈치를 deg 만큼 **더** 굽힌다. 팔뚝·손·칼이 강체로 따라온다.
+
+    축은 **클립당 하나**다(프레임마다 다시 잡으면 칼 방향호가 벌어진다 —
+    위 [오른팔 들기] 의 함정과 같은 이유). 축 = (사이클 평균 위팔) x (손이 갈 쪽).
+    ★이 축이 곧 사람 팔꿈치의 경첩축이다(위팔에 수직 = 팔뚝만 접힌다).
+    """
+    use(armK, act)
+    _, frames = key_frames(act, FORE_R)
+    lat, _up, fwd = chest_axes(act)
+    acc = Vector((0, 0, 0))
+    flex0 = []
+    for f in frames:
+        sc.frame_set(f)
+        bpy.context.view_layer.update()
+        S, E, W = bwpos(UPPER_R), bwpos(FORE_R), bwpos(HAND_R)
+        acc += (E - S).normalized()
+        flex0.append(math.degrees((E - S).angle(W - E)))
+    u = acc.normalized()
+    # 손이 가고 싶은 쪽. 0 = 가슴 **앞** · +90 = 몸 **안쪽**(오른팔의 안쪽이 +lat 다)
+    t = (fwd * math.cos(math.radians(dirdeg))
+         + lat * math.sin(math.radians(dirdeg)))
+    t = t - u * t.dot(u)
+    if t.length < 1e-5:
+        raise SystemExit("팔꿈치 굽힘 목표가 위팔과 나란하다(ELB_DIR 을 바꿔라)")
+    ax = u.cross(t.normalized()).normalized()      # +각 = 손이 t 쪽으로 간다
+    n = apply_world_rot(act, FORE_R, [Matrix.Rotation(math.radians(deg), 3, ax)]
+                        * len(frames))
+    flex1 = []
+    for f in frames:
+        sc.frame_set(f)
+        bpy.context.view_layer.update()
+        S, E, W = bwpos(UPPER_R), bwpos(FORE_R), bwpos(HAND_R)
+        flex1.append(math.degrees((E - S).angle(W - E)))
+    return n, ax, (min(flex0), max(flex0)), (min(flex1), max(flex1))
+
+
+if ELB_R or LIFT_TABLE:
+    print("\n[팔 각도 실측] 감쇠 직후 (0=수직 아래 · 양수=몸 바깥. 손목높이는 블렌더 단위)")
+    for nm in NATIVE:
+        arm_report(new[nm], "DMP " + nm)
+
+if ELB_R:
+    print("\n[팔꿈치 굽힘] %+.1f 도 (방향 %+.0f도: 0=앞 90=안쪽. 팔뚝·손·칼이 따라온다)"
+          % (ELB_R, ELB_DIR))
+    for nm in NATIVE:
+        if nm not in ELB_CLIPS:
+            print("  %-5s 건너뜀(ELB_CLIPS 밖)" % nm)
+            continue
+        n, ax, f0, f1 = bend_elbow(new[nm], ELB_R, ELB_DIR)
+        print("  %-5s 팔뚝 키 %d개 / 축 (%+.3f,%+.3f,%+.3f) / 팔꿈치각 %.1f~%.1f -> "
+              "**%.1f~%.1f도**" % (nm, n, ax.x, ax.y, ax.z, f0[0], f0[1], f1[0], f1[1]))
+    print("\n[칼 흔들림] 팔꿈치 굽힘 후")
+    for nm in NATIVE:
+        blade_arc(new[nm], "ELB " + nm)
+        arm_report(new[nm], "ELB " + nm)
+    print("\n[칼 간섭 실측] 팔꿈치 굽힘 후")
+    M_RAW = {nm: measure(new[nm], "ELB " + nm, 2) for nm in NATIVE}
+
+if ARM_LIFT or LIFT_TABLE:
+    print("\n[오른팔 들기] %+.1f 도%s (어깨에서. 손·칼은 강체로 따라온다) 축=%s"
+          % (ARM_LIFT,
+             (" / 클립별 " + " ".join("%s=%g" % kv for kv in LIFT_TABLE.items()))
+             if LIFT_TABLE else "", LIFT_MODE))
     for nm in NATIVE:
         if nm not in LIFT_CLIPS:
             print("  %-5s 건너뜀(LIFT_CLIPS 밖)" % nm)
             continue
-        n, ax = lift_arm(new[nm], ARM_LIFT)
-        print("  %-5s 위팔 키 %d개 / 축 (%+.3f,%+.3f,%+.3f)"
-              % (nm, n, ax.x, ax.y, ax.z))
+        deg = LIFT_TABLE.get(nm, ARM_LIFT)
+        if abs(deg) < 1e-9:
+            print("  %-5s 건너뜀(들기 0도)" % nm)
+            continue
+        n, ax = lift_arm(new[nm], deg)
+        print("  %-5s %+.1f도 / 위팔 키 %d개 / 축 (%+.3f,%+.3f,%+.3f)"
+              % (nm, deg, n, ax.x, ax.y, ax.z))
     print("\n[칼 흔들림] 팔 들기 후")
     for nm in NATIVE:
         blade_arc(new[nm], "LFT " + nm)
@@ -990,8 +1135,10 @@ if SWING_R or SWING_L:
           % ("클립", "팔", "전 앞/뒤/중립", "후 앞/뒤/중립", "회전"))
     for nm in NATIVE:
         axes = chest_axes(new[nm])
+        r_end = (FORE_R if (SWING_R_REF == "elbow" and nm in SWING_R_REF_CLIPS)
+                 else HAND_R)
         for tgt, bone, hand, clips, gf, gb in (
-                (SWING_R, UPPER_R, HAND_R, SWING_R_CLIPS, 1.0, 1.0),
+                (SWING_R, UPPER_R, r_end, SWING_R_CLIPS, 1.0, 1.0),
                 (SWING_L, UPPER_L, HAND_L, SWING_L_CLIPS, SWING_GF, SWING_GB)):
             if not tgt or nm not in clips:
                 continue
@@ -1004,6 +1151,8 @@ if SWING_R or SWING_L:
     print("\n[칼 흔들림] 스윙 자연화 후")
     for nm in NATIVE:
         blade_arc(new[nm], "SWG " + nm)
+        if ELB_R or LIFT_TABLE:
+            arm_report(new[nm], "SWG " + nm)
     print("\n[칼 간섭 실측] 스윙 자연화 후")
     M_RAW = {nm: measure(new[nm], "SWG " + nm, 2) for nm in NATIVE}
 
@@ -1018,12 +1167,26 @@ if SWING_R or SWING_L:
 #   프레임별 손 행렬을 한 번만 모아 두면 후보 수천 개를 즉시 평가할 수 있다.
 #   비싼 검사(바닥·관통)는 고도 조건을 통과한 상위 몇 개에만 돌린다.
 TIP_ELEV = float(os.environ.get("TIP_ELEV", "-35"))
+# 클립별 TIP_ELEV 덮어쓰기 "Walk:-20". 빈 값이면 전 클립 TIP_ELEV(달리기 무변경용).
+TIP_TABLE = {}
+for _row in os.environ.get("TIP_TABLE", "").split(","):
+    _row = _row.strip()
+    if _row:
+        _k, _v = _row.split(":")
+        TIP_TABLE[_k.strip()] = float(_v)
 NCAND = int(os.environ.get("NCAND", "26"))   # 비싼 검사를 돌릴 후보 수
 # ★칼끝 고도 **진폭**에 주는 벌점(도당). 기본 0 = 옛 판(평균만 본다).
 #   같은 평균 고도라도 후보에 따라 사이클 안에서 칼끝이 위아래로 출렁이는 폭이
 #   두 배씩 다르다. 출렁이면 (1) 눈에 칼이 펄럭이고 (2) **제일 낮은 프레임**이
 #   바닥여유를 결정하므로 평균을 더 내릴 여지도 사라진다. 그래서 진폭을 같이 본다.
 TIP_FLAT = float(os.environ.get("TIP_FLAT", "0"))
+# ★18차: 후보를 구면 균등으로 넓힌다. 0(기본) = 옛 격자 그대로 = 커밋본 재현.
+#   ★**클립 이름을 적으면 그 클립만** 넓힌다("Walk"). 1 이면 전 클립.
+#     달리기는 한 도도 안 바꿔야 해서(오너 지시 범위는 걷기) 이 갈래가 필요하다.
+_WW = os.environ.get("WRIST_WIDE", "0").strip()
+WRIST_WIDE = _WW not in ("", "0")
+WIDE_CLIPS = [c.strip() for c in _WW.split(",") if c.strip() and c.strip() != "1"]
+WRIST_MAX = float(os.environ.get("WRIST_MAX", "120"))   # 넓힐 때의 회전량 상한(도)
 
 
 def hand_mats(act):
@@ -1055,7 +1218,7 @@ def elev_span(mats, delta):
     return max(es) - min(es)
 
 
-def cand_deltas():
+def cand_deltas(wide=False):
     """후보: 단축 회전 + 2축 조합. 작은 각부터 훑는다."""
     out = [(0.0, "없음", Quaternion())]
     degs = list(range(5, 91, 5)) + list(range(-5, -91, -5))
@@ -1068,6 +1231,25 @@ def cand_deltas():
                 out.append((abs(d1) + abs(d2), "X%+d/Z%+d" % (d1, d2),
                             Quaternion(AXES["X"], math.radians(d1))
                             @ Quaternion(AXES["Z"], math.radians(d2))))
+    # ── ★18차 신설: 구면 균등 후보 (WRIST_WIDE=1. 기본 0 = 옛 격자 그대로) ──
+    # 왜 넓혀야 했나. 팔꿈치 굽힘은 팔뚝에 **월드 상수 회전**을 먹이는 일이라
+    # 칼끝 방향 다발(사이클 41도짜리 호)을 통째로 기울인다. 커밋본이 6.1도까지
+    # 눕혀 놓았던 그 호가 팔꿈치 80도만큼 세워지면 고도폭이 34도가 된다
+    # (실측: 커밋본 6.1 -> 팔꿈치판 31~37). 그 기울기를 되눕히는 회전은
+    # 세 축 격자(±90, 15도 조합)의 **밖**에 있다 — 그래서 후보가 아예 없었다.
+    # 축을 구면에 고르게 뿌리면(피보나치) 그 회전이 후보 안에 들어온다.
+    # ★회전량 상한(WRIST_MAX)을 두는 이유: 손목은 사람 관절이다. 다만 축이
+    #   **손뼈 길이축(비틀림)** 에 가까우면 큰 각도 손목이 안 꺾인다(13-손목 함정).
+    if wide:
+        n = 96
+        ga = math.pi * (3.0 - math.sqrt(5.0))
+        for i in range(n):
+            z = 1.0 - 2.0 * (i + 0.5) / n
+            r = math.sqrt(max(0.0, 1.0 - z * z))
+            ax = Vector((r * math.cos(ga * i), r * math.sin(ga * i), z)).normalized()
+            for d in range(10, int(WRIST_MAX) + 1, 10):
+                out.append((float(d), "구면%02d %+d도" % (i, d),
+                            Quaternion(ax, math.radians(d))))
     return sorted(out, key=lambda t: t[0])
 
 
@@ -1075,17 +1257,27 @@ WRIST_USED = {}
 if WRIST_FIX:
     print("\n[손목 보정] 목표: 칼끝 평균 고도 %+.0f도 / 바닥여유>=%.3f / 관통<=%.3f"
           % (TIP_ELEV, CLEAR_MIN, PEN_MAX))
-    cands = cand_deltas()
+    cands_n, cands_w = cand_deltas(False), cand_deltas(True)
     for nm in NATIVE:
+        wide = WRIST_WIDE and (not WIDE_CLIPS or nm in WIDE_CLIPS)
+        cands = cands_w if wide else cands_n
         mats = hand_mats(new[nm])
         e0 = mean_elev(mats, Quaternion())
-        print("  %-5s 보정 전: 칼끝 고도 %+.1f도 / 여유 %+.3f / 관통 %.3f"
-              % (nm, e0, M_RAW[nm]["clear"], M_RAW[nm]["pen"]))
+        tgt = TIP_TABLE.get(nm, TIP_ELEV)          # 18차: 클립별 목표 고도
+        print("  %-5s 보정 전: 칼끝 고도 %+.1f도 / 여유 %+.3f / 관통 %.3f  (목표 %+.0f도)"
+              % (nm, e0, M_RAW[nm]["clear"], M_RAW[nm]["pen"], tgt))
         # 1차: 고도만 보고 후보를 좁힌다(메시를 안 봐도 되므로 공짜다)
-        near = [(abs(mean_elev(mats, q) - TIP_ELEV), mag, lab, q)
+        near = [(abs(mean_elev(mats, q) - tgt), mag, lab, q)
                 for mag, lab, q in cands]
         near = [t for t in near if t[0] <= 30.0]
-        near.sort(key=lambda t: t[0] + 0.25 * t[1])
+        if wide:
+            # ★넓힌 후보는 **싼 항만 다 넣은 점수**로 줄을 세운다(고도오차·회전량·
+            #   고도폭). 옛 정렬(오차 + 0.25*회전량)은 회전량이 큰 후보를 무조건
+            #   뒤로 밀어서, 정작 호를 되눕히는 큰 회전이 상위 26 안에 못 든다.
+            near.sort(key=lambda t: (0.02 * t[0] + 0.004 * t[1]
+                                     + TIP_FLAT * elev_span(mats, t[3])))
+        else:
+            near.sort(key=lambda t: t[0] + 0.25 * t[1])
         # 2차: 비싼 검사(바닥·관통)는 상위 후보에만. 점수로 고른다.
         #   관통 초과가 압도적으로 무겁고, 그다음이 고도, 회전량은 동점 깨기용이다.
         best = None
@@ -1101,7 +1293,7 @@ if WRIST_FIX:
                 best = (cost, lab, q, c, p, mag, err)
         base_cost = (100 * max(0.0, M_RAW[nm]["pen"] - PEN_MAX)
                      + 100 * max(0.0, CLEAR_MIN - M_RAW[nm]["clear"])
-                     + 0.02 * abs(e0 - TIP_ELEV)
+                     + 0.02 * abs(e0 - tgt)
                      + TIP_FLAT * elev_span(mats, Quaternion()))
         if best is None or best[0] >= base_cost:
             print("       -> 보정 안 함(보정 전 점수 %.3f 가 더 낫다)" % base_cost)
@@ -1113,6 +1305,8 @@ if WRIST_FIX:
               "(폭 %.1f도), 점수 %.3f < 보정전 %.3f)"
               % (best[1], best[5], best[3], best[4], mean_elev(mats, best[2]),
                  elev_span(mats, best[2]), best[0], base_cost))
+        if ELB_R or LIFT_TABLE:                  # 18차: 보정까지 먹인 뒤의 손목 실측
+            arm_report(new[nm], "FIN " + nm)
 
     print("\n[칼 흔들림] 손목 보정 후")
     for nm in NATIVE:

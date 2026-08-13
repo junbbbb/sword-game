@@ -1282,6 +1282,30 @@ SWD_W = [(0.00, 0.0), (0.03, 0.0), (0.20, 1.0), (0.70, 1.0), (0.88, 0.55), (1.00
 # 손목이 먹어 줄 상한(도). 0 이면 팔이 칼 사잇각만큼 덜 내려간다.
 SWD_WRIST = float(os.environ.get("SWD_WRIST", "22"))
 
+# ══════════════════════════════════════════════════════════════════════════
+# ★★18차 C — 서 있을 때(Idle) **칼을 세운다** (2026-08-13, 오너 지시)
+#   오너: "칼쥐고 가만히잇을때 칼각도나 너무 눞혀져있다 조금세워야할듯?"
+#   ★★진단은 '각도'가 아니라 **화면**이었다(16차 카메라 기하의 Idle 판).
+#     커밋본 Idle 의 칼끝 월드 고도는 **+38.2도**다. 그런데 이 카메라의 시선축이
+#     (위 -0.758, 앞 +0.653) 이라, 캐릭터가 **카메라를 보고 설 때** 칼 방향이
+#     그 축과 거의 나란해진다 = 화면에서 칼이 접혀 사라진다(맨손으로 보인다).
+#     실측 산수(연속 yaw 전체):
+#         화면 칼 길이 비 = |cos(E + 40.7도)|      (E = 칼끝 월드 고도)
+#         E +38.2 -> 최악 yaw 에서 **0.19** (19%)  <- 오너가 본 그림
+#         E +45~50 -> 0.07~0.17 (더 나빠진다!)     <- "조금만" 세우면 역효과다
+#     40% 이상을 만족하는 구간은 **E <= 26도** 또는 **E >= 73도** 둘뿐이다.
+#     오너 지시("세워라")와 같은 방향인 것은 뒤쪽이라 **E +78도**(거의 수직)로 세운다.
+#   ★팔은 안 올린다(만세 금지). 회전을 **손목에** 먹이므로 어깨·팔꿈치는 한 도도
+#     안 움직인다. IDLE_ARM 에 비율을 주면 그만큼만 팔로 넘긴다.
+#   ★방위(IDLE_AZ)를 45도 격자에서 22.5도 비껴 두는 이유는 17-점프기하와 같다.
+#   손잡이:  IDLE_GUARD=0 이면 옛 Idle 이 그대로 나온다(되돌림 한 줄)
+IDLE_GUARD = os.environ.get("IDLE_GUARD", "1") == "1"
+IDLE_CLIPS = [c.strip() for c in os.environ.get("IDLE_CLIPS", "Idle").split(",")
+              if c.strip()]
+IDLE_E = float(os.environ.get("IDLE_E", "78"))     # 칼끝 목표 고도(가슴 좌표계)
+IDLE_AZ = float(os.environ.get("IDLE_AZ", "22"))   # 칼끝 목표 방위(+=왼쪽)
+IDLE_ARM = float(os.environ.get("IDLE_ARM", "0"))  # 회전 중 팔이 먹을 비율(0=손목만)
+
 
 def _key_at(keys, t):
     """구간 안은 smoothstep 으로 잇는다(속도가 튀면 팔이 홱 꺾인다)."""
@@ -1655,6 +1679,9 @@ def bake(name):
     nf = f1 - f0 + 1
     rel = name in RELEASE and DO_GRIP
     swd = name in SWDOWN
+    idl = IDLE_GUARD and name in IDLE_CLIPS and TIP_DIR is not None
+    IDL_M = [None]          # f0 에서 한 번 정하고 **전 프레임에 같은 회전**을 먹인다
+                            # (프레임마다 다시 잡으면 숨쉬기 흔들림이 죽는다)
     print("\n[%s] 소스 f%d~%d (%d장)%s%s"
           % (name, f0, f1, nf, "  ★한 손 파지(왼팔=균형)" if rel else "",
              "  ★오른팔 내리기(검)" if swd else ""))
@@ -1723,6 +1750,30 @@ def bake(name):
             # ★왼손 파지보다 **먼저**. 검이 먼저 움직여야 왼손이 그 검을 따라간다
             #   (apply_grip 은 지금 프레임의 오른손 위치에서 자루 기준점을 잡는다).
             swds.append(apply_sword_down(pose, Rw, ph_all(i)))
+            pose, basis = build(Rw, pw)
+        if idl:
+            # ★18차 C: 칼만 세운다. 파지보다 **먼저**(왼손이 따라와야 한다).
+            if IDL_M[0] is None:
+                Hr0 = (A2W @ pose[HAND_R]).to_3x3()
+                Hr0.normalize()
+                d0 = (Hr0 @ TIP_DIR).normalized()
+                C0i = torso_frame(pose)
+                bt0 = (C0i @ _sph(IDLE_E, IDLE_AZ)).normalized()
+                IDL_M[0] = d0.rotation_difference(bt0)
+                print("   ★Idle 칼 세우기: 칼끝 %+.1f/%+.1f -> 목표 %+.1f/%+.1f"
+                      " (회전 %.1f도, 팔 몫 %.0f%%)"
+                      % (*_unsph(C0i.inverted() @ d0), IDLE_E, IDLE_AZ,
+                         math.degrees(IDL_M[0].angle), IDLE_ARM * 100))
+            q = IDL_M[0]
+            if IDLE_ARM > 1e-6:
+                qa = Quaternion().slerp(q, IDLE_ARM)
+                ma = qa.to_matrix()
+                for bn in R_ARM:
+                    Rw[bn] = ma @ Rw[bn]
+                qh = q @ qa.inverted()          # 남은 몫은 손목이 먹는다
+                Rw[HAND_R] = qh.to_matrix() @ Rw[HAND_R]
+            else:
+                Rw[HAND_R] = q.to_matrix() @ Rw[HAND_R]
             pose, basis = build(Rw, pw)
         if DO_GRIP:
             T, bef, _, w, Ch, wh = apply_grip(pose, Rw, gts[i], phase(i))
@@ -1897,6 +1948,31 @@ def bake(name):
 
         jump_screen_audit([(_loc(h), _loc(t)) for h, t in zip(jhnds, jtips)])
 
+    # ── ★18차 C: Idle 도 여덟 방향 화면으로 잰다 ──
+    # 서 있는 자세는 게임에서 제일 오래 보는 그림이고, 오너가 본 "칼이 눕혀졌다"는
+    # 실은 **화면에서 접힌 것**이었다. 점프와 같은 자를 그대로 댄다(멈춤 장 = f0·중간).
+    if idl and jtips:
+        gkj = 1.75 / DH
+        ORG = DREST[ROOT_BONE][1]
+
+        def _loci(P):
+            dd = P - ORG
+            return (-dd.dot(W_LFT) * gkj, (P.z + shift - BIND_LOW) * gkj,
+                    dd.dot(W_FWD) * gkj)
+
+        te = [jchs[i][0] for i in range(len(jchs))]
+        tw = [jchs[i][1] for i in range(len(jchs))]
+        print("   ★Idle 칼끝 고도 %+.1f~%+.1f도 · 방위 %+.1f~%+.1f도 ·"
+              " 바닥여유 %+.3f~%+.3f m · 오른손 높이 %.2f~%.2f m"
+              % (min(te), max(te), min(tw), max(tw),
+                 min((t.z + shift - BIND_LOW) * gkj for t in jtips),
+                 max((t.z + shift - BIND_LOW) * gkj for t in jtips),
+                 min((h.z + shift - BIND_LOW) * gkj for h in jhnds),
+                 max((h.z + shift - BIND_LOW) * gkj for h in jhnds)))
+        jump_screen_audit([(_loci(h), _loci(t)) for h, t in zip(jhnds, jtips)],
+                          holds=(0, nf // 2), air=(0, nf - 1),
+                          title="Idle 8방향 화면 실루엣")
+
     # --- 2차: 보정을 넣고 키를 찍는다 ---
     act = new_action(name)
     for i, f in enumerate(range(f0, f1 + 1)):
@@ -1908,6 +1984,17 @@ def bake(name):
         pose, basis = build(Rw, pw)
         if swd:                                     # ★1차와 같은 순서로(검 먼저)
             apply_sword_down(pose, Rw, ph_all(i))
+            pose, basis = build(Rw, pw)
+        if idl and IDL_M[0] is not None:            # ★18차 C. 1차와 같은 자리·같은 회전
+            q = IDL_M[0]
+            if IDLE_ARM > 1e-6:
+                qa = Quaternion().slerp(q, IDLE_ARM)
+                ma = qa.to_matrix()
+                for bn in R_ARM:
+                    Rw[bn] = ma @ Rw[bn]
+                Rw[HAND_R] = (q @ qa.inverted()).to_matrix() @ Rw[HAND_R]
+            else:
+                Rw[HAND_R] = q.to_matrix() @ Rw[HAND_R]
             pose, basis = build(Rw, pw)
         if DO_GRIP:
             _, _, _, _, Ch, wh = apply_grip(pose, Rw, gts[i], phase(i))
@@ -2332,6 +2419,81 @@ HAND_SPEC = {
 HAND_CH = ("bel", "baz", "arl", "bend", "ty", "tp", "tr", "hy", "cr", "lg",
            "wf", "ws", "gw")
 
+# ══════════════════════════════════════════════════════════════════════════
+# ★★18차 X 신작 — **검도 정면베기(마키리오로시)** (2026-08-13, 오너 지시)
+#   오너: "칼 베는모션도 검도나 사무라이처럼 위에서 아래로 딱 써는 모션 새로 해줘봐
+#          기존꺼 그냥 잊고. 맘에 안들면 다시 돌릴거임"
+#   `KENDO_X=0` 이면 위 16차 Heavy 대본이 그대로 굽힌다(md5 fc74fee3 재현 창구).
+#
+# ── 이 카메라에서 "위에서 아래로"를 어떻게 만드나 (16차가 잰 기하 위에서 짠다) ──
+#   [G1] 화면 세로 감도: 월드 1m **위** = 41.5px 위 · 1m **앞(카메라 반대)** = 49.5px
+#        **위**. 즉 칼끝이 앞으로 나가면 화면에서는 **올라간다.** 15차가 "순수 세로"로
+#        짜고도 화면에서 안 읽힌 이유가 이것이다(내려베기의 아래와 앞이 서로 상쇄).
+#        -> 그러니 **칼끝의 앞 이동을 아끼는 것**이 곧 화면 낙차다. 팔을 앞으로 뻗어
+#           마무리하지 말고 **몸이 가라앉으며 손을 몸 가까이 내리는** 검도 마무리로 짠다.
+#   [G2] 화면 가로는 **좌우 성분만** 만든다(1m = 64.8px). 그래서 시상면(좌우 0)에서
+#        휘두르면 화면 궤적은 **정확히 수직**이다. 15차의 진짜 문제는 세로성이 아니라
+#        ①칼이 접혀 안 보인 것 ②낙차가 작았던 것이었다.
+#        -> 16차는 방위를 55도 돌려 둘을 다 샀지만 그만큼 대각이 됐다(실측 화면
+#           Δx -113 / Δy +147 = 세로/가로 1.30). **이번 계약은 그 비를 올리는 것이다.**
+#   [G3] ★접힘 금지구역: 칼 **월드** 방향이 시선축 (위 -0.758, 앞 +0.653) 근처면
+#        화면 길이가 83px -> 5px 로 접힌다. 그 자리는 "앞아래 25~75도" 다.
+#        빠져나오는 유일한 출구가 **좌우 성분**이라, 칼이 깊이 내려가는 마지막
+#        두세 장에서만 방위를 준다(그때는 이미 임팩트가 끝나 화면 낙차를 다 벌었다).
+#        ★월드 방위 = baz + ty(가슴 돌림)다. **둘을 합쳐서** 계산해야 한다.
+#   [G4] 바닥: 칼끝 높이 = 손 높이 - 1.66 x sin(|월드 고도|). 손 1.3m 면 |고도| 45도가
+#        한계다. 그리고 월드 고도 = bel - tp(가슴 숙임) 이므로 tp 도 예산에 넣는다.
+#
+# ── 검도 문법(오너 지시문 그대로) ──
+#   ①정중선으로 크게 들어 올림(f1~f6) ②한 박자 정지(f7~f8 = 게임 0.058초)
+#   ③일직선 낙하(f9~f12. 손목 스냅 + 골반 가라앉음) ④하단 잔심(f13~f15)
+#   ⑤회수(f16~f21. 감속형이라 리본이 두 번째 참격으로 안 읽힌다)
+#   임팩트(칼이 수평선을 지나는 순간) = f10~f11 사이 = 입력 후 **0.29~0.32초**
+#   (지시 0.25~0.35 안. 클립 22장 = 0.700초 = 게임 **0.609초** @ts1.15, 지시 0.6~0.7 안)
+#
+# ── 지켜야 하는 산수(15·16차에서 물린 것) ──
+#   · 칼끝 15.8 m/s(HOT_ON) = ts1.15 에서 **0.458 m/장** = 칼 1.66m 로 약 **16도/장**.
+#     예비는 그 아래(최대 11도/장), 낙하는 위(23~46도/장), 회수는 아래(≤12도/장).
+#   · 칼끝 앞뒤 F > 0 이어야 벤다(main.js 정면 부채꼴 게이트).
+#   · Catmull-Rom 은 키가 등차수열이면 직선이 된다 = 기계적 와이퍼. 값에 스페이싱을 넣는다.
+HAND_SPEC_KENDO = (22, [
+    # ── ①들어 올림. Δbel 9.5·11·10·7·4·1 = 앞은 빠르고 정점에서 눌러 앉힌다 ──
+    #    baz 를 0 근처에 두는 것이 "정중선"이다. 몸은 뒤에 실었다가(wf-) 앞으로 넘긴다.
+    #    ★정점 bel 을 +78 로 둔 이유(카메라): 칼을 **정확히 수직**으로 세우면 화면
+    #      길이가 65% 로 줄고 칼끝도 낮아진다(시선축이 위-앞 대각이라 그렇다).
+    #      14도 앞으로 눕히면 82% 로 서고 칼끝이 화면에서 18px 더 높다 = 낙차가 커진다.
+    (1,  dict(bel=+45, baz=+1,  bend=+9,  ty=-1, tp=-2,  hy=-1, cr=3,  lg=-4,  wf=-3,  ws=-1)),
+    (2,  dict(bel=+56, baz=0,   bend=+16, ty=-2, tp=-4,  hy=-2, cr=6,  lg=-8,  wf=-6,  ws=-2)),
+    (3,  dict(bel=+66, baz=-1,  bend=+23, ty=-3, tp=-6,  hy=-3, cr=9,  lg=-12, wf=-9,  ws=-3)),
+    (4,  dict(bel=+73, baz=-2,  bend=+29, ty=-4, tp=-8,  hy=-4, cr=11, lg=-15, wf=-11, ws=-4)),
+    (5,  dict(bel=+77, baz=-3,  bend=+33, ty=-5, tp=-9,  hy=-5, cr=12, lg=-17, wf=-13, ws=-4)),
+    (6,  dict(bel=+78, baz=-4,  bend=+35, ty=-6, tp=-10, hy=-5, cr=13, lg=-18, wf=-14, ws=-5)),
+    # ── ②한 박자 정지(f7) + 한 장 되누름(f8. 칼끝이 2도 더 눕고 몸이 먼저 출발한다) ──
+    (7,  dict(bel=+78, baz=-4,  bend=+35, ty=-6, tp=-10, hy=-5, cr=13, lg=-18, wf=-14, ws=-5)),
+    (8,  dict(bel=+80, baz=-4,  bend=+34, ty=-5, tp=-9,  hy=-4, cr=14, lg=-15, wf=-11, ws=-4)),
+    # ── ③낙하. 28 -> 44 -> 28 -> 13 도/장. 임팩트(수평선 통과)는 f10~f11 사이다 ──
+    #    ★baz 는 f10 까지 0 근처(=화면에서 곧게 내리꽂힌다). 방위는 칼이 깊이 내려가는
+    #      **마지막 두 장에서만** 준다 — 그 자리가 [G3] 접힘 금지구역이기 때문이다.
+    (9,  dict(bel=+52, baz=-4,  arl=+32, bend=+26, ty=-2, tp=-1, hy=-1, cr=16, lg=-6, wf=-3, ws=-2)),
+    (10, dict(bel=+8,  baz=+1,  arl=+40, bend=+16, ty=+2, tp=+4, hy=+1, cr=20, lg=+10, wf=+7, ws=+1)),
+    (11, dict(bel=-20, baz=+20, arl=+48, bend=+9,  ty=+4, tp=+7, hy=+3, cr=24, lg=+22, wf=+15, ws=+3)),
+    (12, dict(bel=-30, baz=+34, arl=+56, bend=+9,  ty=+6, tp=+9, hy=+5, cr=25, lg=+29, wf=+19, ws=+5)),
+    # ── ④잔심(하단 멈춤). 세 장 동안 칼은 멈추고 **몸만** 가라앉았다 펴진다 ──
+    (13, dict(bel=-29, baz=+38, arl=+54, bend=+10, ty=+6, tp=+9, hy=+5, cr=24, lg=+28, wf=+18, ws=+5)),
+    (14, dict(bel=-28, baz=+39, arl=+52, bend=+11, ty=+6, tp=+8, hy=+5, cr=22, lg=+26, wf=+16, ws=+5)),
+    (15, dict(bel=-26, baz=+38, arl=+50, bend=+11, ty=+6, tp=+8, hy=+5, cr=20, lg=+23, wf=+14, ws=+5)),
+    # ── ⑤회수. 13·11·9·7·5·3 도/장 = **감속형**(등속이면 그게 또 하나의 스윙이다) ──
+    (16, dict(bel=-15, baz=+35, arl=+46, bend=+10, ty=+6, tp=+7, hy=+4, cr=17, lg=+20, wf=+12, ws=+4)),
+    (17, dict(bel=-4,  baz=+34, arl=+48, bend=+11, ty=+6, tp=+6, hy=+4, cr=12, lg=+16, wf=+10, ws=+4)),
+    (18, dict(bel=+5,  baz=+28, arl=+40, bend=+11, ty=+5, tp=+5, hy=+3, cr=9,  lg=+13, wf=+8, ws=+3)),
+    (19, dict(bel=+12, baz=+22, arl=+34, bend=+10, ty=+4, tp=+4, hy=+3, cr=7,  lg=+10, wf=+6, ws=+3)),
+    (20, dict(bel=+17, baz=+16, arl=+30, bend=+8,  ty=+3, tp=+3, hy=+2, cr=5,  lg=+7,  wf=+5, ws=+2)),
+    (21, dict(bel=+20, baz=+10, arl=+28, bend=+6,  ty=+2, tp=+2, hy=+1, cr=3,  lg=+5,  wf=+3, ws=+1)),
+])
+KENDO_X = os.environ.get("KENDO_X", "1") == "1"
+if KENDO_X:
+    HAND_SPEC["Heavy"] = HAND_SPEC_KENDO      # ★16차 대본은 위에 그대로 남아 있다
+
 # ================================ 16차 신설: 게임 카메라 화면 좌표 ================================
 # ★★15차까지 세 판을 전부 **월드 좌표**(칼끝의 위/옆/앞)로 판정했고 세 판 다 통과했는데
 #   오너는 세 판 다 기각했다. 16차에 처음으로 화면으로 재 보니 이유가 나왔다:
@@ -2492,6 +2654,9 @@ def jump_screen_audit(rows, holds=JUMP_HOLDS, air=JUMP_AIR,
             if tgt == "grd" and (w_grd is None or pole > w_grd[0]):
                 w_grd = (pole, ln, vdev, ovl, bel, i)
         hold_bad = max(_pole_of(c) for c in cells)
+        # ★18차: Idle 처럼 '지상 구간'이 아예 없는 클립도 이 자를 쓴다(air 가 전 프레임).
+        if w_grd is None:
+            w_grd = (0.0, 0.0, 0.0, 0.0, 0.0, -1)
         vd = ("★장대" if max(hold_bad, w_air[0]) > 0.55
               else ("접힘" if min(c[0] for c in cells) < 35
                     else ("통과(지상만△)" if w_grd[0] > 0.55 else "통과")))
