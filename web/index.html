@@ -46,26 +46,31 @@
        맨 아래 주석 줄로 내렸다.
      ★키 열은 오른쪽 정렬 고정폭이다. 왼쪽 정렬로 두면 캡 길이가 제각각이라
        설명 글이 계단처럼 어긋난다. */
-  #help { left:16px; top:14px; font-size:13px; line-height:1.6; }
-  #help .hRow { display:flex; align-items:baseline; gap:9px; padding:1px 0; }
+  /* ★★17차: 판의 모든 치수를 글자 크기 하나(--hf)에 매단다. 16차는 전부 px 못박기라
+       창이 작아져도 판만 그대로였다(1100 폭에서 화면의 24% x 47.9%).
+       ★ui.js 에 **같은 식**이 한 벌 더 있다(그쪽이 나중에 붙어 이긴다). 값을 고치면
+         두 곳을 같이 고칠 것 - 로딩 화면과 같은 이유로 이 판도 정본이 두 벌이다. */
+  #help { left:clamp(10px,1.06vw,16px); top:clamp(10px,1.47vh,14px);
+    font-size:clamp(10.4px,min(.68vw + 4.2px,1.45vh + 1.2px),13px); line-height:1.5; }
+  #help .hRow { display:flex; align-items:baseline; gap:.62em; padding:0; }
   /* ★키 열 폭은 **가장 긴 줄**(「이동+ [Space]」)에 맞춘다. 모자라면 그 줄만 왼쪽으로
        삐져나와 판 밖으로 흐른다(flex-basis 고정이라 줄어들지도 늘어나지도 않는다).
      ★nowrap: 좁은 창에서 키캡 글자가 「Spa / ce」로 접히는 것을 막는다. */
-  #help .ks { flex:0 0 106px; display:flex; gap:4px; justify-content:flex-end;
+  #help .ks { flex:0 0 6.9em; display:flex; gap:.3em; justify-content:flex-end;
     white-space:nowrap; }
-  /* ★키캡은 아이보리 면 + 월넛 테 + 둥근 모서리다.
+  /* ★키캡은 어두운 유리 + 시안 헤어라인이다.
        진짜 값은 ui.js 가 나중에 덮는다. 여기 한 벌은 ui.js 가 붙기 전 한 프레임을 위한 것이다 */
-  #help .k { display:inline-block; min-width:24px; padding:1px 7px 2px;
+  #help .k { display:inline-block; min-width:1.9em; padding:1px .5em 2px;
     border:0; background:rgba(20,30,50,.92);
-    box-shadow:inset 0 0 0 1px rgba(160,210,255,.42); color:var(--ui-txt); font-size:12px;
+    box-shadow:inset 0 0 0 1px rgba(160,210,255,.42); color:var(--ui-txt); font-size:.92em;
     font-weight:700; text-align:center; white-space:nowrap; }
   /* 캡 곁의 비-키 글자. 캡 사이의 「~」, 캡 앞의 「이동+」가 여기 속한다 */
-  #help .kx { color:var(--ui-mute); font-size:12px; white-space:nowrap; }
+  #help .kx { color:var(--ui-mute); font-size:.92em; white-space:nowrap; }
   #help .t { color:var(--ui-dim); }
   #help .t b { color:var(--ui-txt); font-weight:800; }
-  #help .hSep { height:1px; margin:7px 4px 8px 0;
+  #help .hSep { height:1px; margin:.5em .3em .55em 0;
     background:linear-gradient(90deg,rgba(120,205,255,.34),rgba(120,205,255,0)); }
-  #help .hNote { color:var(--ui-mute); font-size:12px; line-height:1.55; padding-left:2px; }
+  #help .hNote { color:var(--ui-mute); font-size:.92em; line-height:1.45; padding-left:2px; }
 
   #sword { right:16px; bottom:18px; font-size:15px; font-weight:800;
     color:var(--ui-txt); transition:opacity .25s; }
