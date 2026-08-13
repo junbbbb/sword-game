@@ -174,7 +174,7 @@ const INK_TTL = 0.46;
 const MAX_VIS = MAX_ENEMIES + MAX_CORPSES;
 
 // ---------------------------------------------------------------------------
-// ★머리 위 판 두 장 — 체력 핍 · 인지 표식
+// ★머리 위 판 두 장 — 체력 바 · 인지 표식
 // ---------------------------------------------------------------------------
 // 둘 다 **월드 빌보드**다. DOM 으로 하면 40마리분 좌표를 매 프레임 투영해서
 // style 을 써야 하고(레이아웃 40회/프레임), 3D 로 하면 정점 버퍼 한 벌에 다 들어가
@@ -183,15 +183,18 @@ const MAX_VIS = MAX_ENEMIES + MAX_CORPSES;
 // 크기 근거(실측 산수). 고정 쿼터뷰 fov 20 · dist 34 라 화면 높이 760px 이
 // 대상 평면에서 2*34*tan(10도) = 11.99m 다. 즉 **1m = 63px**.
 //   · 고블린 키 1.30m = 82px
-//   · 핍 한 칸 0.22m = 14px, 세 칸 + 간격 = 0.68m = 43px  (몸 높이의 절반)
+//   · 체력 1 = 0.22m = 14px, 3체력 바 = 0.66m = 42px  (몸 높이의 절반)
 //   · 표식 0.62m = 39px  (느낌표 한 글자가 이 정도는 돼야 34m 에서 읽힌다)
-const PIP_W = 0.22;             // 칸 하나 폭(m)
+// ★2026-08-13 오너 지시로 칸 그림을 걷어냈다("세 칸이 합쳐진 느낌 말고 그냥 하나의 바").
+//   PIP_W 는 이제 **체력 1 이 차지하는 길이**다 - 값도 뜻도 그대로고, 그 길이 안을
+//   칸으로 쪼개 그리던 셰이더 구역만 없앴다.
+const PIP_W = 0.22;             // 체력 1 당 바 길이(m)
 // ★0.105 -> 0.145. 첫 실사 스크린샷에서 칸 높이가 7px 이라 속(찬 칸/빈 칸)을 나누는
 //   띠가 3px 밖에 안 나왔다 = 찼는지 비었는지 구별이 안 됐다. 9px 이면 속이 5px 다.
 // ★0.145 -> 0.175 (17차 UI 통일). 카드 문법은 **1px 헤어라인**이 형태를 정의하는데,
 //   9px 짜리 바에서 위아래 헤어라인 2px 을 빼면 속이 7px 이라 그러데이션이 안 선다.
 //   11px 이면 속이 9px 이라 채움이 띠로 읽힌다.
-const PIP_H = 0.175;            // 칸 높이(m)
+const PIP_H = 0.175;            // 바 높이(m)
 // 피격 뒤 이만큼만 떠 있는다. 상시로 두면 40개 바가 화면을 덮어 롤 HUD 가 아니라
 // MMO 가 된다. "때린 놈만 잠깐"이 이 게임의 밀도에 맞는다.
 const PIP_SHOW = 1.2;
@@ -1171,7 +1174,7 @@ export function createEnemySystem(opts) {
       // ── 리액션·예고 (9차) ──
       wndT: 0,                     // 예비 자세 남은 시간(>0 이면 곧 휘두른다)
       stunT: 0,                    // 피격 경직 남은 시간(>0 이면 발도 클립도 멎는다)
-      pipT: 0,                     // 체력 핍이 떠 있는 남은 시간
+      pipT: 0,                     // 머리 위 체력 바가 떠 있는 남은 시간
       tint: 0, size: 1, h: GOB_H, spawnT: 0,
       // ── 길찾기 ──
       pathT: 0,                    // 다음 경로 재계산까지 남은 시간
@@ -1412,10 +1415,10 @@ export function createEnemySystem(opts) {
   }
 
   // -------------------------------------------------------------------------
-  // ── ★머리 위 판 (체력 핍 · 인지 표식) ──
+  // ── ★머리 위 판 (체력 바 · 인지 표식) ──
   //
   // 건틀릿 1회차가 짚은 두 구멍을 한 시스템으로 메운다.
-  //   손맛 5위 "적 HP 바가 없다"          -> 맞은 놈 머리 위 핍 1.2초
+  //   손맛 5위 "적 HP 바가 없다"          -> 맞은 놈 머리 위 체력 바 1.2초
   //   손맛 8번 "은신 인지 표식 0 (3/10)"  -> ! / ? / 공격 쐐기
   //
   // 구현 원칙은 먹 파편(inkMesh)과 같다. **판 40장을 정점 버퍼 한 벌에 담아
@@ -1613,9 +1616,11 @@ export function createEnemySystem(opts) {
     return m;
   }
 
-  // ── 체력 핍 ──
-  const pipN = new Float32Array(MAX_ENEMIES * 4);   // 칸 수
-  const pipHp = new Float32Array(MAX_ENEMIES * 4);  // 남은 칸
+  // ── 체력 바 (머리 위) ──
+  // ★이름만 pip 로 남아 있다(칸 시절의 유산). 2026-08-13 부터 그림은 **칸이 없는
+  //   연속 바 하나**다 - 아래 fragmentShader 의 「속」주석 참조.
+  const pipN = new Float32Array(MAX_ENEMIES * 4);   // 최대 체력 = 바 길이(체력 1 = PIP_W)
+  const pipHp = new Float32Array(MAX_ENEMIES * 4);  // 남은 체력(연속. 소수 그대로)
   const pipA = new Float32Array(MAX_ENEMIES * 4);   // 알파
   const pipMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, depthTest: false, fog: false,
@@ -1635,9 +1640,9 @@ export function createEnemySystem(opts) {
     //   · 트랙   rgba(2,5,11,.92)              -> 딥 네이비
     //   · 헤어라인 inset 0 0 0 1px rgba(214,240,255,.72)
     //   · 컷코너  --c: 3px (판 높이의 약 0.30)
-    //   · 채움   HP_INK 초록 #2ee08a~#7ff0c0. 여기서는 가로가 아니라 **세로** 그러데이션
-    //            (가로는 칸 경계와 싸운다)
-    //   · 처치 직전(남은 칸 1) 한 칸은 붉게 — HP_INK 의 25% 이하 색 #e04a2e
+    //   · 채움   HP_INK 초록 #2ee08a~#7ff0c0. 가로가 아니라 **세로** 그러데이션
+    //            (가로 그러데이션은 채움 끝이 어디인지를 흐린다)
+    //   · 처치 직전(남은 체력 1 이하) 채움은 붉게 — HP_INK 의 25% 이하 색 #e04a2e
     // ★색은 전부 **선형 HDR**이다(FLASH_R 선언부의 파이프라인 주석 참조. ACES 무릎 +
     //   블룸 임계 1.02). 그래서 sRGB 표기를 그대로 못 넣는다 - ACES 를 되짚어 넣은 값이다.
     //   0.95 가 상한선이다. 그 위로 올리면 바가 블룸으로 번져 실루엣 밖까지 샌다.
@@ -1648,7 +1653,7 @@ export function createEnemySystem(opts) {
         //   (LOG.md 의 '검은 번쩍' 함정. 알파 문턱은 전부 이 꼴로 쓴다).
         if (!(vA > 0.01)) discard;
         // 판을 **세로 높이 1** 로 정규화한 좌표로 옮긴다. 헤어라인 두께·컷코너를
-        // 가로세로 같은 크기로 그리려면 이 환산이 있어야 한다(칸 수마다 판 폭이 다르다).
+        // 가로세로 같은 크기로 그리려면 이 환산이 있어야 한다(최대 체력마다 판 폭이 다르다).
         float ar = max(0.001, vN * ${PIP_W.toFixed(3)} / ${PIP_H.toFixed(3)});
         float U = vU.x * ar, V = vU.y;
         // 가장자리까지의 거리(높이 단위). 네 모서리는 45도로 잘린다 = 컷코너.
@@ -1663,20 +1668,29 @@ export function createEnemySystem(opts) {
         vec3 hair  = vec3(0.55, 0.72, 0.92);        // 창백한 청백. 형태를 정의하는 선
         vec3 track = vec3(0.022, 0.032, 0.058);     // 딥 네이비
         if (d < HAIR) { gl_FragColor = vec4(hair, vA); return; }
-        // ── 속 ──
-        float x = vU.x * vN;
-        float cell = floor(x);
-        float fx = fract(x);
-        bool has = cell < vHp - 0.5;
-        // 칸 사이 홈. 트랙 하나 안에 칸이 나뉜 그림이라 홈은 **트랙 색**이다.
-        bool gap = (vN > 1.5) && (fx < 0.10 || fx > 0.90);
-        if (!has || gap) { gl_FragColor = vec4(track, vA); return; }
+        // ── 속: 칸 없는 **연속 채움** (오너 지시 2026-08-13) ──
+        // "몬스터 체력바 칸으로 하지 말고 그냥 체력바로. 지금 볼 땐 딱 세 칸이 합쳐진
+        //  느낌인데 그냥 하나의 바로."
+        // 옛 그림은 트랙 하나 안을 칸으로 쪼개고 칸 사이에 트랙색 홈을 팠다(floor/fract
+        // 양자화 + gap). 그 두 줄이 「세 칸이 합쳐진」의 정체다. 통째로 걷어낸다.
+        // 남는 것은 비율 하나다: 채움 끝 = (남은 체력 / 최대 체력) × 판 폭.
+        // ★길이의 뜻은 안 버렸다. 판 폭 자체가 최대 체력에 비례하므로(updatePlates 의
+        //   nMax * PIP_W) **채움 길이 = 남은 타수**가 화소 그대로 성립한다. 칸 그림이
+        //   하던 말("몇 대 더 때려야 하나")을 이제 길이가 한다 - 눈금 없이.
+        float fillX = clamp(vHp / max(vN, 0.001), 0.0, 1.0) * ar;
+        // 경계는 1px 남짓만 눕힌다(판 높이 11px 기준 ±0.06 = 0.7px).
+        // ★fwidth 를 안 쓴다: GLSL1 파생함수는 확장에 걸려 있어 컴파일이 기기를 탄다.
+        //   이 판은 월드 크기가 고정이라 상수 폭으로 충분하다.
+        float f = 1.0 - smoothstep(fillX - 0.06, fillX + 0.06, U);
+        if (!(f > 0.001)) { gl_FragColor = vec4(track, vA); return; }
         // 세로 그러데이션. 위가 밝고 아래가 어둡다(유리에 담긴 액체의 문법).
-        // ★남은 칸이 하나면 = 다음 한 대에 죽는다. 그 칸만 붉게(오너 언어: 처치 직전).
+        // ★남은 체력이 1 이하 = 다음 한 대에 죽는다. 그때 **채움 전체**가 붉다
+        //   (칸이 없어졌으니 "마지막 한 칸만"은 성립하지 않는다. 리더는 1/3,
+        //    일반은 1/2 자리에서 붉어진다 = 전환 시점은 옛 그림과 한 프레임도 안 다르다).
         float g = clamp((V - 0.16) / 0.68, 0.0, 1.0);
         vec3 lo = (vHp < 1.5) ? vec3(0.34, 0.05, 0.03) : vec3(0.03, 0.30, 0.14);
         vec3 hi = (vHp < 1.5) ? vec3(0.95, 0.22, 0.13) : vec3(0.16, 0.90, 0.46);
-        gl_FragColor = vec4(mix(lo, hi, g), vA);
+        gl_FragColor = vec4(mix(track, mix(lo, hi, g), f), vA);
       }`,
   });
   const pipMesh = plateMesh(MAX_ENEMIES, pipMat,
@@ -1883,22 +1897,28 @@ export function createEnemySystem(opts) {
       const dd = (e.pos.x - cx0) * (e.pos.x - cx0) + (e.pos.z - cz0) * (e.pos.z - cz0);
       if (dd > PLATE_MAX_D * PLATE_MAX_D) continue;
       const headY = e.pos.y + e.h * 1.02;
-      // ── 핍 ──
-      // ★칸 수 = **그 개체의 최대 체력**이다(1·2·3). 지시서에는 "3~5칸"이라고 적혀
-      //   있었지만, 2대짜리 요괴 머리에 칸을 5개 그리면 그건 거짓말이다. 이 게임의
-      //   핍이 답해야 하는 질문은 "몇 %"가 아니라 **"몇 대 더 때려야 하나"** 다.
-      //   칸이 곧 남은 타수여야 그 질문에 정직하게 답한다.
-      // ★1대짜리는 안 그린다. 칸이 하나면 "찼다"밖에 못 말하는데 그 놈은 맞는
-      //   순간 죽으므로 화면에 뜰 일 자체가 없다(= 뜨면 그게 거짓말이다).
+      // ── 체력 바 ──
+      // ★바 길이 = **그 개체의 최대 체력**에 비례한다(체력 1 = PIP_W). 지시서에는
+      //   "3~5칸"이라고 적혀 있었지만, 2대짜리 요괴 머리에 칸을 5개 그리면 그건
+      //   거짓말이다. 이 바가 답해야 하는 질문은 "몇 %"가 아니라 **"몇 대 더 때려야
+      //   하나"** 이므로, 화면에서 같은 길이가 늘 같은 타수여야 한다.
+      //   → 2체력 놈의 만피 바와 3체력 놈이 한 대 맞고 남은 채움은 **같은 길이**다.
+      // ★2026-08-13 (오너 지시): 그 길이를 칸으로 쪼개 그리던 것을 그만뒀다.
+      //   칸 나눔은 셰이더 「속」구역에서만 하던 일이라, 길이 규칙은 한 줄도 안 바뀐다.
+      // ★1대짜리는 안 그린다. 그 놈은 맞는 순간 죽으므로 바가 화면에 뜰 일 자체가
+      //   없다(= 뜨면 그게 거짓말이다. 늘 가득 찬 바만 보여 준다).
       if (e.pipT > 0 && e.maxHp >= 2 && pn < MAX_ENEMIES) {
         const o = pn * 4;
         const a = Math.min(1, e.pipT / PIP_FADE);
-        const nCell = e.maxHp;
+        const nMax = e.maxHp;
         putPlate(pPos, pUv, o, e.pos.x, headY + PIP_H * 1.9, e.pos.z,
-          nCell * PIP_W * 0.5, PIP_H * 0.5, 0, 1);
-        const hpCell = Math.max(0, Math.ceil(e.hp - 1e-4));
+          nMax * PIP_W * 0.5, PIP_H * 0.5, 0, 1);
+        // ★올림(ceil)을 걷어냈다. 칸 그림일 때는 0.3 체력도 "한 칸"으로 올려야 했지만
+        //   연속 바는 남은 체력을 **있는 그대로** 그린다(귀환 회복 RETURN_HEAL 로
+        //   소수 체력이 실제로 생긴다 - 그때 바가 차오르는 게 보인다).
+        const hpLeft = Math.max(0, Math.min(nMax, e.hp));
         for (let k = 0; k < 4; k++) {
-          pipN[o + k] = nCell; pipHp[o + k] = hpCell; pipA[o + k] = a;
+          pipN[o + k] = nMax; pipHp[o + k] = hpLeft; pipA[o + k] = a;
         }
         pn++;
       }
@@ -2597,7 +2617,7 @@ export function createEnemySystem(opts) {
         // ★e.flash 는 "방금 맞았다"의 시계로만 남는다. 몸에 얹히는 색은 0 이다
         //   (FLASH_R 선언부 - 오너가 끄라고 한 그 번쩍이다).
         e.flash = 1;
-        // 체력 핍을 띄운다. 맞은 놈만 1.2초. (죽으면 아래에서 despawn 되니 안 뜬다)
+        // 머리 위 체력 바를 띄운다. 맞은 놈만 1.2초. (죽으면 아래에서 despawn 되니 안 뜬다)
         e.pipT = PIP_SHOW;
         hits++;
         const grp = e.grp;
@@ -3479,6 +3499,25 @@ export function createEnemySystem(opts) {
                             tex: !!markMat.uniforms.uTex.value,
                             atkMark: MARK_ATK_ON, cells: MARK_N,
                             ...markCensus() }; },
+    // ── ★머리 위 체력 바 검증 창구 (쓰는 창구) ──
+    // 만피 / 부분 / 저체력을 **같은 자리·같은 카메라**에서 나란히 찍으려면 체력을
+    // 때려서 만들면 안 된다 - 한 대 칠 때마다 넉백으로 놈이 밀려서 화소가 안 겹친다.
+    // 그래서 상태를 세워 두는 창구를 판다(dmgTest·setFlashHold 와 같은 갈래다).
+    //   i     = positions 순서(살아 있는 목록 인덱스)
+    //   hp    = 남길 체력. 바 채움은 hp / maxHp 그대로다
+    //   maxHp = 바 길이(체력 1 = PIP_W). 안 주면 안 건드린다
+    //   show  = 바가 떠 있을 시간(초). 크게 주면 촬영 내내 안 걷힌다
+    pipTest(i, hp, maxHp, show) {
+      const e = live[i | 0];
+      if (!e) return null;
+      if (maxHp !== undefined && maxHp !== null) e.maxHp = Math.max(1, maxHp | 0);
+      // ★0 은 안 넣는다. 0 이하는 "죽었다"의 뜻이라 다음 타격 판정이 시체를 만든다.
+      if (hp !== undefined && hp !== null) e.hp = Math.max(0.01, Math.min(e.maxHp, +hp));
+      e.pipT = (show === undefined || show === null) ? PIP_SHOW : +show;
+      return { i: i | 0, hp: +e.hp.toFixed(2), maxHp: e.maxHp, pipT: +e.pipT.toFixed(2),
+               x: +e.pos.x.toFixed(2), z: +e.pos.z.toFixed(2), y: +e.pos.y.toFixed(2),
+               h: +e.h.toFixed(2) };
+    },
     // ── ★숫자 아틀라스 실측 창구 (읽기 전용) ──
     // 겹의 두께를 눈이 아니라 픽셀로 잰다. d 칸의 세로 v 자리 가로줄을 훑어
     // 마스크 채널이 이어지는 길이를 돌려준다:
