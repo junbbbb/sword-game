@@ -1,0 +1,1187 @@
+/* Abyss Hunter UI skin. Activate with: body[data-ui-theme="abyss-hunter"] */
+
+/* Theme tokens: future restyles should begin here. */
+body[data-ui-theme="abyss-hunter"] {
+  color-scheme: dark;
+
+  --ah-font-ui: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Segoe UI", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  --ah-font-display: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo",
+    "Segoe UI", "Malgun Gothic", sans-serif;
+
+  --ah-iron-0: #020207;
+  --ah-iron-1: #060710;
+  --ah-iron-2: #0a0c17;
+  --ah-iron-3: #111522;
+  --ah-iron-4: #1a2030;
+  --ah-panel: rgba(7, 8, 17, .91);
+  --ah-panel-strong: rgba(3, 4, 10, .97);
+  --ah-panel-soft: rgba(12, 15, 27, .84);
+
+  --ah-text: #f2f2ff;
+  --ah-text-soft: #b7bfd4;
+  --ah-text-muted: #70798f;
+
+  --ah-violet: #8d62ff;
+  --ah-violet-bright: #c7b1ff;
+  --ah-violet-dim: #5535a4;
+  --ah-violet-glow: rgba(134, 83, 255, .46);
+  --ah-cyan: #55d8f3;
+  --ah-cyan-bright: #b9f4ff;
+  --ah-cyan-dim: #257d96;
+  --ah-cyan-glow: rgba(61, 211, 244, .40);
+  --ah-amber: #dba84b;
+  --ah-amber-bright: #ffe09a;
+  --ah-amber-glow: rgba(219, 168, 75, .42);
+  --ah-health: #28c894;
+  --ah-health-bright: #8af3d1;
+  --ah-health-glow: rgba(40, 200, 148, .38);
+  --ah-danger: #df4058;
+  --ah-danger-bright: #ff9aaa;
+  --ah-danger-glow: rgba(223, 64, 88, .44);
+  --ah-stealth: #42d4af;
+  --ah-stealth-glow: rgba(66, 212, 175, .35);
+
+  --ah-line: rgba(128, 153, 194, .34);
+  --ah-line-strong: rgba(94, 220, 247, .68);
+  --ah-line-muted: rgba(130, 145, 178, .16);
+  --ah-shadow: 0 12px 34px rgba(0, 0, 0, .68);
+  --ah-shadow-deep: 0 18px 58px rgba(0, 0, 0, .82);
+
+  --ah-etch:
+    repeating-linear-gradient(135deg, rgba(191, 169, 255, .025) 0 1px,
+      transparent 1px 12px),
+    repeating-linear-gradient(45deg, transparent 0 31px,
+      rgba(85, 216, 243, .018) 31px 32px);
+  --ah-etch-violet:
+    repeating-linear-gradient(135deg, rgba(173, 139, 255, .045) 0 1px,
+      transparent 1px 10px),
+    linear-gradient(112deg, transparent 0 46%, rgba(141, 98, 255, .055) 47% 48%,
+      transparent 49% 100%);
+  --ah-panel-fill: var(--ah-etch),
+    linear-gradient(180deg, rgba(16, 18, 33, .95), rgba(4, 5, 12, .97));
+  --ah-panel-fill-violet: var(--ah-etch-violet),
+    linear-gradient(180deg, rgba(22, 17, 43, .95), rgba(5, 5, 14, .98));
+
+  --ah-skill-basic: var(--ah-cyan);
+  --ah-skill-heavy: var(--ah-violet-bright);
+  --ah-skill-wide: #72bfff;
+  --ah-skill-mobility: #a987ff;
+
+  /* Full gradients are intentionally semantic: JS may read and reuse them. */
+  --ui-hp-high-fill: linear-gradient(180deg, #8af3d1 0%, #30c995 30%, #11775d 72%, #084438 100%);
+  --ui-hp-mid-fill: linear-gradient(180deg, #ffe19a 0%, #d7a63f 34%, #8b5b19 73%, #4d2e0d 100%);
+  --ui-hp-low-fill: linear-gradient(180deg, #ff9aaa 0%, #df4058 32%, #8e1d35 72%, #4a0c1b 100%);
+  --ui-hp-ghost-fill: linear-gradient(90deg, rgba(255, 104, 130, .72), rgba(255, 205, 219, .92));
+  --ui-exp-fill: linear-gradient(90deg, #4c2b8f 0%, #8d62ff 45%, #55d8f3 100%);
+
+  /* Canvas damage-number palette. */
+  --fx-damage-normal: #eaf8ff;
+  --fx-damage-accent: #69e4ff;
+  --fx-damage-critical: #a987ff;
+  --fx-damage-kill: #ff536f;
+  --fx-damage-outline: #080713;
+
+  /* Compatibility aliases for the current UI contracts. */
+  --ui-font: var(--ah-font-ui);
+  --ui-glass: var(--ah-panel);
+  --ui-glass-2: var(--ah-panel-strong);
+  --ui-deep: var(--ah-iron-0);
+  --ui-edge: var(--ah-line);
+  --ui-edge-on: var(--ah-line-strong);
+  --ui-hair: var(--ah-line-muted);
+  --ui-txt: var(--ah-text);
+  --ui-dim: var(--ah-text-soft);
+  --ui-mute: var(--ah-text-muted);
+  --ui-cy: var(--ah-cyan);
+  --ui-cy-dim: var(--ah-cyan-dim);
+  --ui-gold: var(--ah-amber);
+  --ui-red: var(--ah-danger);
+  --ui-green: var(--ah-health);
+  --ui-drop: var(--ah-shadow);
+  --rb-token: var(--ah-amber);
+  --rb-ok: var(--ah-stealth);
+
+  background: var(--ah-iron-0);
+  font-family: var(--ah-font-ui);
+}
+
+/* Loading gate */
+body[data-ui-theme="abyss-hunter"] #load {
+  background:
+    radial-gradient(circle at 50% 44%, rgba(92, 47, 177, .25) 0 10%, transparent 36%),
+    repeating-radial-gradient(circle at 50% 44%, transparent 0 76px,
+      rgba(109, 80, 185, .035) 77px 78px, transparent 79px 112px),
+    linear-gradient(180deg, #080811, var(--ah-iron-0) 74%);
+}
+
+body[data-ui-theme="abyss-hunter"] #load .win {
+  --cut-ink: rgba(165, 130, 255, .78);
+  background: var(--cut-lines), var(--ah-panel-fill-violet);
+  box-shadow:
+    inset 0 0 0 1px rgba(170, 137, 255, .76),
+    inset 0 0 44px rgba(92, 47, 177, .18);
+  filter: drop-shadow(0 0 18px rgba(107, 62, 210, .34))
+    drop-shadow(0 16px 34px rgba(0, 0, 0, .78));
+}
+
+body[data-ui-theme="abyss-hunter"] #load .fr {
+  background:
+    linear-gradient(90deg, transparent, var(--ah-violet) 24% 76%, transparent)
+      no-repeat 50% 0 / 144px 2px,
+    linear-gradient(90deg, transparent, rgba(85, 216, 243, .48) 28% 72%, transparent)
+      no-repeat 50% 33px / 100% 1px;
+}
+
+body[data-ui-theme="abyss-hunter"] #load .win::after {
+  border-top-color: var(--ah-violet);
+  filter: drop-shadow(0 0 5px var(--ah-violet-glow));
+}
+
+body[data-ui-theme="abyss-hunter"] #load .hd b {
+  color: var(--ah-cyan-bright);
+  text-shadow: 0 0 12px var(--ah-cyan-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #load .ldTrack {
+  --cut-ink: rgba(126, 113, 168, .54);
+  background: rgba(2, 3, 9, .96);
+}
+
+body[data-ui-theme="abyss-hunter"] #load .ldTrack::after {
+  box-shadow: inset 0 0 0 1px rgba(137, 123, 181, .48);
+}
+
+body[data-ui-theme="abyss-hunter"] #load .ldFill {
+  background: linear-gradient(90deg, #51309c 0%, var(--ah-violet) 56%, var(--ah-cyan-bright) 100%);
+  box-shadow: 0 0 14px var(--ah-violet-glow), inset 0 1px rgba(255, 255, 255, .38);
+}
+
+body[data-ui-theme="abyss-hunter"] #load .ldPct {
+  color: var(--ah-text);
+  text-shadow: 0 0 10px rgba(141, 98, 255, .36);
+}
+
+body[data-ui-theme="abyss-hunter"] #load .ldMeta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 13px;
+  color: var(--ah-text-muted);
+  font-family: var(--ah-font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+body[data-ui-theme="abyss-hunter"] #load .ldMeta > * + *::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin: 0 10px 2px 0;
+  transform: rotate(45deg);
+  background: var(--ah-violet);
+  box-shadow: 0 0 6px var(--ah-violet-glow);
+}
+
+/* Help and utility chips */
+body[data-ui-theme="abyss-hunter"] #help {
+  --cut-ink: rgba(105, 126, 167, .40);
+  background: var(--cut-lines), var(--ah-etch),
+    linear-gradient(180deg, rgba(10, 12, 23, .91), rgba(4, 5, 12, .95));
+  box-shadow:
+    inset 0 0 0 1px rgba(111, 132, 173, .36),
+    inset 3px 0 0 rgba(141, 98, 255, .34),
+    0 10px 28px rgba(0, 0, 0, .42);
+  color: var(--ah-text-soft);
+}
+
+body[data-ui-theme="abyss-hunter"] #help .hRow {
+  border-left: 1px solid transparent;
+}
+
+body[data-ui-theme="abyss-hunter"] #help .k {
+  --cut-ink: rgba(93, 213, 240, .55);
+  background: var(--cut-lines), linear-gradient(180deg, #171b2b, #080a13);
+  box-shadow:
+    inset 0 0 0 1px rgba(93, 213, 240, .48),
+    inset 0 -2px 0 rgba(0, 0, 0, .56),
+    0 0 8px rgba(85, 216, 243, .08);
+  color: var(--ah-cyan-bright);
+}
+
+body[data-ui-theme="abyss-hunter"] #help .kx,
+body[data-ui-theme="abyss-hunter"] #help .hNote {
+  color: var(--ah-text-muted);
+}
+
+body[data-ui-theme="abyss-hunter"] #help .t {
+  color: var(--ah-text-soft);
+}
+
+body[data-ui-theme="abyss-hunter"] #help .t b {
+  color: var(--ah-text);
+}
+
+body[data-ui-theme="abyss-hunter"] #help .hSep {
+  background: linear-gradient(90deg, var(--ah-violet-dim), rgba(85, 216, 243, .35), transparent);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHelpChip {
+  --cut-ink: var(--ah-violet);
+  background: var(--cut-lines), var(--ah-panel-fill-violet);
+  box-shadow:
+    inset 0 0 0 1px var(--ah-violet),
+    inset 0 0 15px rgba(141, 98, 255, .20),
+    0 0 12px rgba(141, 98, 255, .12);
+  color: var(--ah-cyan-bright);
+  text-shadow: 0 0 8px var(--ah-cyan-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHelpChip:hover {
+  color: #fff;
+  box-shadow: inset 0 0 0 1px var(--ah-cyan), 0 0 16px var(--ah-cyan-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #stat {
+  --cut-ink: var(--ah-line-muted);
+  background: var(--cut-lines), rgba(5, 6, 13, .88);
+  box-shadow: inset 0 0 0 1px var(--ah-line-muted);
+  color: var(--ah-text-muted);
+}
+
+body[data-ui-theme="abyss-hunter"] #stat span {
+  color: var(--ah-cyan);
+}
+
+/* Shared story cards */
+body[data-ui-theme="abyss-hunter"] #uiTitle .win,
+body[data-ui-theme="abyss-hunter"] #uiBanner .win,
+body[data-ui-theme="abyss-hunter"] #uiDeath .win,
+body[data-ui-theme="abyss-hunter"] #bClear {
+  background: var(--cut-lines), var(--ah-panel-fill);
+  color: var(--ah-text);
+  font-family: var(--ah-font-display);
+  box-shadow:
+    inset 0 0 0 1px rgba(92, 211, 239, .52),
+    inset 0 0 54px rgba(75, 48, 141, .15);
+  filter: drop-shadow(0 0 16px rgba(76, 188, 218, .14))
+    drop-shadow(0 16px 34px rgba(0, 0, 0, .78));
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitleBg {
+  background:
+    radial-gradient(ellipse at 50% 24%, rgba(55, 27, 111, .42), transparent 38%),
+    radial-gradient(ellipse at 50% 24%, rgba(3, 4, 12, .70), rgba(1, 1, 5, .96) 78%);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitle .win {
+  --cut-ink: rgba(161, 126, 255, .82);
+  background: var(--cut-lines), var(--ah-panel-fill-violet);
+  box-shadow:
+    inset 0 0 0 1px rgba(161, 126, 255, .76),
+    inset 0 0 58px rgba(92, 47, 177, .22);
+  filter: drop-shadow(0 0 18px rgba(109, 64, 218, .34))
+    drop-shadow(0 18px 38px rgba(0, 0, 0, .80));
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitle .fr {
+  background:
+    linear-gradient(90deg, transparent, var(--ah-violet) 22% 78%, transparent)
+      no-repeat 50% 0 / 156px 2px,
+    linear-gradient(90deg, transparent, rgba(141, 98, 255, .50) 28% 72%, transparent)
+      no-repeat 50% 33px / 100% 1px;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitle .win::before {
+  background: linear-gradient(90deg, transparent, var(--ah-cyan) 22% 78%, transparent)
+    no-repeat 50% 100% / 104px 2px;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitle .win::after {
+  border-top-color: var(--ah-violet);
+  filter: drop-shadow(0 0 5px var(--ah-violet-glow));
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitle .hd .ic {
+  background:
+    linear-gradient(90deg, var(--ah-violet), var(--ah-violet)) no-repeat 0 0 / 15px 1px,
+    linear-gradient(90deg, var(--ah-violet), var(--ah-violet)) no-repeat 0 4px / 10px 1px,
+    linear-gradient(90deg, var(--ah-cyan), var(--ah-cyan)) no-repeat 0 8px / 5px 1px,
+    linear-gradient(90deg, var(--ah-violet), var(--ah-violet)) no-repeat 100% 100% / 15px 1px,
+    linear-gradient(90deg, var(--ah-violet), var(--ah-violet)) no-repeat 100% calc(100% - 4px) / 10px 1px,
+    linear-gradient(90deg, var(--ah-cyan), var(--ah-cyan)) no-repeat 100% calc(100% - 8px) / 5px 1px;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitle .hd b {
+  color: var(--ah-cyan-bright);
+  text-shadow: 0 0 12px var(--ah-cyan-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitle .big {
+  color: #faf7ff;
+  letter-spacing: .055em;
+  text-shadow: 0 0 22px var(--ah-violet-glow), 0 2px 8px #000;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitle .sub {
+  color: var(--ah-violet-bright);
+  text-shadow: 0 0 12px var(--ah-violet-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitle .rule {
+  background: linear-gradient(90deg, transparent, var(--ah-violet), var(--ah-cyan), transparent);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitle .rule::after {
+  background: var(--ah-cyan);
+  box-shadow: 0 0 9px var(--ah-cyan-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiTitle .lore {
+  color: var(--ah-text-soft);
+}
+
+/* Boss warning, objective, and boss health */
+body[data-ui-theme="abyss-hunter"] #uiBanner .win,
+body[data-ui-theme="abyss-hunter"] #uiDeath .win {
+  --cut-ink: rgba(231, 70, 94, .82);
+  background: var(--cut-lines), var(--ah-etch),
+    linear-gradient(180deg, rgba(30, 9, 18, .96), rgba(5, 4, 11, .98));
+  box-shadow:
+    inset 0 0 0 1px rgba(231, 70, 94, .78),
+    inset 0 0 52px rgba(161, 28, 54, .18);
+  filter: drop-shadow(0 0 17px var(--ah-danger-glow))
+    drop-shadow(0 16px 36px rgba(0, 0, 0, .82));
+}
+
+body[data-ui-theme="abyss-hunter"] #uiBanner .fr,
+body[data-ui-theme="abyss-hunter"] #uiDeath .fr {
+  background:
+    linear-gradient(90deg, transparent, var(--ah-danger) 22% 78%, transparent)
+      no-repeat 50% 0 / 150px 2px,
+    linear-gradient(90deg, transparent, rgba(239, 87, 111, .46) 28% 72%, transparent)
+      no-repeat 50% 33px / 100% 1px;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiBanner .win::before,
+body[data-ui-theme="abyss-hunter"] #uiDeath .win::before {
+  background: linear-gradient(90deg, transparent, var(--ah-danger) 22% 78%, transparent)
+    no-repeat 50% 100% / 104px 2px;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiBanner .hd b,
+body[data-ui-theme="abyss-hunter"] #uiDeath .hd b {
+  color: var(--ah-danger-bright);
+  text-shadow: 0 0 12px var(--ah-danger-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiBanner .tag {
+  color: var(--ah-text-soft);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiBanner .name {
+  color: #ffdce3;
+  text-shadow: 0 0 22px var(--ah-danger-glow), 0 2px 8px #000;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiBanner .name::before,
+body[data-ui-theme="abyss-hunter"] #uiBanner .name::after {
+  background: var(--ah-danger);
+  box-shadow: 0 0 11px var(--ah-danger-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #bBox {
+  --cut-ink: rgba(223, 64, 88, .62);
+  background: var(--cut-lines), var(--ah-etch),
+    linear-gradient(180deg, rgba(27, 8, 16, .92), rgba(7, 4, 10, .97));
+  box-shadow: inset 0 0 0 1px rgba(223, 64, 88, .58),
+    inset 0 0 22px rgba(142, 26, 48, .22), var(--ah-shadow);
+}
+
+body[data-ui-theme="abyss-hunter"] #bName {
+  color: var(--ah-danger-bright);
+  text-shadow: 0 0 9px var(--ah-danger-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #bBar {
+  background: #08040a;
+  box-shadow: inset 0 0 0 1px rgba(255, 103, 128, .44),
+    inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+
+body[data-ui-theme="abyss-hunter"] #bFill {
+  background: linear-gradient(180deg, #ff788f 0%, #dc304f 38%, #7c142b 100%) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, .28), 0 0 12px var(--ah-danger-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #bGoal {
+  --cut-ink: rgba(219, 168, 75, .68);
+  background: var(--cut-lines),
+    repeating-linear-gradient(135deg, rgba(255, 222, 150, .025) 0 1px, transparent 1px 11px),
+    linear-gradient(180deg, rgba(31, 22, 10, .94), rgba(10, 7, 4, .97));
+  box-shadow: inset 0 0 0 1px rgba(219, 168, 75, .64),
+    inset 0 0 22px rgba(181, 120, 26, .15), 0 8px 24px rgba(0, 0, 0, .42);
+  color: var(--ah-text);
+}
+
+body[data-ui-theme="abyss-hunter"] #bGoal::before {
+  background: var(--ah-amber);
+  box-shadow: 0 0 11px var(--ah-amber-glow), inset 0 0 0 2px rgba(20, 12, 2, .62);
+}
+
+body[data-ui-theme="abyss-hunter"] #bGoal::after,
+body[data-ui-theme="abyss-hunter"] #bGoal i {
+  color: var(--ah-amber-bright);
+}
+
+/* Death and clear */
+body[data-ui-theme="abyss-hunter"] #uiDeath {
+  background:
+    radial-gradient(ellipse 40% 34% at 50% 48%, rgba(180, 29, 59, .32), transparent 72%),
+    radial-gradient(ellipse at 50% 48%, rgba(5, 3, 10, .91), rgba(1, 1, 4, .99) 70%);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDeath .glyph {
+  color: #fff2f5;
+  text-shadow: 0 0 28px var(--ah-danger-glow), 0 0 70px rgba(141, 36, 91, .40);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDeath .rule {
+  background: linear-gradient(90deg, transparent, var(--ah-danger), var(--ah-violet), transparent);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDeath .rule::after {
+  background: var(--ah-danger);
+  box-shadow: 0 0 9px var(--ah-danger-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDeath .cnt {
+  color: var(--ah-danger-bright);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiClearDim {
+  background: radial-gradient(ellipse at 50% 48%, rgba(49, 35, 11, .24), rgba(1, 2, 6, .86) 82%);
+}
+
+body[data-ui-theme="abyss-hunter"] #bClear {
+  --cut-ink: rgba(219, 168, 75, .78);
+  background: var(--cut-lines),
+    repeating-linear-gradient(135deg, rgba(255, 218, 139, .032) 0 1px, transparent 1px 12px),
+    linear-gradient(180deg, rgba(27, 20, 9, .97), rgba(5, 5, 10, .99));
+  box-shadow: inset 0 0 0 1px rgba(219, 168, 75, .74),
+    inset 0 0 54px rgba(181, 120, 26, .15);
+  filter: drop-shadow(0 0 18px var(--ah-amber-glow))
+    drop-shadow(0 18px 40px rgba(0, 0, 0, .84));
+}
+
+body[data-ui-theme="abyss-hunter"] #bClear::before {
+  background:
+    linear-gradient(90deg, transparent, var(--ah-amber) 22% 78%, transparent)
+      no-repeat 50% 0 / 160px 2px,
+    linear-gradient(90deg, transparent, rgba(255, 224, 154, .40) 30% 70%, transparent)
+      no-repeat 50% 33px / 100% 1px;
+}
+
+body[data-ui-theme="abyss-hunter"] #bClear::after,
+body[data-ui-theme="abyss-hunter"] #bClear td.v {
+  color: var(--ah-amber-bright);
+  text-shadow: 0 0 11px var(--ah-amber-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #bClear h1 {
+  color: #fff6df;
+  text-shadow: 0 0 24px var(--ah-amber-glow), 0 2px 8px #000;
+}
+
+body[data-ui-theme="abyss-hunter"] #bClear table {
+  color: var(--ah-text-muted);
+}
+
+body[data-ui-theme="abyss-hunter"] #bClear td {
+  border-bottom-color: rgba(219, 168, 75, .16);
+}
+
+body[data-ui-theme="abyss-hunter"] #bClear .hint {
+  color: var(--ah-text-soft);
+}
+
+/* Bottom command dock */
+body[data-ui-theme="abyss-hunter"] #uiDock {
+  background:
+    var(--ah-etch),
+    linear-gradient(180deg, transparent 0%, rgba(7, 8, 17, .62) 20%, rgba(4, 5, 12, .95) 60%, #020208 100%);
+  box-shadow: inset 0 -1px 0 rgba(141, 98, 255, .20), 0 -18px 44px rgba(0, 0, 0, .22);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDock::before {
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(141, 98, 255, .42) 18%,
+    var(--ah-violet) 38%, var(--ah-cyan) 50%, var(--ah-violet) 62%,
+    rgba(141, 98, 255, .42) 82%, transparent 100%);
+  box-shadow: 0 0 14px rgba(103, 129, 255, .24);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDock::after {
+  opacity: .64;
+  background:
+    linear-gradient(90deg, var(--ah-violet), var(--ah-violet)) no-repeat 0 0 / 14px 1px,
+    linear-gradient(90deg, var(--ah-violet), var(--ah-violet)) no-repeat 0 4px / 9px 1px,
+    linear-gradient(90deg, var(--ah-cyan), var(--ah-cyan)) no-repeat 0 8px / 4px 1px,
+    linear-gradient(90deg, var(--ah-violet), var(--ah-violet)) no-repeat 100% 0 / 14px 1px,
+    linear-gradient(90deg, var(--ah-violet), var(--ah-violet)) no-repeat 100% 4px / 9px 1px,
+    linear-gradient(90deg, var(--ah-cyan), var(--ah-cyan)) no-repeat 100% 8px / 4px 1px;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDock .dkLv {
+  --cut-ink: var(--ah-violet);
+  background: var(--cut-lines), var(--ah-panel-fill-violet);
+  box-shadow: inset 0 0 0 1px var(--ah-violet),
+    inset 0 0 14px rgba(141, 98, 255, .28), 0 0 10px rgba(141, 98, 255, .12);
+  color: var(--ah-violet-bright);
+  text-shadow: 0 0 9px var(--ah-violet-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDock .dkLb {
+  color: var(--ah-cyan);
+}
+
+body[data-ui-theme="abyss-hunter"] #eBar {
+  --cut-ink: rgba(97, 163, 190, .44);
+  background: linear-gradient(180deg, #0a0c15, #03040a);
+}
+
+body[data-ui-theme="abyss-hunter"] #eBar.hpHi #eFill {
+  background: var(--ui-hp-high-fill) !important;
+}
+
+body[data-ui-theme="abyss-hunter"] #eBar.hpMid #eFill {
+  background: var(--ui-hp-mid-fill) !important;
+}
+
+body[data-ui-theme="abyss-hunter"] #eBar.hpLo #eFill {
+  background: var(--ui-hp-low-fill) !important;
+}
+
+body[data-ui-theme="abyss-hunter"] #eFill {
+  box-shadow: inset 0 1px rgba(255, 255, 255, .27), inset 0 -1px rgba(0, 0, 0, .36);
+}
+
+body[data-ui-theme="abyss-hunter"] #eFill::after {
+  background: linear-gradient(90deg, transparent, rgba(221, 250, 255, .58));
+}
+
+body[data-ui-theme="abyss-hunter"] #eBar::after {
+  box-shadow: inset 0 0 0 1px rgba(104, 177, 205, .40);
+  background:
+    var(--cut-lines),
+    repeating-linear-gradient(0deg, rgba(3, 4, 11, .22) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(255, 255, 255, .20) 0 1px, transparent 1px),
+    linear-gradient(90deg, transparent 0 calc(25% - 1px), rgba(1, 3, 8, .62) calc(25% - 1px) 25%, transparent 25%),
+    linear-gradient(90deg, transparent 0 calc(50% - 1px), rgba(1, 3, 8, .46) calc(50% - 1px) 50%, transparent 50%),
+    linear-gradient(90deg, transparent 0 calc(75% - 1px), rgba(1, 3, 8, .46) calc(75% - 1px) 75%, transparent 75%);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpNum {
+  --cut-ink: rgba(86, 176, 207, .38);
+  background: var(--cut-lines), linear-gradient(180deg, rgba(14, 17, 30, .97), rgba(5, 6, 13, .98));
+  box-shadow: inset 0 0 0 1px rgba(86, 176, 207, .34);
+  color: var(--ah-text);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpNum s,
+body[data-ui-theme="abyss-hunter"] #uiHpNum u {
+  color: var(--ah-text-muted);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpNum.low {
+  --cut-ink: rgba(223, 64, 88, .70);
+  background: var(--cut-lines), linear-gradient(180deg, rgba(38, 9, 18, .97), rgba(11, 4, 9, .99));
+  box-shadow: inset 0 0 0 1px rgba(223, 64, 88, .66),
+    inset 0 0 14px rgba(223, 64, 88, .22);
+  color: #ffe6eb;
+}
+
+body[data-ui-theme="abyss-hunter"] #eTxt {
+  color: var(--ah-text-soft);
+}
+
+body[data-ui-theme="abyss-hunter"] #eTxt::before {
+  background: var(--ah-violet);
+  box-shadow: 0 0 7px var(--ah-violet-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #eTxt b {
+  color: var(--ah-cyan-bright);
+  text-shadow: 0 0 8px rgba(85, 216, 243, .20);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDock .dkExp {
+  background: #070712;
+  box-shadow: inset 0 0 0 1px rgba(141, 98, 255, .34);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDock .dkExp i {
+  background: var(--ui-exp-fill);
+  box-shadow: 0 0 11px var(--ah-violet-glow), inset 0 1px rgba(255, 255, 255, .32);
+}
+
+/* Skills, cooldowns, locks, and weapon */
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk,
+body[data-ui-theme="abyss-hunter"] #uiSkills .skLock {
+  --cut-ink: rgba(112, 103, 157, .34);
+  background: var(--cut-lines), var(--ah-etch),
+    linear-gradient(180deg, rgba(16, 18, 33, .95), rgba(5, 6, 14, .98));
+  box-shadow: inset 0 0 0 1px rgba(112, 103, 157, .32),
+    inset 0 0 18px rgba(89, 50, 164, .07);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Basic"] {
+  --sk-accent: var(--ah-skill-basic);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Heavy"] {
+  --sk-accent: var(--ah-skill-heavy);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Wide"] {
+  --sk-accent: var(--ah-skill-wide);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Dash"],
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Jump"] {
+  --sk-accent: var(--ah-skill-mobility);
+}
+
+/* The local 2x2 sprite replaces the base theme's CSS stroke glyphs. */
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  transform: none;
+  background-image: url("./ui-assets/abyss-skills.webp");
+  background-repeat: no-repeat;
+  background-size: 200% 200%;
+  opacity: .84;
+  filter: saturate(.92) contrast(1.05)
+    drop-shadow(0 0 5px color-mix(in srgb, var(--sk-accent) 48%, transparent));
+  transition: opacity .16s ease, filter .16s ease;
+  pointer-events: none;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Basic"]::before {
+  background-position: left top;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Heavy"]::before {
+  background-position: right top;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Wide"]::before {
+  background-position: left bottom;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Dash"]::before,
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Jump"]::before {
+  background-position: right bottom;
+}
+
+/* A restrained iron veil keeps the keycap and name readable over the art. */
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk::after,
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Basic"]::after,
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Heavy"]::after,
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Wide"]::after,
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Dash"]::after,
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk[data-k="Jump"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  transform: none;
+  background:
+    linear-gradient(180deg, rgba(2, 3, 9, .48) 0 29%, transparent 48%),
+    linear-gradient(0deg, rgba(2, 3, 9, .90) 0 25%, transparent 48%);
+  box-shadow: none;
+  opacity: 1;
+  filter: none;
+  pointer-events: none;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk .key {
+  --cut-ink: rgba(85, 216, 243, .54);
+  background: var(--cut-lines), linear-gradient(180deg, #171b2b, #080a13);
+  box-shadow: inset 0 0 0 1px rgba(85, 216, 243, .48), inset 0 -2px rgba(0, 0, 0, .44);
+  color: var(--ah-cyan-bright);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk .nm {
+  color: var(--ah-text);
+  text-shadow: 0 1px 4px #000, 0 0 7px rgba(141, 98, 255, .14);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk.rdy {
+  --cut-ink: var(--sk-accent);
+  background: var(--cut-lines), var(--ah-etch),
+    linear-gradient(180deg, rgba(25, 25, 49, .96), rgba(7, 8, 18, .98));
+  box-shadow: inset 0 0 0 1px var(--sk-accent),
+    inset 0 0 22px color-mix(in srgb, var(--sk-accent) 18%, transparent);
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--sk-accent) 30%, transparent));
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk.off {
+  --cut-ink: rgba(92, 91, 119, .18);
+  background: var(--cut-lines), linear-gradient(180deg, rgba(9, 10, 18, .96), rgba(3, 4, 9, .99));
+  box-shadow: inset 0 0 0 1px rgba(92, 91, 119, .17);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk.off::before {
+  opacity: .25;
+  filter: grayscale(.42) saturate(.40) brightness(.58);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk.off::after {
+  opacity: 1;
+  background: linear-gradient(rgba(2, 3, 8, .62), rgba(2, 3, 8, .82));
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk.off .key {
+  --cut-ink: rgba(91, 106, 139, .26);
+  background: var(--cut-lines), rgba(7, 8, 15, .96);
+  box-shadow: inset 0 0 0 1px rgba(91, 106, 139, .24);
+  color: rgba(183, 191, 212, .44);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .sk .cds {
+  color: #f2edff;
+  text-shadow: 0 0 11px var(--ah-violet-glow), 0 2px 5px #000;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .skLock {
+  --cut-ink: rgba(112, 82, 167, .12);
+  background: var(--cut-lines), rgba(7, 6, 14, .54);
+  box-shadow: inset 0 0 0 1px rgba(112, 82, 167, .11);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .skLock .lk {
+  background: rgba(161, 132, 216, .16);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiSkills .skLock .lk::before {
+  border-color: rgba(161, 132, 216, .16);
+  border-bottom: 0;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDock .dkSword {
+  --cut-ink: rgba(219, 168, 75, .42);
+  background: var(--cut-lines),
+    linear-gradient(180deg, rgba(25, 20, 13, .92), rgba(7, 7, 12, .98));
+  box-shadow: inset 0 0 0 1px rgba(219, 168, 75, .38),
+    inset 0 0 16px rgba(219, 168, 75, .07);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiDock .dkSword .lb {
+  color: var(--ah-amber);
+}
+
+body[data-ui-theme="abyss-hunter"] #sword {
+  color: #fff2d5;
+  text-shadow: 0 0 8px rgba(219, 168, 75, .18);
+}
+
+/* Stealth state */
+body[data-ui-theme="abyss-hunter"] #stHud {
+  font-family: var(--ah-font-ui);
+  box-shadow: var(--ah-shadow);
+}
+
+body[data-ui-theme="abyss-hunter"] #stHud.hide {
+  --cut-ink: var(--ah-stealth);
+  background: var(--cut-lines), var(--ah-etch),
+    linear-gradient(180deg, rgba(7, 29, 26, .95), rgba(3, 12, 13, .98));
+  box-shadow: inset 0 0 0 1px var(--ah-stealth),
+    inset 0 0 20px rgba(66, 212, 175, .17), 0 0 12px rgba(66, 212, 175, .10);
+  color: #cffff1;
+}
+
+body[data-ui-theme="abyss-hunter"] #stHud.loud {
+  --cut-ink: var(--ah-amber);
+  background: var(--cut-lines), var(--ah-etch),
+    linear-gradient(180deg, rgba(34, 22, 9, .95), rgba(12, 7, 5, .98));
+  box-shadow: inset 0 0 0 1px var(--ah-amber),
+    inset 0 0 20px rgba(219, 168, 75, .17), 0 0 12px rgba(219, 168, 75, .10);
+  color: var(--ah-amber-bright);
+}
+
+body[data-ui-theme="abyss-hunter"] #stVig {
+  box-shadow: inset 0 0 190px 62px rgba(1, 12, 15, .76),
+    inset 0 0 72px 9px rgba(34, 171, 150, .25);
+}
+
+body[data-ui-theme="abyss-hunter"] #stVig.loud {
+  box-shadow: inset 0 0 190px 62px rgba(15, 8, 2, .78),
+    inset 0 0 72px 9px rgba(194, 126, 29, .29);
+}
+
+/* Objective compass and nearby-enemy pip */
+body[data-ui-theme="abyss-hunter"] #uiNav .tip {
+  filter: drop-shadow(0 0 7px var(--nav-glow)) drop-shadow(0 3px 4px rgba(0, 0, 0, .76));
+}
+
+body[data-ui-theme="abyss-hunter"] #uiNav .plate {
+  --cut-ink: var(--nav-ink);
+  background: var(--cut-lines), var(--ah-etch),
+    linear-gradient(180deg, rgba(16, 15, 30, .96), rgba(4, 5, 12, .99));
+  box-shadow: inset 0 0 0 1px var(--nav-ink),
+    inset 0 0 20px color-mix(in srgb, var(--nav-ink) 19%, transparent),
+    0 7px 18px rgba(0, 0, 0, .48);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiNav .cap,
+body[data-ui-theme="abyss-hunter"] #uiPip .cap,
+body[data-ui-theme="abyss-hunter"] #uiNav .dst {
+  --cut-ink: rgba(111, 126, 164, .42);
+  background: var(--cut-lines), rgba(5, 6, 14, .96);
+  box-shadow: inset 0 0 0 1px rgba(111, 126, 164, .38), 0 5px 14px rgba(0, 0, 0, .42);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiNav .dst {
+  color: color-mix(in srgb, var(--nav-ink) 72%, white);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiPip {
+  --cut-ink: rgba(141, 98, 255, .46);
+  background: var(--cut-lines), rgba(7, 7, 16, .94);
+  box-shadow: inset 0 0 0 1px rgba(141, 98, 255, .42), 0 4px 12px rgba(0, 0, 0, .42);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiPip::after {
+  background: var(--ah-cyan);
+  box-shadow: 0 0 9px var(--ah-cyan-glow), 0 0 2px #fff;
+}
+
+/* Overhead HP */
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .track {
+  --cut-ink: rgba(184, 221, 235, .74);
+  background: #03040a;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .track::after {
+  box-shadow: inset 0 0 0 1px #020207, inset 0 0 0 2px rgba(181, 218, 232, .78);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .gh {
+  background: var(--ui-hp-ghost-fill);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="#2ee08a"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="46, 224, 138"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="46 224 138"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="138, 243, 209"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="138 243 209"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="ui-hp-high-fill"] {
+  background: var(--ui-hp-high-fill) !important;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="#e0c22e"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="224, 194, 46"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="224 194 46"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="255, 225, 154"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="255 225 154"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="ui-hp-mid-fill"] {
+  background: var(--ui-hp-mid-fill) !important;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="#e04a2e"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="224, 74, 46"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="224 74 46"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="255, 154, 170"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="255 154 170"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="ui-hp-low-fill"] {
+  background: var(--ui-hp-low-fill) !important;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .lv {
+  --cut-ink: var(--ah-violet);
+  background: var(--cut-lines), var(--ah-panel-fill-violet);
+  box-shadow: inset 0 0 0 1px var(--ah-violet),
+    inset 0 0 11px rgba(141, 98, 255, .28), 0 0 8px rgba(141, 98, 255, .16);
+  color: var(--ah-violet-bright);
+  text-shadow: 0 0 8px var(--ah-violet-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat.hit .track {
+  --cut-ink: var(--ah-danger-bright);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat.hit .track::after {
+  box-shadow: inset 0 0 0 1px #020207, inset 0 0 0 2.5px var(--ah-danger-bright);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat.hit .gh {
+  background: linear-gradient(90deg, #fff, #ffb3c0);
+}
+
+/* Combo / skill callout */
+body[data-ui-theme="abyss-hunter"] #combo {
+  color: var(--ah-cyan-bright);
+  text-shadow: 0 0 18px var(--ah-violet-glow), 0 2px 7px #000;
+}
+
+body[data-ui-theme="abyss-hunter"] #combo i {
+  color: var(--ah-text-soft);
+}
+
+body[data-ui-theme="abyss-hunter"] #combo .uiCall {
+  --cut-ink: rgba(141, 98, 255, .72);
+  background: var(--cut-lines), var(--ah-panel-fill-violet);
+  box-shadow: inset 0 0 0 1px rgba(141, 98, 255, .68),
+    inset 0 0 28px rgba(85, 55, 160, .20);
+  filter: drop-shadow(0 0 14px var(--ah-violet-glow));
+}
+
+body[data-ui-theme="abyss-hunter"] #combo .uiCall .hd {
+  color: var(--ah-cyan);
+  text-shadow: 0 0 9px var(--ah-cyan-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #combo .uiCall .nm {
+  color: #f6f2ff;
+  text-shadow: 0 0 19px var(--ah-violet-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #combo .uiCall .ty {
+  color: var(--ah-violet-bright);
+}
+
+/* Optional awakening overlay */
+body[data-ui-theme="abyss-hunter"] #uiLevelUp {
+  position: fixed;
+  left: 50%;
+  top: 43%;
+  z-index: 14;
+  width: min(420px, 78vw);
+  min-height: 150px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  user-select: none;
+  isolation: isolate;
+  opacity: 0;
+  color: var(--ah-text);
+  font-family: var(--ah-font-display);
+  text-align: center;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp::before,
+body[data-ui-theme="abyss-hunter"] #uiLevelUp::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -2;
+  pointer-events: none;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp::before {
+  width: min(560px, 92vw);
+  height: 2px;
+  transform: translate(-50%, -50%) scaleX(.08);
+  background: linear-gradient(90deg, transparent, var(--ah-violet),
+    var(--ah-cyan-bright), var(--ah-violet), transparent);
+  box-shadow: 0 0 18px var(--ah-violet-glow);
+  opacity: 0;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp::after {
+  width: min(440px, 84vw);
+  height: 170px;
+  transform: translate(-50%, -50%) scale(.7);
+  background: radial-gradient(ellipse, rgba(108, 57, 214, .30), transparent 66%);
+  opacity: 0;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp .sigil {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: 112px;
+  height: 112px;
+  transform: translate(-50%, -50%) rotate(45deg) scale(.45);
+  border: 1px solid rgba(141, 98, 255, .82);
+  box-shadow: inset 0 0 24px rgba(141, 98, 255, .12), 0 0 18px var(--ah-violet-glow);
+  opacity: 0;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp .sigil::before,
+body[data-ui-theme="abyss-hunter"] #uiLevelUp .sigil::after {
+  content: "";
+  position: absolute;
+  inset: 15px;
+  border: 1px solid rgba(85, 216, 243, .54);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp .sigil::before {
+  transform: rotate(45deg);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp .sigil::after {
+  inset: 33px;
+  transform: rotate(45deg);
+  background: rgba(141, 98, 255, .08);
+  box-shadow: 0 0 16px var(--ah-cyan-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp .eyebrow {
+  margin-bottom: 5px;
+  color: var(--ah-cyan-bright);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .42em;
+  padding-left: .42em;
+  text-shadow: 0 0 11px var(--ah-cyan-glow);
+  opacity: 0;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp strong {
+  display: block;
+  color: #faf7ff;
+  font-size: clamp(30px, 5vw, 50px);
+  font-weight: 850;
+  line-height: 1;
+  letter-spacing: .16em;
+  padding-left: .16em;
+  text-shadow: 0 0 12px rgba(255, 255, 255, .24),
+    0 0 26px var(--ah-violet-glow), 0 3px 9px #000;
+  opacity: 0;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp .level {
+  margin-top: 9px;
+  padding: 3px 13px 4px;
+  border-left: 1px solid var(--ah-violet);
+  border-right: 1px solid var(--ah-cyan);
+  color: var(--ah-violet-bright);
+  background: linear-gradient(90deg, transparent, rgba(141, 98, 255, .12), transparent);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .22em;
+  padding-left: calc(13px + .22em);
+  text-shadow: 0 0 9px var(--ah-violet-glow);
+  opacity: 0;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp.on {
+  animation: ah-level-shell 1.9s cubic-bezier(.18, .82, .22, 1) both;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp.on::before {
+  animation: ah-level-line 1.55s ease-out .06s both;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp.on::after {
+  animation: ah-level-aura 1.7s ease-out both;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp.on .sigil {
+  animation: ah-level-sigil 1.65s cubic-bezier(.18, .82, .22, 1) both;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp.on .eyebrow {
+  animation: ah-level-copy 1.45s ease-out .12s both;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp.on strong {
+  animation: ah-level-title 1.5s cubic-bezier(.18, .92, .22, 1) .17s both;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiLevelUp.on .level {
+  animation: ah-level-copy 1.35s ease-out .28s both;
+}
+
+@keyframes ah-level-shell {
+  0% { opacity: 0; }
+  9%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes ah-level-line {
+  0% { opacity: 0; transform: translate(-50%, -50%) scaleX(.04); }
+  25% { opacity: 1; transform: translate(-50%, -50%) scaleX(1); }
+  70% { opacity: .62; transform: translate(-50%, -50%) scaleX(.72); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scaleX(.18); }
+}
+
+@keyframes ah-level-aura {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.65); }
+  25% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.16); }
+}
+
+@keyframes ah-level-sigil {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(12deg) scale(.35); }
+  22% { opacity: .92; transform: translate(-50%, -50%) rotate(45deg) scale(1); }
+  68% { opacity: .48; transform: translate(-50%, -50%) rotate(62deg) scale(.96); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(84deg) scale(1.12); }
+}
+
+@keyframes ah-level-title {
+  0% { opacity: 0; transform: translateY(9px) scale(.88); letter-spacing: .28em; }
+  22%, 72% { opacity: 1; transform: none; letter-spacing: .16em; }
+  100% { opacity: 0; transform: translateY(-4px) scale(1.02); letter-spacing: .19em; }
+}
+
+@keyframes ah-level-copy {
+  0% { opacity: 0; transform: translateY(6px); }
+  22%, 72% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui-theme="abyss-hunter"] #uiLevelUp.on {
+    animation: none;
+    opacity: 1;
+  }
+
+  body[data-ui-theme="abyss-hunter"] #uiLevelUp.on::before,
+  body[data-ui-theme="abyss-hunter"] #uiLevelUp.on::after {
+    animation: none;
+    opacity: .42;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  body[data-ui-theme="abyss-hunter"] #uiLevelUp.on .sigil {
+    animation: none;
+    opacity: .42;
+    transform: translate(-50%, -50%) rotate(45deg) scale(1);
+  }
+
+  body[data-ui-theme="abyss-hunter"] #uiLevelUp.on .eyebrow,
+  body[data-ui-theme="abyss-hunter"] #uiLevelUp.on strong,
+  body[data-ui-theme="abyss-hunter"] #uiLevelUp.on .level {
+    animation: none;
+    opacity: 1;
+  }
+}
