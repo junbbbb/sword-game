@@ -180,6 +180,25 @@ const FRAME_T = 1 / 24;      // 한 장을 붙드는 시간(초)
 // 1 = 칼끝 궤적에 붙는 구운 포말 마루 + 타격 팝 f1 물방울 제거.
 // 0 = 새 층을 완전히 끄고 기존 팝 두 장 경로로 돌아간다(롤백은 이 한 줄).
 const FOAM_CREST_V2 = 1;
+// ═════════════════════════════════════════════════════════════════════════════
+// ★★18차 「이아이도 일섬」 스위치 (2026-08-13. 오너 지시)
+//
+//   "칼 이펙트 한번 기존껏 그냥 무시하고 한번너가 새로 만들어봐 귀멸의칼날처럼말고
+//    너가 그냥 이펙트 를. 기존꺼 다시 돌릴수있게해놓고."
+//
+// 그래서 이 상수 **하나**가 새 판과 옛 판을 가른다. main.js 가 이 값을 그대로
+// 수입해 쓰므로(import { createFeel, FX_V18 }) 스위치는 이 파일 이 줄뿐이다.
+//   1 = 18차 일섬  · 얇은 섬광 호(main.js uMode 4) + 접점 에너지 파열(아래 burst)
+//   0 = 17차까지의 귀멸 판  · B 두툼한 물 리본 + 포말 마루 + 초승달 + 먹 튀김 팝
+//
+// ★0 으로 내리면 **옛 경로가 바이트 그대로** 다시 돈다. 지운 코드가 한 줄도 없고
+//   새 코드는 전부 이 상수 뒤에 숨어 있다(gate 만 걸었다. 아래 세 자리가 전부다):
+//     · trailFoamSample  포말 마루 표본 수집을 여기서 끊는다(포말은 리본의 것이다)
+//     · main.js onHit    초승달(impactSlash)+먹 튀김(pop) 대신 burst() 를 부른다
+//     · main.js FX_STYLE 기본 벌이 B 리본 대신 V 일섬이 된다(?fx=b 로 옛 판 열람)
+// ★?fx=a|c|d 대조군 셋은 이 스위치와 **무관하다**(그 셋은 손도 안 댔다).
+// ═════════════════════════════════════════════════════════════════════════════
+export const FX_V18 = 1;
 const FLIP_N = 6;            // 시트 세로 칸 수 = 한 획의 프레임 수
 const FLIP_C = 2;            // 시트 가로 칸 수 = 획 종류
 const FLIP_A = [1.0, 1.0, 1.0, 1.0, 0.90, 0.70];   // 프레임별 알파도 계단이다
@@ -1031,6 +1050,216 @@ export function createFeel(opts) {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
+  // 접점 에너지 파열 (18차 일섬) — 초승달·먹 튀김을 대신하는 한 겹
+  //
+  // 옛 판의 접점 연출은 둘이었다: 진홍/감청 **초승달**(월드 플립북 impactSlash)과
+  // **먹 튀김 팝**(popMesh). 둘 다 먹으로 형태를 정의하는 귀멸 문법이라 일섬 판의
+  // 언어(흰 코어 -> 시안 -> 딥블루 감쇠, 먹선 없음)와 한 화면에 못 선다.
+  // 여기서 그리는 것은 **작은 에너지 파열** 한 겹이다:
+  //   · 방사 스파크 일곱 가닥 (칼이 지나간 각도를 축으로 앞뒤로 길다)
+  //   · 링 한 겹 (프레임마다 넓어지고 얇아진다)
+  //   · 중심 섬광 (f0 에만. 여기만 선형 2를 넘겨 블룸이 문다)
+  //
+  // ★★타이밍이 히트스톱에 물려 있다 (17차 타격감 팩과의 합).
+  //   이 층은 **게임시계**로 늙는다(pop·초승달과 같은 규칙). 히트스톱(명중 70ms ·
+  //   처치 105ms)이 걸리면 게임시계가 0.05배로 눌리므로, 파열은 **f0 한 장을
+  //   붙들고 있는다.** 그래서 f0 을 최대 프레임으로 그린다 — 중심 섬광이 제일 밝고
+  //   스파크가 제일 길다. "멈춘 그 화면에 제일 센 그림이 서 있다"가 되게.
+  //   (반대로 f0 을 작게 그리고 뒤에서 키우면, 커지는 장면이 전부 히트스톱 뒤로
+  //    밀려 사람 눈에는 '멈췄다가 뒤늦게 터진다'로 보인다.)
+  // ★크기 계약은 옛 판 그대로다. 반지름 0.62m x size 라 처치(1.15)에도 0.71m —
+  //   요괴 키 1.30m 안에 든다("무엇을 벴는지 안 보인다"를 다시 열지 않는다).
+  // ═══════════════════════════════════════════════════════════════════════
+  const BURST_MAX = 8;
+  const BURST_R = 0.62;            // size 1 일 때 반지름(m)
+  const BURST_N_HIT = 4;           // 4/24 = 0.167초
+  const BURST_N_KILL = 5;          // 5/24 = 0.208초 (처치가 한 장 길고 한 단 크다)
+  // 프레임별 알파. 파열은 **커지면서 옅어진다**(f0 이 제일 세다).
+  // ★★판의 크기는 **고정**이다(BURST_R). 1차 시도에서 판까지 프레임마다 키웠더니
+  //   셰이더 안의 링 반지름 증가와 곱해져서 파열이 0.97m 짜리 별이 됐다(실측 T10.
+  //   "과대 금지" 계약 위반). 커지는 것은 셰이더의 링·스파크뿐이고, 판은 그 자다.
+  const BURST_A = [1.0, 0.72, 0.42, 0.20, 0.08];
+  const burstGeo = new THREE.BufferGeometry();
+  const bPos = new Float32Array(BURST_MAX * 4 * 3);
+  const bUV = new Float32Array(BURST_MAX * 4 * 2);
+  const bA = new Float32Array(BURST_MAX * 4);
+  const bFrm = new Float32Array(BURST_MAX * 4);
+  const bSeed = new Float32Array(BURST_MAX * 4);
+  const bAng = new Float32Array(BURST_MAX * 4);
+  const bBig = new Float32Array(BURST_MAX * 4);
+  const bIdx = [];
+  for (let i = 0; i < BURST_MAX; i++) {
+    const o = i * 4;
+    bIdx.push(o, o + 1, o + 2, o, o + 2, o + 3);
+    bUV[o * 2] = 0; bUV[o * 2 + 1] = 0;
+    bUV[(o + 1) * 2] = 1; bUV[(o + 1) * 2 + 1] = 0;
+    bUV[(o + 2) * 2] = 1; bUV[(o + 2) * 2 + 1] = 1;
+    bUV[(o + 3) * 2] = 0; bUV[(o + 3) * 2 + 1] = 1;
+  }
+  burstGeo.setAttribute('position', new THREE.BufferAttribute(bPos, 3));
+  burstGeo.setAttribute('aUV', new THREE.BufferAttribute(bUV, 2));
+  burstGeo.setAttribute('aAlpha', new THREE.BufferAttribute(bA, 1));
+  burstGeo.setAttribute('aFrm', new THREE.BufferAttribute(bFrm, 1));
+  burstGeo.setAttribute('aSeed', new THREE.BufferAttribute(bSeed, 1));
+  burstGeo.setAttribute('aAng', new THREE.BufferAttribute(bAng, 1));
+  burstGeo.setAttribute('aBig', new THREE.BufferAttribute(bBig, 1));
+  burstGeo.setIndex(bIdx);
+  // ★색은 **선형 vec3 로 직접** 넣는다(THREE.Color 금지 - 그 자는 hex 를 sRGB 로
+  //   읽어 선형으로 바꾼다. 위 uWat 주석의 함정이 그것이다). main.js 의 uPal 과
+  //   같은 자를 써야 궤적의 코어와 파열의 코어가 화면에서 같은 색에 앉는다.
+  // ★기본값은 물칼 팔레트에서 뽑은 값이다. main.js 가 칼을 바꿀 때마다
+  //   setBurstPalette() 로 그 칼의 네 단을 넘긴다(안 부르면 이 물빛 그대로).
+  const burstMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, depthTest: false, fog: false,
+    blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    uniforms: {
+      // 흰 코어. 선형 1.85 = 블룸 문턱(1.02)을 확실히 넘긴다 = 이 한 점만 번진다
+      uCore: { value: new THREE.Vector3(1.68, 1.78, 1.86) },
+      uHot: { value: new THREE.Vector3(0.31, 1.08, 1.32) },     // 시안(밝은 단)
+      uMid: { value: new THREE.Vector3(0.13, 0.58, 0.76) },     // 시안(중간 단)
+      uDeep: { value: new THREE.Vector3(0.05, 0.21, 0.36) },    // 딥블루(감쇠 끝)
+    },
+    vertexShader: `
+      attribute vec2 aUV; attribute float aAlpha; attribute float aFrm;
+      attribute float aSeed; attribute float aAng; attribute float aBig;
+      varying vec2 vUV; varying float vA; varying float vFrm;
+      varying float vSd; varying float vAn; varying float vBg;
+      void main(){ vUV = aUV; vA = aAlpha; vFrm = aFrm; vSd = aSeed; vAn = aAng; vBg = aBig;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      varying vec2 vUV; varying float vA; varying float vFrm;
+      varying float vSd; varying float vAn; varying float vBg;
+      uniform vec3 uCore; uniform vec3 uHot; uniform vec3 uMid; uniform vec3 uDeep;
+      float h1(float x){ return fract(sin(x * 127.1) * 43758.5453); }
+      void main(){
+        // ★!(vA > x) 꼴. NaN 은 모든 비교가 거짓이라 (vA <= x) 로 쓰면 NaN 이
+        //   discard 를 통과해 HDR 버퍼에 찍히고 블룸이 사각형으로 번진다(v88 함정).
+        if (!(vA > 0.004)) discard;
+        vec2 q = vUV * 2.0 - 1.0;
+        float r = length(q);
+        if (r > 1.0) discard;
+        float fr = floor(vFrm + 0.5);
+        // 벤 각도를 x 축으로 돌린 좌표. 스파크가 **칼이 지나간 축**으로 길어야
+        // "칼이 지나가며 터졌다"로 읽힌다(무작위 방사는 폭죽이 된다).
+        float ca = cos(-vAn), sa = sin(-vAn);
+        vec2 p = vec2(q.x * ca - q.y * sa, q.x * sa + q.y * ca);
+        float ang = atan(p.y, p.x);
+
+        // ── 링 한 겹 ── 프레임마다 넓어지고 얇아진다(판은 안 커진다. 위 주석)
+        float rr = 0.26 + 0.17 * fr;
+        float tw = max(0.028, 0.10 - 0.018 * fr);
+        float ring = 1.0 - smoothstep(0.0, tw, abs(r - rr));
+        // 링은 완전한 원이 아니다. 벤 축 방향이 더 세고, 각도 열두 칸으로 **끊긴다**.
+        // ★안 끊으면 UI 아이콘(완전한 동심원)으로 읽힌다 - 이 게임 화면에는 이미
+        //   요괴 예고 링이 그 문법으로 돌고 있어서 둘이 헷갈린다(실측 크롭에서 그랬다).
+        ring *= 0.45 + 0.55 * abs(cos(ang));
+        ring *= 0.55 + 0.60 * h1(floor((ang + 3.14159265) / 0.52) * 1.7 + vSd);
+
+        // ── 방사 스파크 다섯 가닥 ──
+        // 각 가닥은 제 각도·길이를 씨앗에서 받는다. 벤 축(ang 0/pi) 근처가 길다.
+        // ★일곱 가닥 + 작은 흔들림(0.72)은 화면에서 **바퀴살**로 보였다(실측 T11).
+        //   다섯으로 줄이고 흔들림을 칸의 95% 까지 열면 '몇 가닥 튀었다'가 된다.
+        const float SPK = 5.0;
+        float step0 = 6.2831853 / SPK;
+        float si = floor((ang + 3.14159265) / step0);
+        float sp = 0.0;
+        for (int k = -1; k <= 1; k++) {
+          float idx = si + float(k);
+          float sd = vSd + idx * 3.77;
+          float ac = (idx + 0.5) * step0 - 3.14159265 + (h1(sd) - 0.5) * step0 * 0.95;
+          float da = ang - ac;
+          // 각도 차를 -pi..pi 로 접는다
+          da = da - 6.2831853 * floor(da / 6.2831853 + 0.5);
+          // 길이: 벤 축에 가까울수록 길다(0.55 ~ 1.0). 프레임이 갈수록 길어진다
+          float axial = abs(cos(ac));
+          // ★길이 상한이 곧 계약이다. 1차 시도는 최대 1.30 이라 판 밖으로 뻗어
+          //   **직선 별**이 됐다(실측 T10). 지금 상한 0.68 - 링 안쪽에 머문다.
+          float len = (0.30 + 0.30 * axial) * (0.85 + 0.10 * fr) * (0.45 + 0.70 * h1(sd + 1.3));
+          if (r < len) {
+            // 바늘: 뿌리에서 굵고 끝에서 0 으로. 폭은 **각도** 폭이라 r 이 커질수록
+            // 실제 화소 폭은 그대로다(각도 0.10rad x r 0.5 = 화면에서 2~3px).
+            // ★1차 시도의 0.052 는 1px 라 흰 공 옆에서 아예 안 보였다(실측 T9).
+            float tt = 1.0 - r / max(len, 1e-3);
+            float hw = (0.105 + 0.055 * h1(sd + 2.1)) * (0.35 + 0.65 * tt);
+            float d = 1.0 - smoothstep(hw * 0.35, hw, abs(da));
+            sp = max(sp, d * (0.35 + 0.65 * tt));
+          }
+        }
+
+        // ── 중심 섬광 ── f0 에만. 히트스톱이 붙드는 그 한 장이다.
+        // ★★작아야 한다. 1차 시도에서 반지름 0.32(=0.23m)로 뒀더니 파열이 통째로
+        //   **흰 공** 하나가 됐다(실측 T9. 스파크도 링도 그 안에 먹혔다). 접점의
+        //   '점'이지 폭발이 아니다 - 여기서 화면을 채우면 17차의 백색 패널로 되돌아간다.
+        float cr = (0.11 + 0.04 * vBg) * (fr < 0.5 ? 1.0 : (fr < 1.5 ? 0.62 : 0.0));
+        float core = cr > 0.0 ? (1.0 - smoothstep(cr * 0.40, cr, r)) : 0.0;
+
+        // ── 합성 ── 겹마다 색을 따로 얹는다(가산이라 그냥 더하면 된다).
+        //   링   = 시안 몸 + 딥블루 번짐
+        //   스파크 = 시안 바늘 + 뿌리의 흰 심(세제곱이라 끝으로 갈수록 색만 남는다)
+        //   중심  = 흰 섬광
+        if (sp < 0.05 && ring < 0.05 && core < 0.02) discard;
+        vec3 c = uHot * (ring * 0.85) + uDeep * (ring * 0.60);
+        c += uHot * (sp * 1.10) + uMid * (sp * 0.45);
+        c += uCore * (pow(sp, 3.0) * 0.85);
+        c += uCore * core;
+        float e = clamp(max(max(ring, sp), core), 0.0, 1.0);
+        gl_FragColor = vec4(c, vA * e);
+      }`,
+  });
+  const burstMesh = new THREE.Mesh(burstGeo, burstMat);
+  burstMesh.frustumCulled = false;
+  burstMesh.renderOrder = 14;       // 팝(13) 바로 위, 화면 겹(39+) 아래
+  burstMesh.visible = true;         // 늘 켜 둔다(알파 0 이면 전부 discard. 예열 겸용)
+  scene.add(burstMesh);
+  const bursts = [];                // {p, t, ang, size, seed, n, big}
+  let burstSpawnN = 0;              // 지금까지 띄운 파열 수(게이트 검증 창구)
+  const _bR = new THREE.Vector3(), _bU = new THREE.Vector3(), _bQ = new THREE.Vector3();
+
+  // 접점에 파열 하나. x,y,z = 월드 좌표 / ang = 화면 각도(벤 방향) /
+  // size = 크기 배수 / kill = 처치면 한 단 크고 한 장 길다
+  function burst(x, y, z, ang, size, kill) {
+    burstSpawnN++;
+    if (bursts.length >= BURST_MAX) bursts.shift();
+    bursts.push({ p: new THREE.Vector3(x, y, z), t: 0, ang: ang || 0,
+                  size: (size || 1) * (kill ? 1.15 : 0.90),
+                  n: kill ? BURST_N_KILL : BURST_N_HIT,
+                  big: kill ? 1 : 0, seed: Math.random() * 20 });
+  }
+  // 게임시간으로 늙힌다(히트스톱이 걸리면 f0 을 붙들고 있는다. 위 타이밍 주석)
+  function updateBursts(dtGame) {
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      bursts[i].t += dtGame;
+      if (Math.floor(bursts[i].t / FRAME_T) >= bursts[i].n) bursts.splice(i, 1);
+    }
+    _bR.setFromMatrixColumn(camera.matrixWorld, 0);
+    _bU.setFromMatrixColumn(camera.matrixWorld, 1);
+    for (let i = 0; i < BURST_MAX; i++) {
+      const o = i * 4;
+      if (i >= bursts.length) { for (let k = 0; k < 4; k++) bA[o + k] = 0; continue; }
+      const s = bursts[i];
+      const fr = Math.min(Math.floor(s.t / FRAME_T), BURST_A.length - 1);
+      const rad = s.size * BURST_R;         // ★고정. 위 BURST_A 주석 참조
+      const a = BURST_A[fr];
+      for (let k = 0; k < 4; k++) {
+        _bQ.copy(s.p).addScaledVector(_bR, POP_CORNER[k][0] * rad)
+           .addScaledVector(_bU, POP_CORNER[k][1] * rad);
+        bPos[(o + k) * 3] = _bQ.x; bPos[(o + k) * 3 + 1] = _bQ.y; bPos[(o + k) * 3 + 2] = _bQ.z;
+        bA[o + k] = a;
+        bFrm[o + k] = fr;
+        bSeed[o + k] = s.seed;
+        bAng[o + k] = s.ang;
+        bBig[o + k] = s.big;
+      }
+    }
+    burstGeo.attributes.position.needsUpdate = true;
+    burstGeo.attributes.aAlpha.needsUpdate = true;
+    burstGeo.attributes.aFrm.needsUpdate = true;
+    burstGeo.attributes.aSeed.needsUpdate = true;
+    burstGeo.attributes.aAng.needsUpdate = true;
+    burstGeo.attributes.aBig.needsUpdate = true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
   // 칼끝 포말 마루 (v99 16-FX) — 물방울 대신 리본 바깥면에 붙는 흰 거품
   //
   // main.js 의 파란 B 리본은 다른 에이전트 소유라 여기서 갈지 않는다. 이 층은 매 프레임
@@ -1180,6 +1409,10 @@ export function createFeel(opts) {
   // main.js 한 줄 통로. a,b/rootPos는 매 프레임 재사용되는 객체이므로 즉시 복사한다.
   function trailFoamSample(a, b, wake, rootPos, charH) {
     foamPending.seq++;
+    // ★18차. 포말 마루는 **B 리본의 바깥면에 붙는 층**이다(정박 계약이 리본 기하에
+    //   물려 있다). 일섬 판에는 붙을 리본이 없으므로 표본 수집 자체를 여기서 끊는다.
+    //   FX_V18=0 이면 이 한 줄이 없는 것과 같다(아래 옛 경로가 그대로 돈다).
+    if (FX_V18) { foamPending.valid = false; return false; }
     if (!FOAM_CREST_V2 || !finiteV3(a) || !finiteV3(b) || !Number.isFinite(wake)) {
       foamPending.valid = false;
       return false;
@@ -1731,6 +1964,9 @@ export function createFeel(opts) {
     updateImpactSlashes(rawDt * timeScale);
     // 타격 팝(흰 번쩍 + 먹 튀김). 같은 이유로 게임시계, 같은 이유로 early return 앞.
     updatePops(rawDt * timeScale);
+    // ★18차. 접점 에너지 파열. 같은 게임시계·같은 1/24 칸이고, 부르는 쪽이 없으면
+    //   빈 층이다(FX_V18=0 이면 main.js 가 아예 안 부른다 = 슬롯이 늘 0개).
+    updateBursts(rawDt * timeScale);
     // 칼끝 포말 마루. 같은 게임시계·같은 1/24 칸이며, 데이터가 안 오면 조용히 비어 있다.
     updateFoamCrests(rawDt * timeScale);
 
@@ -2064,7 +2300,7 @@ export function createFeel(opts) {
     // ★"이펙트가 화면의 몇 %인가"는 **이펙트를 껐다 켠 두 장의 차이**로만 정확히 잰다.
     //   색으로 마스크를 추리면 배경의 하늘·물까지 걸려서 숫자가 거짓말을 한다.
     //   그림에는 아무 영향이 없다(배열 하나를 내줄 뿐이다).
-    fxMeshes: [slashMesh, lineMesh, impMesh, impfMesh, popMesh, foamMesh, ringMesh],
+    fxMeshes: [slashMesh, lineMesh, impMesh, impfMesh, popMesh, foamMesh, ringMesh, burstMesh],
     step, updateShake, shakeOffset, updateOverlay, slash, speedLines, shake,
     // ★v99 16-FX main.js 한 줄 통로.
     // a,b = 칼날 선분, wake = 0..1, rootPos/charH = B 리본과 같은 바깥축을 만드는 기준.
@@ -2093,6 +2329,30 @@ export function createFeel(opts) {
     //   쓰므로 같은 자로 넘겨야 화면에서 궤적의 감청 밴드와 같은 색에 앉는다.
     //   (setHex 로 받으면 sRGB->선형 변환이 한 번 더 걸려 훨씬 어두워진다.)
     setPopTint(r, g, b) { popMat.uniforms.uWat.value.setRGB(r, g, b); },
+    // ★18차 일섬. 접점 파열 한 겹(위 burst 절). main.js onHit 이 초승달+팝 자리에
+    //   이것 하나를 부른다(FX_V18=1 일 때만. 0 이면 옛 두 줄이 그대로 돈다).
+    burst,
+    // ★18차. 파열의 색 계단을 **지금 든 칼**의 팔레트에 물린다. 인자는 전부
+    //   **선형 rgb 0..1**(main.js uPal 과 같은 자)이고 밝기 순서로 넘긴다:
+    //     wht(흰 심) > lt1(시안) > mid(중간) > dk1(감청)
+    //   코어는 wht 를 1.85배로 든다 - 블룸 문턱(선형 1.02)을 넘겨야 그 한 점이 번진다.
+    //   안 부르면 물빛 기본값 그대로다(불칼에서도 시안 파열이 터진다 = 부르는 쪽이 있어야 한다).
+    // ★채도 밀기는 궤적 셰이더(main.js fsat)와 **같은 자(2.10)**를 쓴다. 두 층이
+    //   같은 색에 앉아야 "한 이펙트"로 읽힌다(흰 심은 안 민다 - 밀 색이 없다).
+    setBurstPalette(wht, lt1, mid, dk1) {
+      const S = 2.10;
+      const put = (u, c, k) => {
+        const l = c.x * 0.2126 + c.y * 0.7152 + c.z * 0.0722;
+        u.set(Math.max(0, (l + (c.x - l) * S) * k),
+              Math.max(0, (l + (c.y - l) * S) * k),
+              Math.max(0, (l + (c.z - l) * S) * k));
+      };
+      const U = burstMat.uniforms;
+      if (wht) U.uCore.value.set(wht.x * 1.85, wht.y * 1.85, wht.z * 1.85);
+      if (lt1) put(U.uHot.value, lt1, 1.25);
+      if (mid) put(U.uMid.value, mid, 0.95);
+      if (dk1) put(U.uDeep.value, dk1, 0.85);
+    },
     // 맞은 그 자리에 참격 한 장(월드 플립북). main.js 의 옛 spawnImpact(가산합성
     // 초승달 + 별빛)를 그대로 대신한다. 부르는 쪽은 **좌표·각도·크기·종류**만 넘긴다.
     //   x,y,z = 월드 좌표(요괴 가슴께) / ang = 화면 각도(라디안) / size = 크기(m)
@@ -2205,6 +2465,10 @@ export function createFeel(opts) {
                      // 타격 지점 참격(월드 플립북): 지금 몇 장이 떠 있고 각각 몇 번째 칸인가
                      impf: impfs.map(s => Math.floor(s.t / FRAME_T)),
                      impfSheet: !!impfMat.uniforms.uTex.value,
+                     // ★18차 접점 파열. FX_V18 게이트가 실제로 물렸는지 이 두 숫자로 본다
+                     //   (V18=1 이면 spawned 가 오르고 foam.spawned 는 0 에 머문다. 0 이면 반대).
+                     burst: { v18: FX_V18, n: bursts.length, spawned: burstSpawnN,
+                              ages: bursts.map(s => Math.floor(s.t / FRAME_T)) },
                      // 포말 마루: 새 메시도 fxMeshes 계측에 들어가며 수명/24fps 홀드를 여기서 본다.
                      foam: { enabled: !!FOAM_CREST_V2, tex: !!foamSheetLoaded,
                              n: foams.length, frame: foamQFrame, hold: foamHold,

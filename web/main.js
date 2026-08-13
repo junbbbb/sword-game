@@ -66,7 +66,9 @@ const { createBossSystem } = await import(
 // 같은 인스턴스를 본다. 여기서 플레이어 상태를 넣고, 요괴 쪽에서 canSee 로 읽는다.
 const stealth = await import('./stealth.js' + location.search);
 // 손맛(히트스톱·흔들림·처치 연출)과 소리. 둘 다 같은 캐시버스팅 규칙을 쓴다.
-const { createFeel } = await import('./feel.js' + location.search);
+// ★FX_V18 = 18차 「이아이도 일섬」 스위치. **정의는 feel.js 한 곳**이고 여기서는
+//   수입해서 쓴다(스위치가 두 벌이면 반드시 어긋난다). 1 = 일섬 · 0 = 17차 귀멸 판.
+const { createFeel, FX_V18 } = await import('./feel.js' + location.search);
 const { createSfx } = await import('./sfx.js' + location.search);
 
 // ── 개발 모드 스위치 ──
@@ -632,6 +634,11 @@ function setElement(name) {
   wrapMat.uniforms.uStyle.value = e.style;
   sprayMat.uniforms.uPal.value = p;
   sprayMat.uniforms.uRise.value = e.rise || 0;
+  // ★18차. 접점 파열의 색 계단도 이 칼의 팔레트에서 온다(안 물리면 불칼에서도
+  //   시안 파열이 터진다). 인자는 **선형 vec3** - uPal 과 같은 자다(feel.js 주석 참조).
+  //   ★자리는 궤적 코어와 **같은 칸**에서 뽑는다(흰심 6 · 시안 3 · 중간 2 · 감청 1).
+  //   5번(최명)은 어느 칼이든 거의 흰색이라 흰 심 옆에 두면 두 단이 뭉친다.
+  if (FX_V18 && feel.setBurstPalette) feel.setBurstPalette(p[6], p[3], p[2], p[1]);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -653,10 +660,17 @@ function setElement(name) {
 // 손잡이는 전부 아래 표 한 곳에 모았다. 셰이더는 uMode 로 갈린다.
 //   mode 0 = A 혜성 정제   1 = B 귀멸 리본   2 = C v95 정박판   3 = D 샤프 잔광
 // ═══════════════════════════════════════════════════════════════════════════
+// ★★18차. 벌이 하나 늘었다 — **V 이아이도 일섬**(FX_TABLE.v · mode 4).
+//   기본값이 FX_V18 로 갈린다:
+//     FX_V18 = 1 -> 기본 v(일섬).  ?fx=b 로 **17차 B 리본을 그대로 열람**한다(A/B 대조).
+//     FX_V18 = 0 -> 기본 b. 이 함수가 내는 값이 17차와 **문자 하나 안 다르다.**
+//   a/c/d 대조군 셋은 어느 쪽에서도 손대지 않는다(?fx= 로 그대로 열린다).
 const FX_STYLE = (() => {
-  // ★기본값 b = 귀멸 리본 (2026-08-12 오너 확정. a/c/d 는 ?fx= 로 열람 가능)
-  const v = (new URLSearchParams(location.search).get('fx') || 'b').toLowerCase();
-  return (v === 'a' || v === 'c' || v === 'd') ? v : 'b';
+  const v = (new URLSearchParams(location.search).get('fx') || '').toLowerCase();
+  if (v === 'a' || v === 'c' || v === 'd') return v;
+  if (v === 'b') return 'b';                 // 옛 귀멸 리본 열람 창구
+  if (v === 'v') return FX_V18 ? 'v' : 'b';  // 스위치가 내려가 있으면 v 를 못 연다
+  return FX_V18 ? 'v' : 'b';
 })();
 const RIBBON_V2 = 1;  // 0 = B 리본과 봉인칼 호를 16차 2라운드 직전 그림으로 함께 롤백
 const FX_TABLE = {};
@@ -772,6 +786,43 @@ const FX_TABLE = {};
       { kind: 0, at: 0.92, w: HD, inset: 0.03, headOnly: 0, lifeK: 1.00 },
     ],
   };
+  // ═══════════════════════════════════════════════════════════════════════
+  // ── V 이아이도 일섬 (18차. 오너 지시 "기존 무시하고 새로. 귀멸처럼 말고") ──
+  //
+  // **두툼한 리본의 정반대다.** 네 벌(A~D)이 공유하던 전제 — 궤적을 면으로 채우고
+  // 먹으로 두른다 — 를 여기서만 버린다. 대신 거합(居合)의 한 순간을 그린다:
+  //   형태  칼끝 궤적을 따르는 **가는 코어**(흰~시안) 한 줄 + 바깥 **블루 글로우** 한 겹.
+  //         코어 반폭 0.105(방 비율) = B 리본(0.48)의 **22%**. 지시의 "1/4 이하".
+  //         양끝은 바늘이다(코 0.30 · 꼬리 0.00 · 지수 2.30 = 급감쇠).
+  //   시간  **5칸 = 0.208초.** B 는 11칸(0.458초)이었다. 베는 순간 번쩍 서고 사라진다.
+  //   색    흰 코어 -> 시안 -> 딥블루 감쇠. 먹선이 **없다**(먹은 귀멸의 언어다).
+  //         UI 의 시스템 시안(#56D8FF)·던전 마력 웅덩이와 같은 언어로 맞췄다.
+  //   합성  **가산(Additive)**. 네 벌은 전부 NormalBlending(평칠)이었다 — 그 문법에서
+  //         '섬광'은 원리상 안 나온다. 코어는 선형 1.7~2.0 이라 블룸 문턱(1.02)을
+  //         넘겨 그 한 줄만 번진다(tools/aces_screen.py 역산. 선형 1.0 = 화면 209).
+  // ★물보라(sprayK)와 감김 리본(wrapK)을 **둘 다 0** 으로 내린다. 둘 다 물의 언어라
+  //   섬광 한 줄 옆에 서면 그림이 두 벌로 갈린다(오너: "물방울 튀기는 거 너무 별로").
+  //   feel.js 의 포말 마루도 같은 이유로 FX_V18 게이트에서 끊는다.
+  // ★trailMax 16 = 0.267초 보관. 수명이 5칸(0.208초)이라 60fps 에서 살아 있는 표본이
+  //   12.5개다. 34(B) 를 그대로 두면 마디 140개 중 앞 37% 만 살고 나머지가 헛 지오메트리다.
+  const HV = 0.105;
+  FX_TABLE.v = {
+    key: 'v', name: 'V 이아이도 일섬', mode: 4, half: HV, trailMax: 16,
+    // 5칸 = 0.208초. 세기는 앞 두 칸만 온전하고 뒤 세 칸에서 급히 빠진다.
+    ladder:  [1.00, 1.00, 0.86, 0.52, 0.22],
+    // 폭도 같이 빠진다. 마지막 칸은 0.16 이라 면적이 아니라 **선**만 남는다.
+    ladderW: [1.00, 0.96, 0.74, 0.42, 0.16],
+    profile: 'comet', comet: { head: 0.09, nose: 0.30, tailp: 2.30, tail: 0.00 },
+    offK: [0.30, 0.70], headSpan: 0.40, alpha: 'flash', tipK: 1.03,
+    bodyR: 0.82, outR: 3.50, sprayK: 0.0, wrapK: 0.0,
+    cfg: [
+      // 코어: 칼끝에서 방의 10% 안쪽에 서는 가는 심. 이게 곧 '일섬'이다.
+      { kind: 0, at: 0.94, w: HV,  inset: 0.10, headOnly: 0, lifeK: 1.00 },
+      // 글로우: 코어를 감싸는 한 겹. 바깥 가장자리는 칼끝에 정박(inset 0)하고
+      // 안쪽으로 넓게 눕는다. 색이 딥블루라 면적이 넓어도 무게가 안 실린다.
+      { kind: 1, at: 0.94, w: 0.30, inset: 0.00, headOnly: 0, lifeK: 0.78 },
+    ],
+  };
 }
 const FX = FX_TABLE[FX_STYLE];
 
@@ -857,13 +908,30 @@ trailGeo.setIndex(idx);
 
 const trailMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  // ★★18차. 일섬도 **평칠(Normal)**로 그린다. 가산을 먼저 해 보고 되돌린 자리다:
+  //   가산이면 어두운 던전에서는 근사한데 **밝은 초원에서 통째로 씻긴다**(실측 T14 —
+  //   풀밭 위에서 획이 흰 실오라기로 남았다). 가산은 배경보다 밝게만 할 수 있어서
+  //   배경이 이미 밝으면 올릴 여지가 없다.
+  //   평칠이면 두 가지가 같이 된다 —
+  //     ① 코어는 **선형 1.85 를 그대로 프레임버퍼에 쓴다**. 문턱 1.02 를 넘으므로
+  //        블룸은 가산 때와 똑같이 문다(번쩍임을 안 잃는다).
+  //     ② 바깥 글로우(짙은 파랑, 알파 0.35)는 밝은 배경에서 **어둡게** 앉아 형태를
+  //        정의하는 테가 된다. 가산으로는 원리상 못 하는 일이다.
+  //   ★그래서 이 벌도 blending 은 네 벌과 같다(아래 삼항은 지금 항등이지만, 다시
+  //     가산으로 돌려 볼 자리를 남겨 둔다).
   blending: THREE.NormalBlending,
   uniforms: { uPal: { value: null }, uStyle: { value: 0 }, uT: { value: 0 },
               uTex: { value: null }, uUseTex: { value: 0 },
               // ★12-FX-D. 네 벌의 채색 분기(0=A 혜성 · 1=B 리본 · 2=C v95 · 3=D 잔광).
-              //   기하(폭·수명·가닥)는 updateTrail 이, 그림은 여기가 가른다.
+              //   ★18차. 4 = V 일섬(가산 섬광). 기하(폭·수명·가닥)는 updateTrail 이,
+              //   그림은 여기가 가른다.
               uMode: { value: FX.mode },
               uRibbonV2: { value: RIBBON_V2 },
+              // ★18차 기술 변주(mode 4 전용). updateTrail 이 매 칸 갱신한다.
+              //   uBolt 1 = 내려찍기(X). 코어를 계단 지그재그로 갉아 **수직 낙뢰**로 읽힌다.
+              //   uSharp  = 코어 밝기 배수. 횡일섬(C)은 한 단 더 예리하게 든다.
+              uBolt: { value: 0 },
+              uSharp: { value: 1 },
               // 1m 가 화면에서 몇 화소인가(플레이어 깊이 기준). updateTrail 이 매 칸 갱신
               uPxPerM: { value: 50 } },
   vertexShader: `
@@ -881,8 +949,10 @@ const trailMat = new THREE.ShaderMaterial({
     uniform float uT;
     uniform sampler2D uTex;
     uniform float uUseTex;
-    uniform float uMode;       // 0=A 혜성 · 1=B 리본 · 2=C v95 · 3=D 잔광
+    uniform float uMode;       // 0=A 혜성 · 1=B 리본 · 2=C v95 · 3=D 잔광 · 4=V 일섬
     uniform float uRibbonV2;   // 1=B·봉인칼 V2 · 0=둘 다 직전 채색
+    uniform float uBolt;       // 18차. 1 = 내려찍기(낙뢰 지그재그)
+    uniform float uSharp;      // 18차. 코어 밝기 배수(기술별)
     uniform float uPxPerM;
     #define C_DK2 uPal[0]
     #define C_DK1 uPal[1]
@@ -898,6 +968,15 @@ const trailMat = new THREE.ShaderMaterial({
       f = f*f*(3.0-2.0*f);
       return mix(mix(hash(i), hash(i+vec2(1,0)), f.x),
                  mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+    }
+    // ★18차. 채도 밀기(mode 4 전용). 휘도는 그대로 두고 색만 밖으로 민다.
+    //   왜 필요한가 — ACES 는 **밝을수록 채도를 먹는다**(tools/aces_screen.py 역산).
+    //   봉인칼 팔레트의 시안 자리(#7FD4F5)는 화면에서 채도 0.11 로 앉아 그냥 흰 실선이
+    //   된다(실측). 2.10 으로 밀면 봉인칼 감청 자리가 #2AB2CB(채도 0.79)까지 서고,
+    //   **색상(hue)은 안 건드리므로** 불칼은 주황 그대로다(#EE9B22).
+    vec3 fsat(vec3 c, float k){
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      return max(vec3(0.0), vec3(l) + (c - vec3(l)) * k);
     }
 
     // ───────────────────────────────────────────────────────────
@@ -942,6 +1021,73 @@ const trailMat = new THREE.ShaderMaterial({
       //    그 셋은 지금 본 획의 **밴드**로 들어와 있다.)
       float kind = floor(vSeed + 0.5);
       float sd = vSeed * 2.7 + 1.0 + floor(uT * 24.0) * 0.31;
+
+      // ═══════════════════════════════════════════════════════════════════
+      // ★★V 이아이도 일섬 (uMode 4. 18차)
+      //
+      // 여기 아래 네 벌(A~D)이 공유하는 것을 이 분기는 **하나도 안 쓴다** —
+      // 먹 외곽선(ow/rw)도, 편측 밴드 계단(bt)도, 손그림 텍스처(uTex)도 없다.
+      // 그리는 것은 딱 둘이다:
+      //   kind 0  코어 — 가운데가 흰 심(선형 1.7~2.0. 블룸 문턱 1.02 를 넘긴다)이고
+      //                  바깥으로 시안 두 단. **화소 하한**을 걸어 얇은 마디에서도
+      //                  심이 안 사라지게 한다(먹선을 화소로 잡던 것과 같은 원리).
+      //   kind 1  글로우 — 딥블루 한 겹. 부드럽게 빠지되(pow) 밝기가 낮아 면적이
+      //                  넓어도 무게가 안 실린다. 코어를 감싸는 후광 노릇만 한다.
+      // ★가산이라 **알파가 곧 세기**다. 계단(vA)이 1/24 로 끊기므로 섬광도 계단으로
+      //   꺼진다(60fps 로 매끈하게 빠지면 그 순간 CG 발광체가 된다).
+      // ★스타일(칼) 분기를 안 탄다 — 봉인칼(style 1)·불(style 2)도 같은 문법으로
+      //   그리되 색은 제 팔레트에서 온다. 그래서 칼 일곱 자루의 정체가 그대로 산다.
+      // ═══════════════════════════════════════════════════════════════════
+      if (uMode > 3.5) {
+        float dE = 1.0 - abs(v - 0.5) * 2.0;        // 0 = 가장자리, 1 = 한가운데
+        float halfPx = max(1.0, vHalf * uPxPerM);
+        // 길이 방향 감쇠. **계단 다섯 단**(u 는 살아 있는 창 기준 0..1)
+        float ls = min(1.0, floor(u * 5.0) / 4.0);
+        if (kind > 0.5) {
+          // ── 글로우 한 겹 ──
+          // ★코어에 **붙어서** 빠져야 후광이 된다. 지수를 올릴수록 코어 옆에 몰린다
+          //   (1.45 로 두면 넓고 평평하게 깔려서 '파란 판'이 하나 더 생긴다).
+          float g = pow(max(0.0, dE), 2.10);
+          if (!(g > 0.03)) discard;
+          // ★평칠이라 **어두운 파랑**이어야 한다(가산일 때는 밝을수록 좋았다).
+          //   바깥이 짙어야 밝은 초원에서 획의 테가 서고, 어두운 던전에서는 코어의
+          //   후광으로 읽힌다. 안쪽(코어 쪽)으로 갈수록 시안으로 올라간다.
+          vec3 cg = mix(fsat(C_DK1, 2.10) * 0.55, fsat(C_MID, 2.10) * 0.95, g);
+          gl_FragColor = vec4(cg, vA * (0.10 + 0.62 * g) * (1.0 - 0.55 * ls));
+          return;
+        }
+        // ── 코어 ──
+        // ★낙뢰(X 내려찍기)는 **가장자리를 계단으로 갉아** 지그재그를 만든다.
+        //   매끈한 사인으로 흔들면 뱀이 되고, 계단으로 끊으면 번개가 된다.
+        float cut = 0.0;
+        if (uBolt > 0.5) {
+          float seg = floor(u * 9.0);
+          cut = 0.30 * hash(vec2(seg + sd * 0.7, 3.0)) * step(0.5, v)
+              + 0.22 * hash(vec2(seg + sd * 1.9, 7.0)) * step(v, 0.5);
+        }
+        float dN = (dE - cut) / max(1.0 - cut, 1e-3);
+        if (!(dN > 0.02)) discard;
+        // 흰 심의 폭. **화소 하한**을 건다 - 가는 마디에서 심이 통째로 사라지면
+        // 남는 것이 옅은 시안 실오라기뿐이라 "안 보인다"가 된다(10차의 병).
+        // ★★1차 실측에서 2.4/halfPx·하한 0.34 로 뒀더니 코어가 반폭의 82% 를 먹어
+        //   획이 통째로 **흰 실선**이 됐다(시안이 화면에 한 화소도 안 남았다).
+        //   지금은 흰 심을 ±1.8화소로 조이고 그 바깥을 시안 두 단으로 채운다.
+        float cw = clamp(1.8 / halfPx, 0.24, 0.62);
+        // ★색을 **한 단씩 아래에서** 뽑는다(LT3->LT1, LT1->MID). 팔레트 위 칸(LT3)은
+        //   어느 칼이든 거의 흰색이라(봉인칼 #D8F4FF · 물 #3BCCF9) 흰 심 옆에 두면
+        //   두 단이 한 색으로 뭉친다. 시안은 LT1(#7FD4F5 / #239DCC) 자리에 있다.
+        vec3 c;
+        if (dN > 1.0 - cw) c = C_WHT * (1.85 * uSharp);
+        else if (dN > 0.28) c = fsat(C_LT1, 2.10) * 1.25;
+        else c = fsat(C_MID, 2.10) * 0.95;
+        // 꼬리는 밝기가 계단으로 빠지고 시안 -> 감청으로 내려앉는다(바늘 끝).
+        c = mix(c, fsat(C_DK1, 2.10) * 0.90, 0.55 * ls);
+        c *= 1.0 - 0.42 * ls;
+        // 가장자리 한 겹만 부드럽게 닫는다(1픽셀. 자로 자른 획은 판때기로 읽힌다)
+        float ea = smoothstep(0.0, 0.05, dN);
+        gl_FragColor = vec4(c, vA * ea);
+        return;
+      }
 
       if (uStyle > 0.5 && uStyle < 1.5) {
         if (uMode > 0.5 && uMode < 1.5 && uRibbonV2 > 0.5) {
@@ -1311,6 +1457,13 @@ const trailMesh = new THREE.Mesh(trailGeo, trailMat);
 trailMesh.frustumCulled = false;
 trailMesh.renderOrder = 3;
 scene.add(trailMesh);
+// ★검증 창구(?dev 없이도 연다. 읽기 전용). 궤적 정점에 NaN 이 한 톨 들어가면
+//   블룸이 그 점을 **사각형으로** 번지게 한다(v88 '검은 번쩍'의 기전). 안정성 표본이
+//   이 값을 센다 - 있으면 그 인덱스, 없으면 -1.
+window.__trailNaN = () => {
+  for (let i = 0; i < posArr.length; i++) if (!Number.isFinite(posArr[i])) return i;
+  return -1;
+};
 
 // ---------- 칼을 휘감는 리본 (리듬체조 리본) ----------
 // 궤적(trail)은 "지나간 자취"라서 칼이 멈춰 있으면 아무것도 안 보인다.
@@ -1987,6 +2140,20 @@ function updateTrail(force) {
     trailMat.uniforms.uPxPerM.value =
       (h * 0.5) / (Math.tan(camera.fov * Math.PI / 360) * dCam);
   }
+  // ★★18차 기술 변주 (mode 4 전용). **손잡이 세 줄이 여기 다 있다.**
+  //   Z 3연타(Attack) = 기본. 가는 일섬이 셋 연달아 선다.
+  //   X 내려찍기(Heavy) = 1.34배 굵히고 **낙뢰 지그재그**를 켠다(셰이더 uBolt).
+  //   C 횡일섬(Wide)    = 0.86배로 더 가늘게. 대신 흰 심을 한 단 밝게 든다(uSharp).
+  // ★기하는 넷이 똑같은 길을 지난다 - 여기서 배수 하나와 스위치 둘만 갈린다.
+  //   다른 벌(A~D)에서는 이 블록이 통째로 안 돈다(uBolt/uSharp 는 셰이더에서도 안 읽힌다).
+  let techW = 1.0;
+  if (FX.mode === 4) {
+    const bolt = (atkClip === 'Heavy') ? 1 : 0;
+    const wide = (atkClip === 'Wide') ? 1 : 0;
+    techW = bolt ? 1.34 : (wide ? 0.86 : 1.0);
+    trailMat.uniforms.uBolt.value = bolt;
+    trailMat.uniforms.uSharp.value = wide ? 1.22 : 1.0;
+  }
   // 판정 계약(handoff_combat.md): 정면 리치 3.2m · 정면 부채꼴 ±75°.
   const px = root.position.x, pz = root.position.z;
   const fwx = Math.sin(root.rotation.y), fwz = Math.cos(root.rotation.y);
@@ -2195,7 +2362,7 @@ function updateTrail(force) {
       // ★gK: 일격기가 좀 더 굵어야 하지만(연출) 방을 넘을 수는 없으므로 배수를 조인다.
       const room = Math.max(0, outCap - BODY_R);
       const gK = Math.min(1.15, Math.max(0.72, g / 1.55));
-      let half = C.w * room * taper * headK * edgeK * gK;
+      let half = C.w * room * taper * headK * edgeK * gK * techW;   // ★techW = 18차 기술 변주
       if (half > room * 0.48) half = room * 0.48;
       // C.inset = 이 가닥의 바깥 가장자리가 **칼끝에서 안쪽으로** 얼마나 물러나는가(방 비율).
       // 0 = 칼끝에 붙은 마루(포말·갈퀴), 클수록 몸 쪽에 눕는 겹 획.
@@ -2237,6 +2404,11 @@ function updateTrail(force) {
       //   D 만 반투명을 허용하는 이유는 그 벌의 정의가 '잔광'이기 때문이다(대조군).
       let q;
       if (FX_ALPHA === 'v95') q = inten > 0.46 ? 1.0 : (inten > 0.26 ? 0.92 : (inten > 0.13 ? 0.78 : 0));
+      // ★18차 'flash'. 가산이라 알파가 곧 **세기**다. 세 단으로 뚝뚝 꺼진다 —
+      //   두 칸은 온전히 서 있고 뒤 세 칸에서 0.72 -> 0.38 -> 0 으로 떨어진다.
+      //   binary(1 아니면 0)로 두면 5칸이 통째로 최대 밝기로 살다가 한 프레임에
+      //   사라져서 '섬광'이 아니라 '깜빡이는 판'이 된다.
+      else if (FX_ALPHA === 'flash') q = inten > 0.55 ? 1.0 : (inten > 0.30 ? 0.72 : (inten > 0.13 ? 0.38 : 0));
       else if (FX_ALPHA === 'soft') q = inten > 0.60 ? 1.0 : (inten > 0.40 ? 0.78 : (inten > 0.22 ? 0.52 : (inten > 0.10 ? 0.30 : 0)));
       else q = inten > 0.13 ? 1.0 : 0;
       if (!inReach) { q = 0; if (i === 0) clipped++; }
@@ -4338,7 +4510,14 @@ if (DEV) {
                   style: { key: FX.key, name: FX.name, mode: FX.mode, half: FX.half,
                            strands: STRANDS, life: FX.ladder.length, trailMax: TRAIL_MAX,
                            profile: FX.profile, alpha: FX.alpha, tipK: FX_TIP_K,
-                           sprayK: FX.sprayK, wrapK: FX.wrapK },
+                           sprayK: FX.sprayK, wrapK: FX.wrapK,
+                           // ★18차. 스위치 상태와 합성 방식까지 한 줄에 적는다
+                           //   (A/B 판정지 첫 줄에 "어느 판을 보고 있는가"가 있어야 한다).
+                           // ★실제 재질에서 읽는다. 상수식으로 적었다가 가산->평칠로
+                           //   되돌린 뒤에도 'additive' 라고 적혀 판정지가 거짓말을 했다.
+                           v18: FX_V18,
+                           blend: trailMat.blending === THREE.AdditiveBlending ? 'additive' : 'normal',
+                           lifeSec: +(FX.ladder.length / FX_FPS).toFixed(3) },
                   charH: () => charH, root: () => root };
   window.__atkTime = () => (actions.Attack ? actions.Attack.time : -1);
   // 칼날 판정 선분(월드). 요괴 캡슐 판정을 숫자로 검증할 때 쓴다.
@@ -4650,12 +4829,19 @@ const enemies = createEnemySystem({
       // ★5번째 인자 kind. 안 넘기면 feel.js 가 window.__dbg 를 훔쳐보며 기술을 **추측**한다.
       //   heavy 는 수면참·횡일섬일 때만 켜지는 플래그라 그게 곧 감청(water)이다.
       feel.slash(sa.ang, sa.x, sa.y, h.wiped, heavy ? 'water' : 'kill');
-      // ★맞은 자리에 참격 한 장(v92. 옛 spawnImpact = 가산합성 초승달 자리).
-      //   붓자국이 화면에 앉는 큰 획이라면 이건 요괴 가슴께에 서는 작은 획이다.
-      //   종류는 붓자국과 같은 규칙 - 수면참·횡일섬은 감청, 그 밖의 처치는 진홍.
-      feel.impactSlash(h.x, h.y, h.z, sa.ang, 0.95, heavy ? 'water' : 'kill');
-      // ★v94. 접점의 1~2프레임 팝(흰 번쩍 -> 먹 튀김). 처치도 명중이라 같이 찍는다.
-      feel.pop(h.x, h.y, h.z, 1.15);
+      // ★★18차. 접점 연출이 스위치로 갈린다(FX_V18).
+      //   1 = 파열 한 겹(방사 스파크 + 링 + 중심 섬광. 시안)
+      //   0 = 옛 두 장(진홍/감청 초승달 + 먹 튀김 팝) — 아래 두 줄이 그대로 산다.
+      //   ★파열의 f0(최대 프레임)이 히트스톱(처치 105ms)에 붙들린다. 그 합이 목적이다.
+      if (FX_V18) feel.burst(h.x, h.y, h.z, sa.ang, 1.0, true);
+      else {
+        // ★맞은 자리에 참격 한 장(v92. 옛 spawnImpact = 가산합성 초승달 자리).
+        //   붓자국이 화면에 앉는 큰 획이라면 이건 요괴 가슴께에 서는 작은 획이다.
+        //   종류는 붓자국과 같은 규칙 - 수면참·횡일섬은 감청, 그 밖의 처치는 진홍.
+        feel.impactSlash(h.x, h.y, h.z, sa.ang, 0.95, heavy ? 'water' : 'kill');
+        // ★v94. 접점의 1~2프레임 팝(흰 번쩍 -> 먹 튀김). 처치도 명중이라 같이 찍는다.
+        feel.pop(h.x, h.y, h.z, 1.15);
+      }
       spawnInk(h.x, h.y, h.z, swingDir.x, swingDir.y, swingDir.z, 26, 1.35);
       // ★무리 전멸의 먹링은 **마지막으로 벤 자리**에 편다. 좌표를 안 넘기면 feel.js 가
       //   직전 붓자국의 화면 좌표를 월드로 되짚는다(한 프레임만 지나도 못 찾고 버린다).
@@ -4668,12 +4854,16 @@ const enemies = createEnemySystem({
       addHitStop(HS_HIT, h.swing);
       feel.hit(h.swing, sa.ang, sa.x, sa.y, heavy ? 'water' : 'kill');
       sfx.hit(1);
-      // ★안 죽인 명중은 감청 고정이다. 붉은색은 처치·피격 전용(오너 지시).
-      feel.impactSlash(h.x, h.y, h.z, sa.ang, 0.72, 'water');
-      // ★v94. 심사 격차 4: "안 죽는 적은 리본이 그냥 통과한다."
-      //   맞은 그 자리에 흰 번쩍 한 장 + 먹 튀김 한 장(24fps 기준 2프레임).
-      //   A3 가 넣은 적 플래시·경직(enemy.js)과 겹으로 논다.
-      feel.pop(h.x, h.y, h.z, 0.9);
+      // ★18차. 처치와 같은 규칙으로 갈린다(파열은 처치보다 한 단 작다 - burst 안에서).
+      if (FX_V18) feel.burst(h.x, h.y, h.z, sa.ang, 0.85, false);
+      else {
+        // ★안 죽인 명중은 감청 고정이다. 붉은색은 처치·피격 전용(오너 지시).
+        feel.impactSlash(h.x, h.y, h.z, sa.ang, 0.72, 'water');
+        // ★v94. 심사 격차 4: "안 죽는 적은 리본이 그냥 통과한다."
+        //   맞은 그 자리에 흰 번쩍 한 장 + 먹 튀김 한 장(24fps 기준 2프레임).
+        //   A3 가 넣은 적 플래시·경직(enemy.js)과 겹으로 논다.
+        feel.pop(h.x, h.y, h.z, 0.9);
+      }
     }
   },
   // ── 맞은 방향 (9차. 손맛 7위 "어디서 맞았는지 모른다") ──
@@ -4825,7 +5015,9 @@ const boss = createBossSystem({
       sfx.hit(d.heavy ? 1.25 : 1);
       const sa = screenAngle(d.x, d.y, d.z, swingDir.x, swingDir.y, swingDir.z);
       // 보스 타격도 같은 한 장을 쓴다(크기만 크다). 감청 - 처치가 아니다.
-      feel.impactSlash(d.x, d.y, d.z, sa.ang, d.heavy ? 1.35 : 0.9, 'water');
+      // ★18차. 잡몹과 같은 규칙으로 갈린다(보스만 다른 문법이면 화면이 두 벌이 된다).
+      if (FX_V18) feel.burst(d.x, d.y, d.z, sa.ang, d.heavy ? 1.25 : 0.95, false);
+      else feel.impactSlash(d.x, d.y, d.z, sa.ang, d.heavy ? 1.35 : 0.9, 'water');
     } else if (name === 'die') {
       // 보스가 쓰러진 자리에 먹링을 편다. 좌표를 안 넘기면 붓자국이 없어서
       // feel.js 가 되짚기에 실패하고 링이 아예 안 뜬다(그 경로를 안 쓰게 만든다).
