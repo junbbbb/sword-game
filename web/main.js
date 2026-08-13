@@ -335,6 +335,7 @@ function resetRun() {
   attacking = false; heavy = false; atkClip = null; atkStruck = false; atkHitT = -99;
   stepLeft = 0; stepDist = 0;
   coastLeft = 0; punchLeft = 0; hsLeft = 0;   // ★관성·카메라 펀치·히트스톱도 판을 넘기면 안 된다
+  _uw.on = false; camLift = 0; camOccT = 0;   // ★벽 빼내기 목표·카메라 가림 완화도 판을 넘기면 안 된다
   dashLeft = 0; dashGone = 0; dashReadyT = -99; dashIfUntil = -99;
   restoreDashTs();
   vy = 0; grounded = true; jumping = false;
@@ -3867,6 +3868,197 @@ const swordA = new THREE.Vector3(), swordB = new THREE.Vector3();
 const camTarget = new THREE.Vector3();
 
 // ---------------------------------------------------------------------------
+// ★이동 신뢰성 (17차. 신규유저 비평 1순위 "게임을 못 하게 만드는 유일한 요인")
+// ---------------------------------------------------------------------------
+// 진단부터 적는다. 비평의 세 그림은 **셋 다 같은 한 가지**였다.
+//   ① 같은 자리에서 40초 넘게 못 움직임(걷기 애니만 반복) 3회
+//   ② 캐릭터가 벽 위에 올라타 맵 지붕을 걸음(07_standing_on_walls_zoomout.png)
+//   ③ 벽 틈에 껴 화면이 통째로 벽·캐릭터로 덮임(12·13)
+//
+// ★맵 벽은 칸 한 줄마다 상자로 굽는다. 앞벽(1.45m)과 뒷벽(3.60m)이 **따로** 상자가
+//   되고 상자는 칸 경계에서 0.22m 씩 안으로 물러나 있다(level2.json colliderNote).
+//   그래서 **보이는 벽 속에 0.22~0.44m 짜리 빈 금**이 생긴다. 실측: 이 맵에 71 군데,
+//   총 길이 420.8m. 사람 지름은 0.70m 라 절대 못 들어가는 폭인데, 금은 콜라이더가
+//   아니라 콜라이더 **사이**라서 충돌기는 "여기는 밖"이라고 답한다.
+//
+// ★level.slide 는 목적지로 **먼저 옮기고 나서** 밀어내는 방식이고(level.js 소유),
+//   밀어낼 때 "파고든 깊이가 얕은 축"으로 뺀다. 한 프레임 이동이 상자 안쪽으로 깊이
+//   들어가면 그 규칙이 **뒤집힌다** — 되돌아 나오는 대신 옆(=금 쪽)으로 밀린다.
+//   금 안에 들어가면 양쪽 상자가 서로 반대로 밀어서 밀어내기 3회가 끝나도 못 나온다.
+//   실측(16방향 x 설 수 있는 자리 21071):
+//       걷기 1.71m/s (한 프레임 0.029m)   -> 벽 속 착지 0.00%
+//       달리기 3.20   (0.053m)            -> 0.26%
+//       달리기 + 프레임 드롭(dt 상한 0.05) -> 0.81%
+//       ★대시 3.5m/0.18s (한 프레임 0.885m) -> 18.13%
+//   전진 스텝(0.09m)·넉백(0.087m)은 0%. 즉 **대시 한 번이 여덟 자리 중 하나에서**
+//   사람을 벽 속에 박는다. 박힌 자리에서 8방향 1.5초씩 눌러 본 실측 이동은 0.00m다
+//   (= ①의 40초 정지). 그리고 앞벽이 1.45m 라 **끼인 사람의 상반신만 벽 위로 나온다**
+//   = ②의 "지붕 보행". 실측 y 는 0.02(바닥)였다 — 한 번도 올라간 적이 없다.
+//   ③도 같은 자리다: 금 격자점의 30.9% 가 카메라 광선이 벽에 막히는 자리다
+//   (제대로 선 자리에서는 0.8%).
+//
+// ★고치는 자리는 main.js 뿐이다(level.js·level2.json 은 소유 밖). 두 겹으로 막는다.
+//   ① moveBy  = 한 프레임 이동을 0.09m 씩 잘라 민다. 상자 안쪽으로 깊이 들어갈 일이
+//                없어지니 밀려나는 축이 안 뒤집힌다. 그래도 조각의 결과가 벽 속이면
+//                그 조각을 버리고 x축/z축으로 갈라 미끄러뜨린다(진짜 슬라이드).
+//   ② unwedge = 그래도 어떤 경로로든 벽 속에 있으면 제일 가까운 설 수 있는 자리로
+//                빼낸다. level.pushOut 은 같은 3회 밀어내기라 금 안에서는 진동만 한다.
+const PR = level.PLAYER_RADIUS;
+// '벽 속인가'를 볼 때 쓰는 반경. 벽에 붙어 선 정상 상태는 면에서 정확히 PR 만큼
+// 떨어져 있으므로, 그걸 벽 속으로 오판하지 않게 6% 줄여 잡는다.
+const WEDGE_R = PR * 0.94;
+const MOVE_SUB = 0.09;          // m. 조각 하나의 최대 길이(제일 좁은 금 0.22m 의 절반 이하)
+const MOVE_SUB_MAX = 24;        // 한 프레임 조각 수 상한(대시 최대 0.885m -> 10조각)
+const _mv = { x: 0, z: 0, hit: false };
+let moveVeto = 0, moveWedge = 0, moveMaxY = 0, moveMaxGY = 0;   // 진단 계수기
+
+// 한 프레임의 이동을 실제로 놓는 **유일한 문**. 걷기·코스트·대시·전진스텝이 전부 여기로 온다.
+// 규칙이 갈라지면 "대시로만 벽에 박히는" 이번 같은 일이 또 난다.
+function moveBy(dx, dz) {
+  const d = Math.hypot(dx, dz);
+  if (!(d > 1e-9)) return 0;
+  const x0 = root.position.x, z0 = root.position.z;
+  const n = Math.min(MOVE_SUB_MAX, Math.max(1, Math.ceil(d / MOVE_SUB)));
+  const sx = dx / n, sz = dz / n;
+  for (let i = 0; i < n; i++) {
+    const px = root.position.x, pz = root.position.z;
+    let st = level.slide(px, pz, sx, sz, PR, _mv);
+    let nx = st.x, nz = st.z;
+    if (level.blocked(nx, nz, WEDGE_R)) {
+      // 이 조각이 사람을 벽 속으로 넣었다. 버리고 축을 갈라 미끄러진다.
+      moveVeto++;
+      let ok = false;
+      if (sx !== 0) {
+        st = level.slide(px, pz, sx, 0, PR, _mv);
+        if (!level.blocked(st.x, st.z, WEDGE_R)) { nx = st.x; nz = st.z; ok = true; }
+      }
+      if (!ok && sz !== 0) {
+        st = level.slide(px, pz, 0, sz, PR, _mv);
+        if (!level.blocked(st.x, st.z, WEDGE_R)) { nx = st.x; nz = st.z; ok = true; }
+      }
+      if (!ok) break;            // 두 축 다 벽 속이다. 이 프레임은 여기까지.
+    }
+    root.position.x = nx; root.position.z = nz;
+  }
+  return Math.hypot(root.position.x - x0, root.position.z - z0);
+}
+
+// ── 벽 속에서 빼내기 ──
+// ★level.pushOut 을 안 쓴다. 그것도 같은 '밀어내기 3회'라 0.44m 금 안에서는 양쪽
+//   상자가 서로 반대로 밀어 제자리 진동만 한다(실측 8방향 1.5초 이동 0.00m).
+//   그래서 밀지 않고 **가장 가까운 설 수 있는 자리를 찾아 그리로 걸어 나간다.**
+// ★출구를 고를 때 **가는 길**까지 본다. 안 보면 1.56m 짜리 돌벽을 뚫고 반대편으로
+//   순간이동하는 그림이 나온다(금을 따라 나가는 길과 거리가 비슷하다).
+const UNWEDGE_SPD = 7.0;        // m/s. 한 박자(0.2~0.5초)에 빠져나온다
+const UNWEDGE_MAX = 4.0;        // m. 이보다 먼 출구는 안 찾는다
+const UNWEDGE_PATH_R = 0.12;    // m. 길 검사 반경(금 반폭 0.22 보다 작다)
+const _uw = { x: 0, z: 0, on: false };
+function unwedgePathOk(x0, z0, x1, z1) {
+  const d = Math.hypot(x1 - x0, z1 - z0);
+  const n = Math.max(2, Math.ceil(d / 0.08));
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    if (level.blocked(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, UNWEDGE_PATH_R)) return false;
+  }
+  return true;
+}
+function unwedgeTarget(x, z) {
+  // 고리를 가까운 쪽부터 훑는다. 처음 찾은 자리가 곧 최단 출구다.
+  let fallback = null;
+  for (let d = 0.15; d <= UNWEDGE_MAX; d += 0.10) {
+    const steps = Math.max(16, Math.round(d * 20));
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      const nx = x + Math.sin(a) * d, nz = z + Math.cos(a) * d;
+      if (level.blocked(nx, nz, PR * 1.02)) continue;
+      if (unwedgePathOk(x, z, nx, nz)) return { x: nx, z: nz };
+      if (!fallback) fallback = { x: nx, z: nz };
+    }
+  }
+  return fallback;               // 길이 막혀도 벽 속에 두는 것보다는 낫다
+}
+function unwedge(dt) {
+  if (!level.blocked(root.position.x, root.position.z, WEDGE_R)) { _uw.on = false; return false; }
+  moveWedge++;
+  if (_uw.on && level.blocked(_uw.x, _uw.z, PR * 1.02)) _uw.on = false;   // 목표가 상했다
+  if (!_uw.on) {
+    const t = unwedgeTarget(root.position.x, root.position.z);
+    if (!t) return false;        // 나갈 자리가 없다. 그냥 둔다(움직임은 막지 않는다)
+    _uw.x = t.x; _uw.z = t.z; _uw.on = true;
+  }
+  const dx = _uw.x - root.position.x, dz = _uw.z - root.position.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 1e-4) { _uw.on = false; return true; }
+  const k = Math.min(d, UNWEDGE_SPD * Math.max(dt, 1 / 240));
+  // ★여기서는 level.slide 를 안 지난다. 지금 자리가 이미 벽 속이라 밀어내기가 또
+  //   금 쪽으로 되민다. 목표는 이미 '설 수 있는 자리'로 검증돼 있다.
+  root.position.x += dx / d * k;
+  root.position.z += dz / d * k;
+  return true;
+}
+
+// ── 카메라 가림 완화 (camBase 층만) ──
+// ★손맛 층(camPunch·흔들림)은 한 줄도 안 건드린다. 17차 타격감 팩이 갈라 둔 그 경계다.
+// 카메라는 yaw 고정이라 시야를 막는 것은 **플레이어 남쪽의 높은 것**뿐이다.
+// 실측: 제대로 선 자리 21071 중 168(0.8%)이 가슴이 가린다 — 전부 중앙 회랑 기둥
+// (x=±3.2, h=3.57) 바로 북쪽이다. 벽 속(금)에서는 30.9% 라 그쪽은 위 두 겹이 없앤다.
+// 대응은 **각을 조금 세우는 것** 하나뿐이다(당겨도 3m 앞의 기둥은 안 비킨다).
+//   +0.28rad(49.3° -> 65.3°) 면 168 중 96 자리가 열린다. 그 이상은 부감이 돼서 안 쓴다.
+const CAM_LIFT_MAX = 0.28;      // rad. 가릴 때 더 세우는 최대 각
+const CAM_LIFT_HOLD = 0.20;     // s. 이만큼 계속 가려야 든다(기둥을 스칠 때는 안 든다)
+const CAM_LIFT_UP = 3.0;        // 1/s. 드는 속도
+const CAM_LIFT_DN = 2.0;        // 1/s. 내리는 속도
+const CAM_MIN_GAP = 6.0;        // m. camBase 가 플레이어에 이보다 가까워지지 않는다
+let camLift = 0, camOccT = 0;
+let camTallCache = null;
+// ★문턱을 charH 로 잡으면 안 된다. charH 는 캐릭터 glb 가 도착해야 1.75 가 되는데
+//   이 목록은 한 번 굽고 캐시하므로 **모델보다 먼저 불리면 기준이 2.4 로 굳는다.**
+//   가슴(1.085)보다 낮은 것은 어차피 못 가리므로 고정 상수로 거른다.
+const CAM_OCC_MIN_H = 1.20;
+function camTall() {
+  if (camTallCache) return camTallCache;
+  const lv = level.data();
+  camTallCache = ((lv && lv.colliders) || []).filter(c => (c.h || 0) > CAM_OCC_MIN_H);
+  return camTallCache;
+}
+function camOccluded(px, pz, pit) {
+  const list = camTall();
+  if (!list.length) return false;
+  // ★placeCamera 가 보는 지점과 **같은 높이**를 쓴다(그쪽은 지면과 무관한 절대 y 다).
+  //   여기서만 지면을 더하면 단 위에서 판정이 어긋난다.
+  const chest = charH * 0.62;
+  const tx = px - Math.sin(yaw) * lead, tz = pz - Math.cos(yaw) * lead;
+  const dx = tx + Math.sin(yaw) * Math.cos(pit) * dist - px;
+  const dz = tz + Math.cos(yaw) * Math.cos(pit) * dist - pz;
+  const dy = Math.sin(pit) * dist;
+  const horiz = Math.hypot(dx, dz) || 1;
+  const far = Math.min(1, 7.0 / horiz);   // 7m 넘으면 광선이 제일 높은 벽보다 위다
+  for (let i = 1; i <= 18; i++) {
+    const t = far * i / 18;
+    const sx = px + dx * t, sz = pz + dz * t, sy = chest + dy * t;
+    for (let j = 0; j < list.length; j++) {
+      const c = list[j];
+      if (sy >= c.h) continue;
+      if (c.type === 'circle') {
+        const ex = sx - c.x, ez = sz - c.z;
+        if (ex * ex + ez * ez < c.r * c.r) return true;
+      } else if (Math.abs(sx - c.x) < c.hx && Math.abs(sz - c.z) < c.hz) return true;
+    }
+  }
+  return false;
+}
+function updateCamLift(rawDt) {
+  // ★판단은 **기본 각**으로 한다. 든 각으로 재면 드는 순간 조건이 풀려서 오르내림이
+  //   반복된다(카메라가 숨을 쉰다). 기본 각이 막혀 있는 동안만 들고 있는다.
+  const occ = camOccluded(root.position.x, root.position.z, pitch);
+  if (occ) camOccT += rawDt; else camOccT = 0;
+  const want = (camOccT >= CAM_LIFT_HOLD) ? CAM_LIFT_MAX : 0;
+  const k = Math.min(1, rawDt * (want > camLift ? CAM_LIFT_UP : CAM_LIFT_DN));
+  camLift += (want - camLift) * k;
+  if (camLift < 1e-4) camLift = 0;
+}
+
+// ---------------------------------------------------------------------------
 // ★카메라 오프셋 레이어 (17차 타격감 팩)
 // ---------------------------------------------------------------------------
 // 카메라의 자리를 **두 층으로 갈랐다.**
@@ -3969,13 +4161,25 @@ function placeCamera(lerpK, hold) {
   camTarget.set(root.position.x - Math.sin(yaw) * lead,
                 charH * 0.62,
                 root.position.z - Math.cos(yaw) * lead);
-  _camWant.set(camTarget.x + Math.sin(yaw) * Math.cos(pitch) * dist,
-               camTarget.y + Math.sin(pitch) * dist,
-               camTarget.z + Math.cos(yaw) * Math.cos(pitch) * dist);
+  // ★17-이동신뢰성: 가림 완화로 얻은 각을 여기서 한 번만 더한다(camBase 층).
+  //   camLift 는 평시 0 이라 안 가려 있을 때의 그림은 옛것과 한 픽셀도 안 다르다.
+  const pit = pitch + camLift;
+  _camWant.set(camTarget.x + Math.sin(yaw) * Math.cos(pit) * dist,
+               camTarget.y + Math.sin(pit) * dist,
+               camTarget.z + Math.cos(yaw) * Math.cos(pit) * dist);
   if (!camBaseInit) { camBase.copy(_camWant); camBaseInit = true; }
   else if (hold) { /* 히트스톱: 이동 보간을 통째로 세운다 */ }
   else if (lerpK > 0 && lerpK < 1) camBase.lerp(_camWant, lerpK);
   else camBase.copy(_camWant);
+  // ★최소 거리. 지금 식으로는 dist(18~32) 가 곧 거리라 절대 안 걸리지만, 카메라를
+  //   만지는 다음 사람이 camBase 를 당겼을 때 **등에 처박히는 그림**은 여기서 막는다.
+  //   (비평 ③ "카메라가 등에 처박혀 화면 전체가 캐릭터")
+  const gx = camBase.x - camTarget.x, gy = camBase.y - camTarget.y, gz = camBase.z - camTarget.z;
+  const gap = Math.sqrt(gx * gx + gy * gy + gz * gz);
+  if (gap > 1e-4 && gap < CAM_MIN_GAP) {
+    const s = CAM_MIN_GAP / gap;
+    camBase.set(camTarget.x + gx * s, camTarget.y + gy * s, camTarget.z + gz * s);
+  }
   camera.position.copy(camBase);
   camera.lookAt(camTarget);
   // 오프셋은 lookAt **뒤에** 얹는다. 앞에 얹으면 미는 만큼 시선이 되돌아와 상쇄된다.
@@ -4032,6 +4236,8 @@ function probeCam() {
   const sTop = stick(top), sBot = stick(bot);
   return {
     yaw: +yaw.toFixed(3), pitch: +pitch.toFixed(3), deg: +(pitch * 180 / Math.PI).toFixed(1),
+    // ★가림 완화로 지금 더 세워 둔 각. 평시 0 이라 위 두 값이 곧 화면의 각이다.
+    lift: +camLift.toFixed(4),
     dist: +dist.toFixed(2), fov: camera.fov, lead: +lead.toFixed(2),
     fwd: top ? +along(top).toFixed(2) : null,
     back: bot ? +(-along(bot)).toFixed(2) : null,
@@ -4546,6 +4752,21 @@ window.__hitRule = (o = {}) => {
 // 표적 거리 d 에서 전진 스텝이 몇 m 인지(사거리 검증 스크립트가 쓴다)
 window.__atkStep = d => +stepDistFor(d).toFixed(3);
 
+// ── 이동 신뢰성 계측 창구 (17차) ──
+// veto  = 조각 하나가 벽 속으로 들어가서 버린 횟수(축 분리 슬라이드로 갈아탄 횟수)
+// wedge = 몸이 벽 속에 있어서 빼내기가 돈 프레임 수. **평시에는 0 이어야 한다**
+// maxY  = 이 판에서 플레이어가 올라간 최고 높이. 맵의 제일 높은 단(계단 1.02)을
+//         넘으면 "벽 위에 올라탔다"는 뜻이다(비평 ②의 검증자).
+// lift  = 지금 걸린 카메라 가림 완화 각(rad). 안 가려 있으면 0.
+window.__move = () => ({
+  veto: moveVeto, wedge: moveWedge, maxY: +moveMaxY.toFixed(3),
+  maxGroundY: +moveMaxGY.toFixed(3),
+  wedgedNow: level.blocked(root.position.x, root.position.z, WEDGE_R),
+  lift: +camLift.toFixed(4), occT: +camOccT.toFixed(2),
+  sub: MOVE_SUB, wedgeR: +WEDGE_R.toFixed(3), minGap: CAM_MIN_GAP,
+});
+window.__moveReset = () => { moveVeto = 0; moveWedge = 0; moveMaxY = 0; moveMaxGY = 0; return true; };
+
 // ---------- 보스 · 증표 · 탈출 ----------
 // 층을 "깨는" 부분이다. 자리(보스 마당·아레나·탈출구)는 전부 맵이 정한다.
 // ★플레이어 체력은 enemy.js 가 한 군데서 관리한다. 보스는 그 문(damagePlayer)만 쓴다.
@@ -4687,7 +4908,20 @@ function tick() {
     // ★comboWindow 는 **일부러 안 건드린다.** 캔슬 뒤에 Z 를 이으면 다음 타로 이어져야 한다.
     play(running ? 'Run' : 'Walk', 0.12);
   }
-  const moving = (mx || mz) && !attacking && dashLeft <= 0;
+  // ── ★벽 속에서 빼내기 (17-이동신뢰성) ──
+  // 어떤 경로로든 몸이 벽 속(콜라이더 사이 0.22~0.44m 짜리 금)에 들어가 있으면,
+  // 이 프레임의 입력을 접고 제일 가까운 설 수 있는 자리로 빼낸다. 아래 moveBy 는
+  // 벽 속에서는 두 축이 다 막혀서 한 조각도 못 나가므로(= 40초 정지), 여기가 먼저다.
+  const wedged = unwedge(rawDt);
+  if (root.position.y > moveMaxY) moveMaxY = root.position.y;
+  // ★"벽 위에 올라탔나"의 진짜 자는 이쪽이다. maxY 는 점프가 섞여서 못 쓴다
+  //   (대시 키를 방향 없이 누르면 점프가 나간다). 발이 딛고 선 면의 높이는
+  //   맵의 제일 높은 단(계단 꼭대기 1.02)을 절대 넘을 수 없다.
+  {
+    const _gy = level.groundY(root.position.x, root.position.z);
+    if (_gy > moveMaxGY) moveMaxGY = _gy;
+  }
+  const moving = !wedged && (mx || mz) && !attacking && dashLeft <= 0;
   if (moving) {
     fwd.set(Math.sin(yaw), 0, Math.cos(yaw));
     rightv.set(Math.cos(yaw), 0, -Math.sin(yaw));
@@ -4700,10 +4934,8 @@ function tick() {
     //   취소하면 벽을 스치며 걸을 때마다 딱딱 멈춰서 조작이 답답해진다.
     //   몸이 향하는 방향(targetYaw)은 밀려난 결과가 아니라 **입력**으로 정한다.
     //   밀려난 방향으로 돌리면 벽에 붙어 걸을 때 몸이 벽을 향해 홱 돈다.
-    const st = level.slide(root.position.x, root.position.z,
-                           move.x * spd * dt, move.z * spd * dt, level.PLAYER_RADIUS);
-    root.position.x = st.x;
-    root.position.z = st.z;
+    // ★17차부터 이동은 전부 moveBy 한 문으로만 나간다(조각내기 + 벽 속 거부 + 축 분리).
+    moveBy(move.x * spd * dt, move.z * spd * dt);
     const targetYaw = Math.atan2(move.x, move.z);
     let d = targetYaw - root.rotation.y;
     while (d > Math.PI) d -= Math.PI * 2;
@@ -4724,10 +4956,7 @@ function tick() {
       coastLeft = Math.max(0, coastLeft - dt);
       const ck = coastLeft / COAST_T;                  // 1 -> 0
       const cs = ck * ck;
-      const st = level.slide(root.position.x, root.position.z,
-                             coastVX * cs * dt, coastVZ * cs * dt, level.PLAYER_RADIUS);
-      root.position.x = st.x;
-      root.position.z = st.z;
+      moveBy(coastVX * cs * dt, coastVZ * cs * dt);
     }
   }
 
@@ -4740,10 +4969,9 @@ function tick() {
     dashLeft = Math.max(0, dashLeft - dt);
     dashGone = dashEase(1 - dashLeft / DASH_DUR) * DASH_DIST;
     const k = dashGone - p0;
-    const st = level.slide(root.position.x, root.position.z,
-                           dashDX * k, dashDZ * k, level.PLAYER_RADIUS);
-    root.position.x = st.x;
-    root.position.z = st.z;
+    // ★한 프레임에 최대 0.885m 를 가는 이 줄이 "벽 속 끼임" 의 진범이었다(18.13%).
+    //   moveBy 가 0.09m 씩 잘라서 민다 — 그래서 벽 앞에서 정확히 멈춘다.
+    moveBy(dashDX * k, dashDZ * k);
     if (dashLeft <= 0) { dashGone = 0; restoreDashTs(); }
   }
 
@@ -4758,10 +4986,7 @@ function tick() {
     stepLeft = Math.max(0, stepLeft - dt);
     const k = (stepEase(1 - stepLeft / STEP_DUR) - stepEase(p0)) * stepDist;
     const yy = root.rotation.y;
-    const st = level.slide(root.position.x, root.position.z,
-                           Math.sin(yy) * k, Math.cos(yy) * k, level.PLAYER_RADIUS);
-    root.position.x = st.x;
-    root.position.z = st.z;
+    moveBy(Math.sin(yy) * k, Math.cos(yy) * k);
   }
 
   // 중력·착지·지면 높이
@@ -5049,6 +5274,8 @@ function tick() {
   //     화면에 나가는 오프셋만 placeCamera 안에서 붙들어 둔다(shakeOffsetFrozen).
   feel.updateShake(rawDt);
   updateCamPunch(rawDt, hitFrozen);
+  // ★가림 완화는 히트스톱 중에는 안 돈다(멈춘 프레임에서 각이 움직이면 정지가 깨진다).
+  if (!hitFrozen) updateCamLift(rawDt);
   placeCamera(rawDt * 12, hitFrozen);
   // 화면 겹(붓질 슬래시·속도선)도 실제 dt. 카메라와 같은 시계를 쓴다.
   feel.updateOverlay(rawDt);

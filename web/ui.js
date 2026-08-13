@@ -236,7 +236,7 @@ body{font-synthesis:none;-webkit-font-synthesis:none}
 #uiTitle .win,#uiBanner .win,#uiDeath .win,#bClear,
 #uiSkills .sk,#uiSkills .skLock,#eBar,#bBox,#bGoal,#help,#stat,#uiHelpChip,
 #combo .uiCall,#uiDock .dkSword,#uiSkills .sk .key,#uiDock .dkLv,
-#uiHpFloat .track,#uiHpFloat .lv,#uiNav .plate,#uiPip,#stHud,#uiNav .cap,#uiPip .cap{
+#uiHpFloat .track,#uiHpFloat .lv,#uiNav .plate,#uiPip,#stHud,#uiNav .cap,#uiPip .cap,#uiNav .dst{
   clip-path:polygon(var(--c) 0,calc(100% - var(--c)) 0,100% var(--c),
                     100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,
                     var(--c) 100%,0 calc(100% - var(--c)),0 var(--c))}
@@ -1012,6 +1012,22 @@ body.uiCleared #uiClearDim{opacity:1}
   opacity:0;transition:opacity .35s ease}
 #uiNav .cap{top:50%;margin-top:28px}
 #uiNav .cap.on,#uiPip .cap.on{opacity:1}
+/* 남은 거리(m). ★17차 신규유저 비평 ④ "마커가 거리 정보 없이 가장자리에 고정이라
+   전진 중인지 막힌 건지 판별이 안 된다." 방향만으로는 **가고 있는지**를 못 읽는다.
+   숫자가 줄어드는 것만으로 충분하므로 판 하나 · 글자 하나로 끝낸다.
+   ★첫 등장 라벨(.cap)과 **같은 자리**를 쓴다. 겹치는 2.6초 동안은 라벨이 이긴다.
+   ★카드 문법 그대로다 - 남색 판 + 1px 창백 헤어라인 + 컷코너(--c 5px).
+     테는 획 색이 아니라 --ui-edge 다. 획 색으로 두르면 판이 하나 더 생겨서
+     "무엇이 목표인가"를 말하는 글자 판과 세기가 같아진다.
+   ★숫자는 tabular-nums. 안 그러면 12 -> 11 에서 판 폭이 흔들려 깜빡이는 걸로 읽힌다. */
+#uiNav .dst{--c:5px;position:absolute;left:50%;top:50%;margin-top:28px;
+  transform:translate(-50%,0);padding:2px 8px 3px;white-space:nowrap;
+  border:0;border-radius:0;background:rgba(6,11,22,.94);
+  box-shadow:inset 0 0 0 1px var(--ui-edge);
+  font-family:var(--ui-font);font-size:11px;font-weight:800;letter-spacing:.02em;
+  font-variant-numeric:tabular-nums;color:var(--nav-ink);text-shadow:none;
+  opacity:0;transition:opacity .3s ease}
+#uiNav .dst.on{opacity:.92}
 /* 명멸. 판이 2.2초에 한 번 은은하게 숨을 쉰다.
    ★★예전에는 **box-shadow 자체를 키프레임으로 흔들었다.** box-shadow 는 합성이 아니라
      페인트라, 나침반이 떠 있는 내내 매 프레임 판을 다시 그린다.
@@ -1352,10 +1368,11 @@ export function initUI() {
   // 목표 방향 나침반. 판(글자)은 안 돌고 화살만 판 둘레를 돈다
   const nav = el('div', 'uiNav');
   nav.innerHTML = '<div class="dial"><i class="tip"></i></div><div class="plate"></div>'
-    + '<div class="cap"></div>';
+    + '<div class="cap"></div><div class="dst"></div>';
   const navDial = nav.querySelector('.dial');
   const navPlate = nav.querySelector('.plate');
   const navCap = nav.querySelector('.cap');
+  const navDst = nav.querySelector('.dst');
 
   // 가까운 요괴 무리 마커
   const pip = el('div', 'uiPip');
@@ -1828,6 +1845,8 @@ export function initUI() {
   const PIP_R = 10;           // px. 무리 마커 소형판 반지름(20px 판)
   // px. 나침반 첫 등장 라벨(.cap)이 판 중심 밑으로 자라는 길이(margin-top 28 + 높이 22).
   const NAV_CAP_H = 36;
+  // px. 남은 거리 판(.dst)이 판 중심 밑으로 자라는 길이(margin-top 28 + 높이 17).
+  const NAV_DST_H = 22;
 
   // ★나침반이 커지면서(판 46px + 화살 끝까지 64px) HUD 를 덮기 시작했다. 여백을 상수로
   //   박으면 창 크기·글자 크기가 바뀔 때마다 어긋나므로 **HUD 조각의 실제 사각형을
@@ -1971,6 +1990,7 @@ export function initUI() {
   }
 
   let navGlyph = '';          // 지금 새겨 둔 글자. 안 바뀌면 DOM 을 안 건드린다
+  let navDstTxt = '';         // 지금 찍혀 있는 거리 글자. 같은 이유로 캐시한다
   let navPx = null;           // 화살이 지금 있는 화면 좌표(px). 마커가 겹치는지 볼 때 쓴다
   // 단계가 처음 뜰 때만 판 밑에 작은 말을 2.6초 붙인다(첫 등장 1회)
   const navCapSeen = {};
@@ -2004,10 +2024,25 @@ export function initUI() {
     // ★글자가 바뀌는 그 틱에만 부르면 안 된다. 그 틱이 로딩 중이었으면 영영 못 뜬다.
     //   매 틱 불러도 안쪽에서 seen 으로 한 번만 통과한다.
     showNavCap(t.kind);
+    // ── 남은 거리 ──
+    // ★비평 ④ "마커에 거리 정보가 없어 전진/막힘 판별이 안 된다". 방향은 이미 화살이
+    //   말하고 있었다. 없던 것은 **가고 있는가**였다. 숫자 하나면 그게 붙는다.
+    // ★첫 등장 라벨이 붙어 있는 2.6초 동안만 비킨다(같은 자리를 쓴다).
+    const pp = window.__pos ? window.__pos() : null;
+    const capOn = navCap.classList.contains('on');
+    if (pp) {
+      const m = Math.max(0, Math.round(Math.hypot(t.x - pp.x, t.z - pp.z)));
+      const txt = m + 'm';
+      // ★글자가 안 바뀌면 DOM 을 안 건드린다. 매 프레임 textContent 를 쓰면
+      //   그때마다 레이아웃이 다시 돈다(계기판에서 이미 겪은 함정이다).
+      if (navDstTxt !== txt) { navDstTxt = txt; navDst.textContent = txt; }
+      navDst.classList.toggle('on', !capOn);
+    } else navDst.classList.remove('on');
     const s = safeBox();
     // ★첫 등장 라벨이 붙어 있는 동안은 판 밑으로 34px 이 더 자란다. 그 창에서만
     //   아래 한계를 더 올린다 - 평상시에도 올려 두면 「가리키는 자리」가 어긋난다.
-    const capH = navCap.classList.contains('on') ? NAV_CAP_H : 0;
+    // ★거리 판(22px)도 같은 자리라 켜져 있으면 그만큼 물러난다.
+    const capH = capOn ? NAV_CAP_H : (navDst.classList.contains('on') ? NAV_DST_H : 0);
     navPx = place(nav, spot, s.navL, s.navR, s.navT, s.navB, s.navBDock - capH,
                   s.dockL, s.dockR, PLATE_R + 8);
     navDial.style.transform = 'rotate(' + spot.ang.toFixed(1) + 'deg)';
