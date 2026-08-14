@@ -1197,7 +1197,7 @@ body.uiCleared #uiClearDim{opacity:1}
      이중으로 쓴다. 하나를 없애면 「지금 몇 남았나」와 「위험한가」 중 하나가 죽는다.
    ★폭은 **화면 px 고정**이다. 휠 줌(18~32m)으로 캐릭터가 커졌다 작아져도 바는 안 변한다.
    ★자리는 JS 가 **transform 으로만** 쓴다. left/top 을 매 프레임 쓰면 레이아웃이 돈다. */
-#uiHpFloat{position:fixed;left:0;top:0;z-index:5;width:84px;height:24px;
+#uiHpFloat{position:fixed;left:0;top:0;z-index:5;width:84px;height:16px;
   pointer-events:none;user-select:none;opacity:0;overflow:visible;
   border:0;border-radius:0;background:transparent;box-shadow:none;
   transition:opacity .18s ease;will-change:transform}
@@ -1227,24 +1227,23 @@ body.uiCleared #uiClearDim{opacity:1}
   background:var(--cut-lines);
   box-shadow:inset 0 0 0 1px rgba(2,5,11,.92),inset 0 0 0 2px rgba(214,240,255,.86)}
 #uiHpFloat .track i{top:0;bottom:0;left:0;border-radius:0}
-/* 바코드 HP. 레벨 배지와 같은 높이를 쓰며, 실제 체력 폭이 줄면 오른쪽의 세로획부터
-   함께 사라진다. 굵은 획/가는 획을 한 묶음으로 반복해 숫자 없이도 잔량이 읽힌다.
+/* 가는 바코드 HP. 레벨 배지와 같은 높이를 쓰며, 실제 체력 폭이 줄면 오른쪽의 세로획부터
+   함께 사라진다. 획은 모두 1px로 두껍게 뭉치지 않게 한다.
    체력 구간별 색상은 쓰지 않는다. 만피부터 빈사까지 --ui-green 한 색으로 고정한다. */
 #uiHpFloat .gh{display:none}
 #uiHpFloat .fl{
   background:repeating-linear-gradient(90deg,
-    var(--ui-green) 0 2px,transparent 2px 4px,
-    var(--ui-green) 4px 8px,transparent 8px 10px);
+    var(--ui-green) 0 1px,transparent 1px 6px);
   filter:saturate(1.08);transition:filter .2s ease}
 /* 레벨 뱃지. 같은 transform 노드 안에서 트랙 왼쪽에 붙는다 */
-#uiHpFloat .lv{--c:5px;--cut-ink:var(--ui-gold);
+#uiHpFloat .lv{--c:4px;--cut-ink:var(--ui-gold);
   position:absolute;right:calc(100% - 3px);top:50%;z-index:3;
-  width:24px;height:24px;transform:translateY(-50%);
+  width:16px;height:16px;transform:translateY(-50%);
   display:flex;align-items:center;justify-content:center;
   border:0;border-radius:0;background:var(--cut-lines),rgba(24,17,6,.94);
   box-shadow:inset 0 0 0 1px var(--ui-gold),inset 0 0 10px rgba(230,160,40,.30);
   color:var(--ui-gold);font-family:var(--ui-font);
-  font-size:11.5px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
+  font-size:9.5px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
   text-shadow:0 0 8px rgba(255,187,61,.6)}
 /* 맞은 순간에는 외곽선과 밝기만 짧게 반응한다. 체력 잔량과 관계없는 피격 피드백이며
    바코드의 색상과 획 수 계산은 바꾸지 않는다. */
@@ -1358,8 +1357,8 @@ body.uiCleared #uiClearDim{opacity:1}
   #uiSkills .sk[data-k="Jump"]::after{top:18px;height:9px}
   #eBar{height:18px}
   #stHud{bottom:76px}
-  #uiHpFloat{width:68px;height:21px}
-  #uiHpFloat .lv{width:21px;height:21px;font-size:10.5px}
+  #uiHpFloat{width:68px;height:14px}
+  #uiHpFloat .lv{width:14px;height:14px;font-size:9px}
   /* ★안내판 아래끝이 계기판 윗선을 넘지 않게 줄 간격만 줄인다.
      글자 크기는 마지막에 건드린다는 순서 그대로다. */
   #help{line-height:1.45;padding:8px 12px 9px}

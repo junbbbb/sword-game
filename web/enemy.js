@@ -181,15 +181,13 @@ const MAX_VIS = MAX_ENEMIES + MAX_CORPSES;
 // **드로우콜 1**로 끝난다. 먹 파편(inkMesh)이 쓰는 것과 같은 수법이다.
 //
 // 체력 바는 모든 일반 몬스터가 같은 월드 폭을 쓴다. 최대 체력은 크기를 바꾸지 않고
-// 10칸 중 몇 칸이 켜지는지만 결정한다. 플레이어의 굵은 초록 바와 혼동되지 않도록
-// 몬스터 쪽은 얇은 고정 붉은색이며, 저체력 색 변화와 장식 프레임을 쓰지 않는다.
+// 연속 게이지의 채움 비율만 결정한다. 플레이어의 초록 바와 혼동되지 않도록 몬스터 쪽은
+// 더 얇은 고정 붉은색이며, 저체력 색 변화와 장식 프레임을 쓰지 않는다.
 const BAR_W = 0.44;             // ★바 폭(m). 몹 종류와 무관하게 한 값이다 (= 옛 PIP_W 0.22 x 2)
-// 플레이어 머리 위 바(24px급)와 한눈에 구분되도록 몬스터 쪽은 약 7px로 얇게 둔다.
-// 장식·그라데이션·저체력 색 변화 없이, 남은 체력은 켜진 바코드 수로만 표현한다.
-const PIP_H = 0.11;             // 바 높이(m). 640px 촬영 뷰포트에서 약 7px
-const BAR_SEGMENTS = 10;        // 최대 체력과 무관하게 언제나 같은 10칸
-const BAR_BORDER = 0.09;        // 높이 단위. 화면에서 약 0.6px의 얇은 먹색 테두리
-const BAR_SEG_GAP = 0.12;       // 각 칸 좌우 공백 비율
+// 플레이어 머리 위 바(16px급)와 한눈에 구분되도록 몬스터 쪽은 약 5px로 얇게 둔다.
+// 장식·그라데이션·저체력 색 변화 없이 하나의 연속 게이지로 표현한다.
+const PIP_H = 0.085;            // 바 높이(m). 640px 촬영 뷰포트에서 약 5px
+const BAR_BORDER = 0.10;        // 높이 단위. 화면에서 약 0.5px의 얇은 먹색 테두리
 // 피격 뒤 이만큼만 떠 있는다. 상시로 두면 40개 바가 화면을 덮어 롤 HUD 가 아니라
 // MMO 가 된다. "때린 놈만 잠깐"이 이 게임의 밀도에 맞는다.
 const PIP_SHOW = 1.2;
@@ -298,7 +296,7 @@ const DMG_NEAR = 2.2;
 //
 // 왜 「몹 체력을 2배로」가 아니라 「칼 데미지를 0.5로」인가:
 //   ① 체력 분포(leader 3 / 일반 2·1)는 스폰·리더 개념과 묶인 밸런스 축이라 안 건드린다.
-//   ② 머리 위 바는 몹 체력과 무관하게 같은 폭·높이·10칸을 쓴다. 체력을 2배로 올리는
+//   ② 머리 위 바는 몹 체력과 무관하게 같은 폭·높이를 쓴다. 체력을 2배로 올리는
 //      방식이었다면 바 채움과 전투 템포를 함께 다시 판단해야 했다.
 //   ③ 귀환 회복(RETURN_HEAL, 초당 핍)도 핍 단위라 **완치까지 걸리는 벽시계 시간이
 //      그대로다.** 체력을 2배로 올렸다면 회복도 같이 2배로 올려야 했다.
@@ -368,8 +366,8 @@ const LVL_CAP = 12;             // 성장 상한 레벨. 이 위로는 안 는�
 const LVL_PER_KILL = 5;         // 몇 마리에 한 단인가(★ui.js 뱃지와 같은 값이어야 한다)
 //
 // ── ④ 체력 바와의 계약 ──
-//   · 몬스터 바는 레벨·최대 체력과 무관하게 같은 10칸이며, hp/maxHp 만큼만 켜진다.
-//   · 만피부터 빈사까지 켜진 칸은 같은 붉은색이다. 위험도에 따른 색 전환은 없다.
+//   · 몬스터 바는 레벨·최대 체력과 무관하게 같은 폭·높이이며, hp/maxHp 만큼 채워진다.
+//   · 만피부터 빈사까지 같은 붉은색이다. 위험도에 따른 색 전환은 없다.
 //   · 한 대에 죽는 몬스터의 빈 바가 번쩍이지 않도록 표시 조건만 현재 최저타를 쓴다.
 //
 // ── ⑤ 롤백 ──
@@ -1721,14 +1719,12 @@ export function createEnemySystem(opts) {
   }
 
   // ── 체력 바 (머리 위) ──
-  // 이름만 pip 로 남아 있다. 폭과 10칸 구조는 모든 일반 몬스터가 같고, 최대 체력은
-  // 켜진 바코드 수를 계산하는 분모로만 사용한다.
+  // 이름만 pip 로 남아 있다. 폭과 높이는 모두 같고, 최대 체력은 연속 채움의 분모다.
   const pipN = new Float32Array(MAX_ENEMIES * 4);   // 최대 체력(채움 비율의 분모)
   const pipHp = new Float32Array(MAX_ENEMIES * 4);  // 남은 체력
   const pipA = new Float32Array(MAX_ENEMIES * 4);   // 알파
-  // 일반 몬스터 전용: 장식·그라데이션·저체력 색 변화 없는 바코드 바.
-  // 켜진 칸은 hp/maxHp 를 10등분해 ceil 한 개수라 hp>0 인 동안 최소 1칸은 남는다.
-  const pipSimpleFrag = `
+  // 일반 몬스터 전용: 장식·그라데이션·저체력 색 변화 없는 단일 게이지.
+  const pipBarFrag = `
     varying vec2 vU; varying float vN; varying float vHp; varying float vA;
     void main(){
       if (!(vA > 0.01)) discard;
@@ -1740,22 +1736,11 @@ export function createEnemySystem(opts) {
       vec3 borderCol = vec3(0.14, 0.15, 0.17);
       if (edge < border) { gl_FragColor = vec4(borderCol, vA); return; }
 
-      float innerX = clamp((U - border) / max(ar - border * 2.0, 0.001), 0.0, 0.999999);
-      float slotX = innerX * ${BAR_SEGMENTS.toFixed(1)};
-      float cell = floor(slotX);
-      float within = fract(slotX);
-      float segment = step(${BAR_SEG_GAP.toFixed(3)}, within)
-                    * (1.0 - step(${(1 - BAR_SEG_GAP).toFixed(3)}, within));
-
-      float hp01 = clamp(vHp / max(vN, 0.001), 0.0, 1.0);
-      float litN = (hp01 > 0.0001)
-        ? ceil(hp01 * ${BAR_SEGMENTS.toFixed(1)} - 0.0001) : 0.0;
-      float lit = step(cell + 1.0, litN);
-
+      float fillX = clamp(vHp / max(vN, 0.001), 0.0, 1.0) * ar;
+      float fill = 1.0 - smoothstep(fillX - 0.025, fillX + 0.025, U);
       vec3 track = vec3(0.008, 0.010, 0.014);
-      vec3 offSeg = vec3(0.040, 0.045, 0.055);
       vec3 hpSeg = vec3(0.72, 0.055, 0.028);
-      vec3 col = mix(track, mix(offSeg, hpSeg, lit), segment);
+      vec3 col = mix(track, hpSeg, fill);
       gl_FragColor = vec4(col, vA);
     }`;
 
@@ -1767,7 +1752,7 @@ export function createEnemySystem(opts) {
       varying vec2 vU; varying float vN; varying float vHp; varying float vA;
       void main(){ vU = uv; vN = aN; vHp = aHp; vA = aA;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: pipSimpleFrag,
+    fragmentShader: pipBarFrag,
   });
   const pipMesh = plateMesh(MAX_ENEMIES, pipMat,
     { aN: { arr: pipN, n: 1 }, aHp: { arr: pipHp, n: 1 }, aA: { arr: pipA, n: 1 } });
@@ -1990,7 +1975,7 @@ export function createEnemySystem(opts) {
       if (dd > PLATE_MAX_D * PLATE_MAX_D) continue;
       const headY = e.pos.y + e.h * 1.02;
       // ── 체력 바 ──
-      // 폭·높이·10칸 구조는 모든 일반 몬스터가 같다. 체력은 켜진 칸 수로만 읽힌다.
+      // 폭·높이는 모든 일반 몬스터가 같고, 체력은 연속 채움 비율로만 읽힌다.
       // ★한 대에 죽는 놈은 안 그린다. 그 놈은 맞는 순간 시체가 되므로 바가 화면에 뜰
       //   일 자체가 없다(= 뜨면 그게 거짓말이다. 늘 가득 찬 바만 보여 준다).
       // ★18차: 그 조건을 `maxHp >= 2` 라고 적어 놨었다. 「핍 1 = 한 대」였을 때만 맞는
@@ -2006,8 +1991,7 @@ export function createEnemySystem(opts) {
         const nMax = e.maxHp;
         putPlate(pPos, pUv, o, e.pos.x, headY + PIP_H * 1.9, e.pos.z,
           BAR_W * 0.5, PIP_H * 0.5, 0, 1);
-        // 소수 체력은 그대로 전달하고 셰이더가 비율을 10칸으로 올림한다.
-        // hp>0인 동안 마지막 한 칸이 남고, 0일 때만 전부 꺼진다.
+        // 소수 체력은 그대로 전달하고 셰이더가 연속 비율로 그린다.
         const hpLeft = Math.max(0, Math.min(nMax, e.hp));
         for (let k = 0; k < 4; k++) {
           pipN[o + k] = nMax; pipHp[o + k] = hpLeft; pipA[o + k] = a;
@@ -3679,11 +3663,10 @@ export function createEnemySystem(opts) {
                taps };
     },
     // ── 체력 바 계약 창구 (읽기 전용) ──
-    // 폭·높이·칸 수와 고정색 여부를 캡처 하네스에서 확인하는 자리다.
+    // 폭·높이와 고정색 여부를 캡처 하네스에서 확인하는 자리다.
     get bar() {
       return { w: BAR_W, h: PIP_H, fixedW: true,
-               style: 'barcode', segments: BAR_SEGMENTS,
-               border: BAR_BORDER, segmentGap: BAR_SEG_GAP,
+               style: 'solid', border: BAR_BORDER,
                ink: 'fixed-crimson', colorChanges: false,
                show: PIP_SHOW, fade: PIP_FADE };
     },
@@ -3693,7 +3676,7 @@ export function createEnemySystem(opts) {
     // 그래서 상태를 세워 두는 창구를 판다(dmgTest·setFlashHold 와 같은 갈래다).
     //   i     = positions 순서(살아 있는 목록 인덱스)
     //   hp    = 남길 체력. 바 채움은 hp / maxHp 그대로다
-    //   maxHp = 그 놈의 최대 체력. 바 폭과 10칸 구조는 변하지 않고 채움 비율만 달라진다
+    //   maxHp = 그 놈의 최대 체력. 바 폭과 구조는 변하지 않고 채움 비율만 달라진다
     //   show  = 바가 떠 있을 시간(초). 크게 주면 촬영 내내 안 걷힌다
     pipTest(i, hp, maxHp, show) {
       const e = live[i | 0];
