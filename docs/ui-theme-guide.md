@@ -1,137 +1,121 @@
-# 클린 슬레이트 UI 가이드
+# UI 테마 가이드
 
-현재 UI는 기존 테마 위에 색만 덮는 스킨이 아니다. `web/ui.js`가 정보 위계와 DOM을
-새로 조립하고, `web/ui-rebuild.css`가 **Black Ledger** 화면 체계를 전담한다.
-`web/index.html`은 아래 한 파일만 불러오며 `data-ui-system`으로 활성 상태를 표시한다.
+UI는 기존 구조와 게임 로직을 유지한 채 색, 표면, 테두리, 장식, 타이포그래피만
+덮어쓰는 독립 스킨이다. 현재 활성 시안은 참고 이미지의 먹색·청동 알림창과 따뜻한
+판타지 게임 가독성을 섞은 **Bronze Story**다. 이전 **Abyss Hunter** 시안도 그대로
+보관하므로 한 줄로 왕복할 수 있다.
+
+## 활성화
+
+`web/index.html`에서 테마 CSS를 불러오고 `body`의 값으로 활성 테마를 고른다.
 
 ```html
-<link id="uiCss" rel="stylesheet" href="./ui-rebuild.css">
-<body data-ui-system="black-ledger">
+<link rel="stylesheet" href="./ui-theme-abyss.css">
+<link rel="stylesheet" href="./ui-theme-bronze.css">
+<body data-ui-theme="bronze-story">
 ```
 
-## 바꿀 때의 순서
+- 현재 시안: `data-ui-theme="bronze-story"`
+- 이전 시안: `data-ui-theme="abyss-hunter"`
+- 끄기: `data-ui-theme` 속성을 제거한다.
+- 다른 테마로 전환: 속성값만 새 테마 이름으로 바꾼다.
 
-작은 시안 변경은 `web/ui-rebuild.css` 맨 위 `:root` 토큰부터 고친다. 같은 색이나
-간격을 컴포넌트 선택자마다 다시 쓰지 않는다.
+각 테마 규칙은 자기 `body[data-ui-theme="..."]` 아래로 제한한다. 테마 CSS는
+`ui.js`의 동적 기본 스타일보다 먼저 로드되지만, `body[...]`를 더한 높은 선택자
+우선순위로 외형을 유지한다. 상태 제어용 인라인 `width`, `transform`, `opacity`,
+`display`는 테마가 덮지 않는다.
 
-| 토큰 묶음 | 역할 |
-|---|---|
-| `--bl-ink-*` | 배경과 표면의 깊이 |
-| `--bl-bone*`, `--bl-muted` | 본문, 수치, 보조 정보 |
-| `--bl-brass*`, `--bl-gold` | 프레임, 선택, 성장과 보상 |
-| `--bl-rust*`, `--bl-moss*` | 위험/피격, 생존 상태 |
-| `--bl-skill`, `--bl-line*`, `--bl-shadow` | 액션, 경계, 깊이 |
-| `--bl-font`, `--bl-safe-*` | 공통 서체와 기기 안전 여백 |
-| `--fx-damage-*` | `enemy.js`가 읽는 월드 데미지 숫자 색 |
+## Bronze Story 팔레트와 표면
 
-`--fx-damage-*`는 Three.js 재질 초기화 때 CSS에서 한 번 읽으므로 바꾼 뒤 페이지를
-새로고침한다. 값은 `#RGB` 또는 `#RRGGBB`가 가장 안전하다. 정보 구조까지 바꾸는
-요청이면 토큰을 억지로 늘리지 말고 `ui.js`의 해당 컴포넌트와 CSS 절을 함께 고친다.
+색과 공통 표면은 `web/ui-theme-bronze.css` 상단의 `--bs-*` 토큰 블록에서 먼저
+고친다. 개별 HUD 선택자에 같은 색을 반복해서 직접 쓰지 않는다.
 
-## 컴포넌트 지도
+| 의미 | Bronze Story 토큰 | 용도 |
+|---|---|---|
+| 서체 | `--bs-font-ui`, `--bs-font-display` | 수치, 픽셀풍 제목/알림 |
+| 바탕 단계 | `--bs-night-*`, `--bs-charcoal*` | 먹색 배경과 판 깊이 |
+| 판 표면 | `--bs-panel*`, `--bs-panel-fill*` | 카드, 도크, 보조판 |
+| 글자 | `--bs-cream*`, `--bs-parchment`, `--bs-muted` | 주 정보, 설명, 비활성 정보 |
+| 테두리/장식 | `--bs-bronze*`, `--bs-frame-image` | 이중선과 주요 카드 모서리 |
+| 성장/보상 | `--bs-gold*` | 레벨, EXP, 목표, 획득물 |
+| 생존/위험 | `--bs-green*`, `--bs-red*` | 플레이어 HP, 보스, 피격, 사망 |
 
-`web/ui-rebuild.css`는 다음 순서로 나뉜다.
+`--ui-*`와 `--rb-*`는 위 토큰을 가리키는 호환 alias다. 기본 UI 구조는 유지하고
+Bronze Story 토큰을 바꾸면 로딩 화면과 동적 HUD가 함께 따라오게 한다. 하단/머리 위
+체력처럼 JS와 공유해야 하는 완성 그라데이션은 `--ui-hp-*-fill`, 성장 바는
+`--ui-exp-fill`, 데미지 숫자는 `--fx-damage-*`에서 바꾼다.
 
-1. 레이어와 로딩 장부
-2. 하단 HUD의 생존자 카드·액션 덱·장비 카드
-3. 목표와 보스 HUD
-4. 조작 안내 서랍
-5. 플레이어 머리 위 HP와 화면 가장자리 목표 표시
-6. 입장·보스 경고·사망·클리어 연출
-7. 보조 HUD, 화면 소유 상태, 반응형 규칙
+`--fx-damage-*` 다섯 값은 Three.js 재질로도 전달되므로 `#RGB` 또는 `#RRGGBB`
+형식으로 지정한다. `oklch()`나 `color-mix()` 같은 문법은 안전한 기본색에 폴백한다.
 
-DOM 생성과 상태 연결은 같은 순서의 주석이 있는 `web/ui.js`에서 찾는다. CSS는 외형과
-배치를, JS는 노드 생성·상태 읽기·인라인 수치 갱신을 맡는다.
+색은 의미를 유지한다. 팔레트를 바꿔도 체력=생존, 적색=보스/피격,
+금색=성장/보상, 청동색=선택/행동이라는 역할은 섞지 않는다. 투명도, 그라데이션,
+프레임과 표면 질감은 같은 파일에서 조정하되 작은 변경은 먼저 토큰으로 해결한다.
 
-## 동작 계약
+## 스킬 아이콘 교체
 
-다음 ID와 구조는 다른 시스템이 직접 읽거나 갱신하므로 시각 작업 중 임의로 바꾸지 않는다.
+현재는 `web/ui-assets/bronze-skills.webp`, 이전 시안은
+`web/ui-assets/abyss-skills.webp` 한 장을 각각 2×2로 잘라 네 슬롯에 쓴다. 같은
+크기와 배치로 파일만 교체하면 CSS는 그대로 둘 수 있다.
 
-| 소유 파일 | 유지할 계약 |
-|---|---|
-| `index.html` | `#uiCss`, `#load`, `#help`, `#stat`, `#sword`, `#combo` |
-| `enemy.js` | `#eHud > #eBar > #eFill`, `#eTxt`, 피격·사망 상태 |
-| `boss.js` / `level2.js` | `#bHud`, `#bBox`, `#bGoal`, `#bName`, `#bFill`, `#bClear` |
-| `stealth.js` | `#stHud`, `#stVig`와 은신 상태 클래스 |
-| `ui.js` | `#uiRoot`의 네 레이어, `#uiDock`, `#uiSkills`, `#uiHpFloat`, `#uiNav`, `#uiPip` 및 연출 노드 |
+- 왼쪽 위: `Basic`
+- 오른쪽 위: `Heavy`
+- 왼쪽 아래: `Wide`
+- 오른쪽 아래: `Jump` / `Dash`
 
-`#eHud`는 이름과 달리 **플레이어 체력/처치 HUD**다. 몬스터 머리 위 체력바와 혼동하지
-않는다. 스킬 슬롯의 첫 자식 `i.cd`, 그 다음 `b.cds`, 그리고 `data-k` 값은
-`main.js`와 `ui.js`가 공유하는 구조 계약이다. 로직이 쓰는 `width`, `transform`,
-`opacity`, `display` 인라인 값과 `uiCine`, `uiCleared`, `uiDeathOn` 같은 상태 클래스도
-고정값으로 덮지 않는다.
+이미지 안에 키나 기술명을 넣지 않는다. 키캡·이름·쿨다운은 기존 DOM이 별도로
+표시하므로, 이미지에는 기술의 실루엣만 둔다. 상세 생성 정보는
+`web/ui-assets/README.md`에 기록한다.
 
-## 몬스터 머리 위 체력바
+## DOM 소유 경계
 
-실제 몬스터 체력바는 DOM/CSS가 아니라 `web/enemy.js`의 Three.js 월드 렌더링이다.
+테마 CSS는 **외형만 소유**한다. 다음 파일이 가진 DOM과 상태 계약은 유지한다.
 
-- `BAR_W`, `PIP_H`: 명패의 월드 크기
-- `★머리 위 판 (체력 바 · 인지 표식)` 절: 판 시스템과 한 드로우콜 구조
-- `체력 바 (머리 위)` 절의 `pipMat`: 명패·프레임·트랙·연속 채움·빈사 끝점·등급 리벳 셰이더
-- `pipMesh`: 동적 버퍼를 실제 메시로 묶는 곳
-- `updatePlates()`: 타격 후 노출 시간, 알파, 위치, `hp/maxHp`를 버퍼와 uniform에 전달하는 곳
+- `index.html`: `#load`, `#help`, `#stat`, `#sword`, `#combo` 등 정적 셸
+- `ui.js`: 알림창, 스킬 슬롯, 하단 도크, 내비게이션, 보조 HP, 기본 `#uiStyle`
+- `enemy.js`: `#eHud`, `#eBar`, `#eFill`, `#eTxt`, 피격·사망 상태
+- `boss.js`: `#bHud`, `#bBox`, `#bGoal`, `#bName`, `#bFill`, `#bClear`
+- `stealth.js`: `#stHud`, `#stVig`와 은신 상태 클래스
+- `main.js`: 게임 수치, 쿨다운, 표시 여부, 인라인 갱신과 개발용 패널
 
-색·모양은 `pipMat`의 프래그먼트 셰이더에서, 전체 크기는 `BAR_W`/`PIP_H`에서 조정한다.
-노출 판정(`e.pipT`), 최대 개수, 버퍼 attribute 이름은 성능과 전투 로직 계약이므로 외형
-수정만 할 때는 유지한다.
+테마 작업에서는 ID·클래스·DOM 순서·문구·`innerHTML`을 바꾸지 않는다. JS가 갱신하는 `width`, `transform`, `opacity`, `display`와 상태 클래스도 CSS에서 고정하지 않는다. 배치를 손댈 때는 `pointer-events`, `z-index`, safe area가 게임 입력을 막지 않는지 확인한다.
 
-## 레벨 상승 연출
+## 새 테마 추가
 
-레벨 상승은 화면 중앙 창을 띄우지 않는다. `web/ui.js`의 `레벨 / 체력` 절이 레벨 변화를
-감지하면 `showLevelUp()`에서 `window.__feel.levelUp(window.__root, height)`를 호출하고,
-하단 레벨 숫자에는 짧은 `pulse`만 준다.
+1. `web/ui-theme-bronze.css`를 참고해 `web/ui-theme-<name>.css`를 만든다.
+2. 모든 선택자를 `body[data-ui-theme="<name>"]`로 스코프한다.
+3. 의미 토큰부터 새 팔레트로 매핑하고, 필요한 부품의 표면 규칙만 추가한다.
+4. JS나 기존 기본 CSS를 복사해 수정하지 않는다. 인라인 상태까지 덮는 `!important`는 가급적 쓰지 않는다.
+5. `index.html`에 CSS 링크를 추가하고 `body` 속성값만 바꿔 비교한다. 여러 테마 CSS가 함께 로드되어도 스코프 값이 다르면 충돌하지 않는다.
+6. 팔레트/표면, HUD, 팝업, QA처럼 작은 커밋으로 나눈다.
 
-캐릭터 주변 빛은 `web/feel.js`의 `레벨 상승 빛` 절에 있다. `levelRoot` 아래 발밑 고리,
-상승 고리, 세로 베일 셰이더, 스파크를 두며 `levelUp()`이 시작하고
-`updateLevelUp()`이 실제 시간으로 약 1초 동안 갱신한다. 지속 시간과 스파크 수는 파일
-상단의 `LEVEL_UP_T`, `LEVEL_UP_SPARKS`에서 바꾼다. 화면 전체 플래시나 DOM 모달을 다시
-추가하지 않는다.
+## 빠른 QA
 
-## QA와 배포 빌드
+- 첫 로딩 화면부터 게임 HUD까지 기본색이 번쩍이거나 테마가 끊기지 않는가
+- 플레이어/보스 HP, 처치 수, EXP, 쿨다운이 실제 상태에 따라 계속 갱신되는가
+- 일반·피격·위험·은신·보스·사망/클리어 상태가 색만 보고도 구분되는가
+- 16:9, 좁은 창, 작은 높이에서 HUD가 겹치거나 화면 중앙을 과도하게 가리지 않는가
+- 한글/숫자가 잘리지 않고 대비가 충분한가
+- 조작 안내와 개발용 UI가 클릭·키보드·게임 입력을 막지 않는가
+- 브라우저 콘솔에 CSS 로드 실패나 JS 오류가 없는가
 
-```bash
-# 로컬 확인
-python3 -m http.server 8777 --directory web
-# http://127.0.0.1:8777/
+## 롤백
 
-# 문법과 배포본 생성
-node --check web/ui.js
-node --check web/enemy.js
-node --check web/feel.js
-python3 tools/build_deploy.py
-
-# 프로덕션 배포가 필요할 때
-cd dist
-vercel deploy --prod --yes --archive=tgz
-```
-
-최소 확인 항목은 16:9·좁은 화면 겹침, 플레이어/몬스터/보스 HP 갱신, 스킬 쿨다운,
-입장·사망·클리어 상태, 레벨업 때 중앙 모달이 없는지, 콘솔 오류와 CSS 404가 없는지다.
-
-## 이전 시안과 롤백
-
-`web/ui-theme-abyss.css`와 `web/ui-theme-bronze.css`는 파일과 Git 이력에 남아 있지만
-현재 `index.html`에서는 불러오지 않는다. 새 DOM에 옛 CSS 한 장만 다시 연결하면 구조가
-섞이므로, 옛 시안 전체가 필요할 때는 해당 브랜치/커밋으로 되돌린다.
+현재 작업 브랜치는 `codex/ui-bronze-story-20260814`다. 이전 보라 시안은
+`c57a5ab` 또는 `codex/ui-awakened-demo-20260814`에서 확인할 수 있다.
 
 ```bash
-# 현재 변경과 UI 이력 확인
-git diff -- web/index.html web/ui.js web/ui-rebuild.css web/enemy.js web/feel.js
-git log --oneline --decorate -- web/index.html web/ui.js web/enemy.js web/feel.js
+# UI 변경 이력 확인
+git log --oneline --decorate -- web/index.html web/ui-theme-bronze.css docs/ui-theme-guide.md
 
-# 옛 시안은 전환하지 않고 내용만 확인
-git show 2ffa67c:web/ui-theme-bronze.css
-git show c57a5ab:web/ui-theme-abyss.css
-
-# 옛 시안 브랜치에서 전체 화면 확인
+# 새 UI와 기존 UI 전환
 git switch codex/ui-bronze-story-20260814
 git switch codex/ui-awakened-demo-20260814
 
-# 이미 공유한 새 UI 커밋을 안전하게 취소
-git switch codex/ui-clean-slate-20260814
+# 공유된 이력을 보존하면서 특정 UI 커밋만 되돌리기
+git switch codex/ui-bronze-story-20260814
 git revert <commit-sha>
-git push origin codex/ui-clean-slate-20260814
+git push origin codex/ui-bronze-story-20260814
 ```
 
-브랜치 전환 전에는 작업 중인 변경을 커밋하거나 임시 보관한다. 공유한 이력에는
-`reset --hard`나 강제 푸시 대신 `git revert`를 사용한다.
+브랜치를 바꾸기 전에는 작업 중인 변경을 먼저 커밋하거나 임시 보관한다. 이미 푸시한 이력에는 `reset --hard`나 강제 푸시 대신 `git revert`를 사용한다.

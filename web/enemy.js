@@ -180,18 +180,59 @@ const MAX_VIS = MAX_ENEMIES + MAX_CORPSES;
 // style 을 써야 하고(레이아웃 40회/프레임), 3D 로 하면 정점 버퍼 한 벌에 다 들어가
 // **드로우콜 1**로 끝난다. 먹 파편(inkMesh)이 쓰는 것과 같은 수법이다.
 //
-// 고정 쿼터뷰에서 1m 는 뷰포트에 따라 약 63~93px. 명패 0.58m 는 36~54px라
-// 고블린 몸통보다 넓게 읽히면서도 무리 전투를 가리지 않는다.
-// clean-slate 「검은 장부」: 청록 캡슐·칸 실루엣을 버리고, 흑철 명패 안에
-// 적갈색 연속 게이지를 넣는다. 모든 개체의 폭은 같다.
-const BAR_W = 0.58;             // 명패 전체 폭(m). 1512x950 기준 약 54px
-// 체력은 칸으로 쪼개지 않고 hp/maxHp 한 덩어리로만 읽는다.
-// 강함은 게이지와 분리해 아래 황동 리벳 1~3개로 말한다.
-const PIP_H = 0.21;             // 포인터·프레임을 포함한 명패 높이(m)
+// 크기 근거(실측 산수). 고정 쿼터뷰 fov 20 · dist 34 라 화면 높이 760px 이
+// 대상 평면에서 2*34*tan(10도) = 11.99m 다. 즉 **1m = 63px**.
+//   · 고블린 키 1.30m = 82px
+//   · 체력 1 = 0.22m = 14px, 3체력 바 = 0.66m = 42px  (몸 높이의 절반)
+//   · 표식 0.62m = 39px  (느낌표 한 글자가 이 정도는 돼야 34m 에서 읽힌다)
+// ★2026-08-13 오너 지시로 칸 그림을 걷어냈다("세 칸이 합쳐진 느낌 말고 그냥 하나의 바").
+//   PIP_W 는 이제 **체력 1 이 차지하는 길이**다 - 값도 뜻도 그대로고, 그 길이 안을
+//   칸으로 쪼개 그리던 셰이더 구역만 없앴다.
+//
+// ── ★★폭을 고정한다 (오너 지시 2026-08-13 밤. 「길이 = 튼튼함」 설계 기각) ──
+// 오너 원문: "어떤 고블린은 체력바가 왜이리 작아? 체력바길이는 동일하게하고 가운데
+//            구분선을 넣어서 체력이 가늠되게하던가 뭐 그래야할거같은데
+//            체력별로 체력바길이 다르게 하려했어?"
+// 그렇다. 그러려던 것이었고 **기각됐다.** 「폭 = maxHp x PIP_W」는 화면에서 이렇게 나왔다
+// (실측, 960x640 뷰포트 = 1m 62.7px):
+//     리더 3핍 41.5px  ·  일반 2핍 27.9px  ·  일반 1핍 **13.9px**
+// 1핍 잡몹이 전체의 60% 인데 그 놈의 바는 **리더의 3분의 1**이고, 몸통보다 짧아서
+// 「바」가 아니라 「점」으로 읽혔다. 설계가 답하려던 질문("몇 대 더 때려야 하나")은
+// 옳았는데, 그 답을 **바의 존재감**과 맞바꾼 것이 잘못이었다 - 바는 먼저 바로 보여야 한다.
+//
+// 새 계약(롤 미니언 바 문법): **폭은 한 값 · 채움은 hp/maxHp 비율 · 눈금이 타수를 센다.**
+//   · BAR_W 는 옛 2핍 폭(0.22 x 2)과 **같은 값**이다. 즉 2핍 잡몹의 바는 이번 변경으로
+//     화소 하나 안 움직인다(A/B 에서 그 한 줄이 자 노릇을 한다).
+//   · 오너 화면(1512x950, 1m = 93px)에서 41px. 고블린 키 1.30m = 121px 의 1/3 이다.
+//   · 촬영 뷰포트(640px)에서는 27.9px 라 리더 6칸이 칸당 4.7px 로 빠듯하다 -
+//     **눈금 판정은 실측 해상도를 같이 적어야 한다**(아래 hpbar_fixed 하네스).
+const BAR_W = 0.44;             // ★바 폭(m). 몹 종류와 무관하게 한 값이다 (= 옛 PIP_W 0.22 x 2)
+// ── ★눈금(구분선) — 한 대가 한 칸이다 ──
+// 폭을 고정하면 「몇 대 더 때려야 하나」를 길이가 못 말한다. 그 말을 눈금이 대신한다.
+// 칸 수는 **maxHp / 칼 한 대**라서 18차 데미지 반감(SWORD_DMG 0.5)이 그대로 반영된다:
+//     1핍 2칸 · 2핍 4칸 · 리더 3핍 6칸   (경계선은 칸 수보다 하나 적다)
+// DMG_SCALE 을 1 로 되돌리면 칸 수도 저절로 1/2/3 으로 돌아간다(상수 하나도 안 고친다).
+// ★17차가 걷어낸 「칸 그림」으로 되돌아가면 안 된다. 그때 기각된 것은 **채움을 칸으로
+//   쪼개고 칸 사이에 트랙색 홈을 판** 그림이었다("딱 세 칸이 합쳐진 느낌"). 여기 눈금은
+//   홈이 아니라 **채움 위에 겹치는 가는 값**이다 - 채움 자체는 끊기지 않고 이어진다.
+const BAR_TICK_HW = 0.050;      // 눈금 반폭(판 높이 = 1 단위. 11px 바에서 약 1.1px)
+const BAR_TICK_AA = 0.030;      // 그 경계를 눕히는 폭(상수. fwidth 는 GLSL1 확장이라 안 쓴다)
+// ★눈금의 **세기**. 첫 판은 잉크(선형 0.005)를 박았더니 실측 열 밝기가 207 -> 6 으로
+//   떨어져 채움에 검은 슬릿을 판 그림이 됐다 = 17차가 기각한 「칸이 합쳐진 느낌」의 재발.
+//   그래서 절대색이 아니라 **자기 색의 배수**로 바꿨다 - 눈금은 잉크가 아니라 그림자다.
+//   채움 위(그림자)와 빈 트랙 위(한 단계 밝은 값) 둘 다 바탕에서 파생하므로 색이 안 는다.
+const BAR_TICK_MUL = 0.34;      // 채움 위 눈금 = 그 자리 색 x 이 값
+const BAR_TICK_LIFT = 2.6;      // 빈 트랙 위 눈금 = 트랙색 x 이 값(어두운 데선 밝혀야 보인다)
+// ★0.105 -> 0.145. 첫 실사 스크린샷에서 칸 높이가 7px 이라 속(찬 칸/빈 칸)을 나누는
+//   띠가 3px 밖에 안 나왔다 = 찼는지 비었는지 구별이 안 됐다. 9px 이면 속이 5px 다.
+// ★0.145 -> 0.175 (17차 UI 통일). 카드 문법은 **1px 헤어라인**이 형태를 정의하는데,
+//   9px 짜리 바에서 위아래 헤어라인 2px 을 빼면 속이 7px 이라 그러데이션이 안 선다.
+//   11px 이면 속이 9px 이라 채움이 띠로 읽힌다.
+const PIP_H = 0.175;            // 바 높이(m)
 // 피격 뒤 이만큼만 떠 있는다. 상시로 두면 40개 바가 화면을 덮어 롤 HUD 가 아니라
 // MMO 가 된다. "때린 놈만 잠깐"이 이 게임의 밀도에 맞는다.
-const PIP_SHOW = 2.0;
-const PIP_FADE = 0.35;          // 손이 다시 갈 여유를 두고 짧게 걷힌다
+const PIP_SHOW = 1.2;
+const PIP_FADE = 0.25;          // 마지막 0.25초에 걷힌다
 // 표식 판 크기(m). 정사각형이다.
 const MARK_SZ = 0.62;
 // 표식 종류(식별 번호). 0=! 1=? 2=공격 쐐기
@@ -296,14 +337,18 @@ const DMG_NEAR = 2.2;
 //
 // 왜 「몹 체력을 2배로」가 아니라 「칼 데미지를 0.5로」인가:
 //   ① 체력 분포(leader 3 / 일반 2·1)는 스폰·리더 개념과 묶인 밸런스 축이라 안 건드린다.
-//   ② 머리 위 명패는 폭을 고정하고 maxHp 로 리벳 등급만 결정한다.
-//      데미지를 반감해도 명패 실루엣은 불변이고 게이지가 더 천천히 줄어든다.
+//   ② 머리 위 바의 길이 계약(당시: 핍 1 = PIP_W = 0.22m)이 그대로 산다. maxHp 가
+//      안 변하니 **바의 물리적 크기가 화소 하나 안 바뀐다.** 체력을 2배로 올렸다면
+//      리더 바가 0.66m -> 1.32m 로 두 배가 돼서 PIP_W 까지 같이 손봐야 했다(회귀 두 배).
+//      ★그 길이 계약은 같은 날 밤 오너가 기각했다(BAR_W 주석). 지금 이 항의 값어치는
+//        「바 크기」가 아니라 **눈금 칸 수**로 옮겨 갔다 - DMG_SCALE 이 곧 칸 수의
+//        분모라, 1 로 되돌리면 칸도 2/4/6 에서 1/2/3 으로 저절로 돌아간다.
 //   ③ 귀환 회복(RETURN_HEAL, 초당 핍)도 핍 단위라 **완치까지 걸리는 벽시계 시간이
 //      그대로다.** 체력을 2배로 올렸다면 회복도 같이 2배로 올려야 했다.
 //   ④ 0.5 는 IEEE754 에서 정확히 표현되므로 3 - 0.5×6 = 0 이 **오차 없이** 성립한다.
 //      (e.hp <= 0 처치 판정에 엡실론이 필요 없다. 0.3 같은 값이면 필요했다.)
-// 대신 「핍 1 = 한 대」가 깨지므로 명패 표시 조건과 저체력 끝점 문턱은
-// 둘 다 현재 레벨의 최소 타격량(dmgFloor)을 본다.
+// 대신 「핍 1 = 한 대」가 깨지므로 그 가정에 기대던 자리 두 곳을 SWORD_DMG 로 다시
+// 적었다: 바를 띄우는 조건(아래 updatePlates)과 붉어지는 문턱(pip 셰이더).
 //
 // ★보스는 안 건드렸다. boss.js 가 자기 체력·피해를 따로 갖는 별도 체계다
 //   (MAX_HP 60 / Z 3 / X·C 5 = 20타·12타). 이 파일의 핍과 공유하는 상수가 없어서
@@ -338,12 +383,12 @@ const DMG_SHOW = 100;           // 화면 환산 배수. 핍 1 = 100 (한 대 = 
 // 지시는 "±10%" 였다. 그대로 넣으면 안 된다는 것이 산수로 나왔다:
 //   잡몹의 60% 가 1핍이고, 레벨 1 Z 한 대는 정확히 그 절반(0.5)이다. ±10% 면
 //   두 대의 합이 1.0 을 넘을 확률이 **정확히 50%** 다(대칭이니까). 즉 1핍 잡몹의
-//   절반이 세 대를 버틴다. 즉 18차에 못 박은 전투 계약("모든 잡몽은 최소 두 대")을
-//   확률적으로 깨뜨리게 된다.
+//   절반이 세 대를 버틴다 = 머리 위 눈금 2칸이 절반은 거짓말이 되고, 18차에 오너가
+//   못 박은 계약("모든 잡몹이 최소 두 대")도 같이 깨진다.
 //   기준값을 10% 올려 놓고 ±10% 를 흔들어도 0.41% 가 남는다(균등분포 삼각형 넓이).
 // 그래서 폭(20%p)은 그대로 두고 **바닥을 기준값에 맞춰 위로 세웠다**: 흔들림 [0, +0.20].
 //   · 한 대는 절대 기준값 아래로 안 떨어진다 → 「기술·레벨이 정한 기본 한 대」가
-//     **최솟값 보장**이 된다. 저체력 끝점·처치 타수가 전부 이 보장 위에 선다.
+//     **최솟값 보장**이 된다. 눈금·붉음 문턱·처치 타수가 전부 이 보장 위에 선다.
 //   · 레벨 1 최대 타격: Z 0.60 · X 0.96 · C 0.72. 셋 다 1핍(1.0) 아래다
 //     = **18차 계약("최소 두 대")이 레벨 1 에서 그대로 산다.** X 는 4% 차이로 걸린다.
 //   · 결정론이다(hash1). 같은 판을 다시 돌리면 같은 수가 나온다 → 950표본·A/B 촬영이
@@ -1734,109 +1779,112 @@ export function createEnemySystem(opts) {
   }
 
   // ── 체력 바 (머리 위) ──
-  // 이름만 기존 업데이트 코드와의 호환을 위해 pip 로 남겨 둔다.
-  const pipN = new Float32Array(MAX_ENEMIES * 4);   // 최대 체력(채움 비율·리벳 등급)
+  // ★이름만 pip 로 남아 있다(칸 시절의 유산). 2026-08-13 부터 그림은 **칸이 없는
+  //   연속 바 하나**고, 같은 날 밤부터 그 바의 **폭이 고정**이다(BAR_W 주석 참조).
+  const pipN = new Float32Array(MAX_ENEMIES * 4);   // 최대 체력. 눈금 칸 수·채움 비율의 분모
   const pipHp = new Float32Array(MAX_ENEMIES * 4);  // 남은 체력(연속. 소수 그대로)
   const pipA = new Float32Array(MAX_ENEMIES * 4);   // 알파
-  // ── 20차: 한 드로우콜은 그대로, 그림은 처음부터 다시 ──
-  // 아래 재질은 옛 셰이더의 캡슐·눈금·청록색을 하나도 상속하지 않는다.
-  // 명패 실루엣, 황동 프레임, 흑철 트랙, 적갈색 채움, 등급 리벳을
-  // 모두 한 장의 SDF 프래그먼트로 그린다. 바는 끝까지 한 덩어리다.
   const pipMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, depthTest: false, fog: false,
     side: THREE.DoubleSide, blending: THREE.NormalBlending,
-    uniforms: {
-      // kills 상태는 아래에서 초기화되므로 첫 프레임 전에는 레벨 1 최소타로 시작한다.
-      uLow: { value: SWORD_DMG + 1e-4 },
-      uT: { value: 0 },
-    },
+    // ★붉어지는 문턱. 18차까지 셰이더에 구워 넣던 상수였는데, 한 대의 크기가 레벨을
+    //   타면서 **매 프레임 바뀌는 값**이 됐다(updatePlates 가 dmgFloor() 로 채운다).
+    uniforms: { uLow: { value: SWORD_DMG * 1.5 } },
     vertexShader: `
       attribute float aN; attribute float aHp; attribute float aA;
       varying vec2 vU; varying float vN; varying float vHp; varying float vA;
-      void main(){
-        vU = uv; vN = aN; vHp = aHp; vA = aA;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
+      void main(){ vU = uv; vN = aN; vHp = aHp; vA = aA;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    // ── ★카드 문법으로 갈아 끼움 (17차. 17-UI마감 제안) ──
+    // 여태 이 바 하나만 게임에서 **다른 언어**였다: 먹 테두리 + 종이색 칸.
+    // 그 사이 계기판·스킬칩·플레이어 머리 위 바(#uiHpFloat)가 전부 한 벌로 통일됐다
+    //   딥 네이비 트랙 + 1px 창백한 헤어라인 + 컷코너 + 세로 그러데이션 채움.
+    // 블라인드 비평도 같은 자리를 짚었다: "회색 돌바닥 위에서 회색 사각이라 안 보인다."
+    // 그 값을 그대로 옮긴다(ui.js #uiHpFloat .track / HP_INK).
+    //   · 트랙   rgba(2,5,11,.92)              -> 딥 네이비
+    //   · 헤어라인 inset 0 0 0 1px rgba(214,240,255,.72)
+    //   · 컷코너  --c: 3px (판 높이의 약 0.30)
+    //   · 채움   HP_INK 초록 #2ee08a~#7ff0c0. 가로가 아니라 **세로** 그러데이션
+    //            (가로 그러데이션은 채움 끝이 어디인지를 흐린다)
+    //   · 처치 직전(남은 체력 1 이하) 채움은 붉게 — HP_INK 의 25% 이하 색 #e04a2e
+    // ★색은 전부 **선형 HDR**이다(FLASH_R 선언부의 파이프라인 주석 참조. ACES 무릎 +
+    //   블룸 임계 1.02). 그래서 sRGB 표기를 그대로 못 넣는다 - ACES 를 되짚어 넣은 값이다.
+    //   0.95 가 상한선이다. 그 위로 올리면 바가 블룸으로 번져 실루엣 밖까지 샌다.
     fragmentShader: `
-      uniform float uLow; uniform float uT;
+      uniform float uLow;
       varying vec2 vU; varying float vN; varying float vHp; varying float vA;
-
-      float boxMask(vec2 p, vec2 lo, vec2 hi, float aa){
-        float d = min(min(p.x - lo.x, hi.x - p.x), min(p.y - lo.y, hi.y - p.y));
-        return smoothstep(-aa, aa, d);
-      }
-      float discMask(vec2 p, vec2 c, float r, float aa){
-        // UV 폭이 높이의 약 2.76배라 x 축을 보정해 화면에서 원으로 보이게 한다.
-        vec2 q = vec2((p.x - c.x) * ${(BAR_W / PIP_H).toFixed(6)}, p.y - c.y);
-        return 1.0 - smoothstep(r - aa, r + aa, length(q));
-      }
-
       void main(){
+        // ★!(a > x) 꼴. a <= x 로 쓰면 NaN 이 통과해서 블룸이 화면을 검게 만든다
+        //   (LOG.md 의 '검은 번쩍' 함정. 알파 문턱은 전부 이 꼴로 쓴다).
         if (!(vA > 0.01)) discard;
-        vec2 p = vU;
-        const float AA = 0.012;
-
-        // 바닥을 가리키는 작은 송곳 하나가 명패를 몸에 묶어 준다.
-        float plate = boxMask(p, vec2(0.025, 0.18), vec2(0.975, 0.89), AA);
-        float bevel = smoothstep(-AA, AA,
-          (0.975 - p.x) + (0.89 - p.y) - 0.075);
-        plate *= bevel;
-        float pointer = smoothstep(-AA, AA,
-          (p.y - 0.055) * 0.48 - abs(p.x - 0.50))
-          * (1.0 - smoothstep(0.18 - AA, 0.18 + AA, p.y));
-        float shape = max(plate, pointer);
-        if (!(shape > 0.01)) discard;
-
-        vec3 ironDeep = vec3(0.006, 0.004, 0.003);
-        vec3 iron = vec3(0.018, 0.013, 0.010);
-        vec3 brass = vec3(0.34, 0.16, 0.055);
-        vec3 brassHi = vec3(0.72, 0.42, 0.15);
-        vec3 bone = vec3(0.76, 0.66, 0.50);
-        vec3 track = vec3(0.026, 0.010, 0.012);
-        vec3 col = mix(ironDeep, iron, clamp((p.y - 0.18) / 0.71, 0.0, 1.0));
-
-        // 비대칭 황동 프레임. 오른쪽 위 한 곳만 빗면으로 잘라 스킨 잔상을 없앤다.
-        float inner = boxMask(p, vec2(0.050, 0.225), vec2(0.950, 0.845), AA);
-        float frame = clamp(plate - inner, 0.0, 1.0);
-        col = mix(col, mix(brass, brassHi, clamp((p.y - 0.18) / 0.71, 0.0, 1.0)), frame);
-        col = mix(col, brass, pointer * 0.82);
-
-        // 트랙과 채움. 세로 홈·원형 캡슐이 없는 연속 게이지다.
-        float rail = boxMask(p, vec2(0.080, 0.355), vec2(0.920, 0.705), AA);
-        float well = boxMask(p, vec2(0.105, 0.395), vec2(0.895, 0.665), AA);
-        col = mix(col, bone * 0.62, rail);
-        col = mix(col, track, well);
-
-        float ratio = clamp(vHp / max(vN, 0.001), 0.0, 1.0);
-        float fillX = mix(0.105, 0.895, ratio);
-        float filled = 1.0 - smoothstep(fillX - AA, fillX + AA, p.x);
-        float gy = clamp((p.y - 0.395) / 0.27, 0.0, 1.0);
-        vec3 bloodLo = vec3(0.16, 0.018, 0.018);
-        vec3 bloodHi = vec3(0.64, 0.105, 0.065);
-        vec3 blood = mix(bloodLo, bloodHi, gy);
-        col = mix(col, blood, well * filled);
-
-        // 다음 한 대에 끝나는 상태는 전체 색을 바꾸지 않고 채움 끝점만 밝힌다.
-        float lethal = 1.0 - step(uLow, vHp);
-        float cap = (1.0 - smoothstep(0.010, 0.026, abs(p.x - fillX))) * well * filled;
-        float pulse = 0.76 + 0.24 * sin(uT * 7.0);
-        col = mix(col, bone * (0.82 + 0.18 * pulse), cap * lethal);
-
-        // 최대 체력 1/2/3은 채움을 쪼개지 않고 아래 황동 리벳으로만 말한다.
-        float tier = clamp(floor(vN + 0.5), 1.0, 3.0);
-        float rivets = 0.0;
-        for (int i = 0; i < 3; i++) {
-          float fi = float(i);
-          float active = step(fi + 0.5, tier);
-          float rx = 0.50 + (fi - (tier - 1.0) * 0.5) * 0.060;
-          rivets = max(rivets, active * discMask(p, vec2(rx, 0.275), 0.036, 0.010));
-        }
-        col = mix(col, tier > 2.5 ? brassHi : brass, rivets);
-
-        // 손상된 철판 결은 재질감만 주고 수치를 방해하지 않는다.
-        float grain = 0.965 + 0.035 * sin(p.x * 91.0 + p.y * 37.0);
-        col *= mix(1.0, grain, plate * (1.0 - well));
-        gl_FragColor = vec4(col, vA * shape);
+        // 판을 **세로 높이 1** 로 정규화한 좌표로 옮긴다. 헤어라인 두께·컷코너·눈금을
+        // 가로세로 같은 크기로 그리려면 이 환산이 있어야 한다.
+        // ★2026-08-13 밤부터 이 값은 **상수**다(폭 고정). 여태는 vN(최대 체력)이 들어와
+        //   개체마다 판이 늘어났다 - 그게 오너가 본 "왜 이리 작아"의 정체다.
+        float ar = ${(BAR_W / PIP_H).toFixed(6)};
+        float U = vU.x * ar, V = vU.y;
+        // 가장자리까지의 거리(높이 단위). 네 모서리는 45도로 잘린다 = 컷코너.
+        float CUT = 0.25;                           // --c: 3px / 12px 와 같은 비율
+        float d = min(min(U, ar - U), min(V, 1.0 - V));
+        d = min(d, (U + V - CUT) * 0.70710678);
+        d = min(d, (ar - U + V - CUT) * 0.70710678);
+        d = min(d, (U + 1.0 - V - CUT) * 0.70710678);
+        d = min(d, (ar - U + 1.0 - V - CUT) * 0.70710678);
+        if (d < 0.0) discard;                       // 잘려 나간 모서리
+        float HAIR = 0.115;                         // 1px (판 높이 11px 기준)
+        vec3 hair  = vec3(0.55, 0.72, 0.92);        // 창백한 청백. 형태를 정의하는 선
+        vec3 track = vec3(0.022, 0.032, 0.058);     // 딥 네이비
+        if (d < HAIR) { gl_FragColor = vec4(hair, vA); return; }
+        // ── 속: 칸 없는 **연속 채움** (오너 지시 2026-08-13 낮) ──
+        // "몬스터 체력바 칸으로 하지 말고 그냥 체력바로. 지금 볼 땐 딱 세 칸이 합쳐진
+        //  느낌인데 그냥 하나의 바로."
+        // 옛 그림은 트랙 하나 안을 칸으로 쪼개고 칸 사이에 트랙색 홈을 팠다(floor/fract
+        // 양자화 + gap). 그 두 줄이 「세 칸이 합쳐진」의 정체다. 통째로 걷어냈고,
+        // **이 계약은 이번에도 그대로다** - 채움은 여전히 한 덩어리로 이어진다.
+        // 남는 것은 비율 하나다: 채움 끝 = (남은 체력 / 최대 체력) × 판 폭.
+        float fillX = clamp(vHp / max(vN, 0.001), 0.0, 1.0) * ar;
+        // 경계는 1px 남짓만 눕힌다(판 높이 11px 기준 ±0.06 = 0.7px).
+        // ★fwidth 를 안 쓴다: GLSL1 파생함수는 확장에 걸려 있어 컴파일이 기기를 탄다.
+        //   이 판은 월드 크기가 고정이라 상수 폭으로 충분하다.
+        float f = 1.0 - smoothstep(fillX - 0.06, fillX + 0.06, U);
+        // 세로 그러데이션. 위가 밝고 아래가 어둡다(유리에 담긴 액체의 문법).
+        // ★붉어지는 뜻은 하나다: **다음 한 대에 죽는다**(남은 체력 <= 칼 한 대).
+        //   칸이 없어졌으니 "마지막 한 칸만"은 성립하지 않고, 채움 전체가 붉어진다.
+        // ★18차: 문턱이 상수 1.5 였다. 그건 「핍 1 = 한 대」일 때만 맞는 수라서
+        //   칼 데미지를 반으로 줄이자마자 **두 대 남았는데 붉은** 거짓말이 된다.
+        //   SWORD_DMG 에서 구웠다(×1.5 는 정수 사이 중점 = 부동소수 안전 여유).
+        // ★19차: 그 자리도 이제 못 굽는다. 한 대가 레벨을 타므로 문턱이 **판이 도는
+        //   중에 자란다**(처치 5마다 한 단). 그래서 유니폼(uLow)이다 - 값은
+        //   updatePlates 가 dmgFloor()로 채운다 = 지금 레벨의 **최저타**다.
+        //   흔들림이 위로만 뜨므로 vHp <= uLow 는 "어떤 기술로 때려도 죽는다"의 보장이다.
+        float g = clamp((V - 0.16) / 0.68, 0.0, 1.0);
+        float LOW = uLow;
+        vec3 lo = (vHp < LOW) ? vec3(0.34, 0.05, 0.03) : vec3(0.03, 0.30, 0.14);
+        vec3 hi = (vHp < LOW) ? vec3(0.95, 0.22, 0.13) : vec3(0.16, 0.90, 0.46);
+        vec3 col = mix(track, mix(lo, hi, g), f);
+        // ── ★눈금(구분선): 한 대 = 한 칸 (오너 지시 2026-08-13 밤) ──
+        // 폭이 고정이라 길이는 이제 "몇 %"만 말한다. **"몇 대"는 눈금이 말한다.**
+        //   칸 수 = 최대 체력 / 칼 한 대 → 1핍 2칸 · 2핍 4칸 · 리더 6칸
+        //   경계선은 칸 사이에만 선다(양 끝 0·segN 은 헤어라인이 이미 그린 자리다).
+        // ★홈이 아니라 **겹치는 값**이다. 채움을 잘라 내면 17차에 기각된 「세 칸이
+        //   합쳐진 느낌」이 그대로 돌아온다 - 채움 마스크 f 는 위에서 이미 끝났고
+        //   여기서는 색만 어둡게 눌러 얹는다.
+        float segN = max(1.0, floor(vN / ${SWORD_DMG.toFixed(4)} + 0.5));
+        float s = vU.x * segN;                       // 0 .. segN (칸 단위 자리)
+        float bi = floor(s + 0.5);                   // 가장 가까운 칸 경계 번호
+        float inner = step(0.5, bi) * step(bi, segN - 0.5);   // 양 끝 경계는 뺀다
+        float dT = abs(s - bi) * ar / segN;          // 그 경계까지 거리(높이 단위)
+        float tick = inner * (1.0 - smoothstep(
+          ${(BAR_TICK_HW - BAR_TICK_AA).toFixed(4)},
+          ${(BAR_TICK_HW + BAR_TICK_AA).toFixed(4)}, dT));
+        // ★눈금 색은 **바탕을 따라 뒤집힌다.** 채움 위에서는 제 색의 그림자(어두운 값)로,
+        //   빈 트랙 위에서는 어두운 색 위 어두운 색이라 안 보이므로 한 단계 **밝은** 값으로.
+        //   둘 다 바탕에서 파생한 배수라 이 바에 색이 하나도 안 늘어난다.
+        //   (빈 구역에도 눈금이 서야 "이 놈이 원래 몇 대짜리인가"가 반피에서도 읽힌다.)
+        vec3 tickCol = mix(track * ${BAR_TICK_LIFT.toFixed(2)},
+                           col   * ${BAR_TICK_MUL.toFixed(2)}, f);
+        col = mix(col, tickCol, tick);
+        gl_FragColor = vec4(col, vA);
       }`,
   });
   const pipMesh = plateMesh(MAX_ENEMIES, pipMat,
@@ -2051,7 +2099,6 @@ export function createEnemySystem(opts) {
     //   (레벨 1 Z 로 1핍을 한 대 치면 남는 체력이 딱 문턱 언저리다).
     const lowNow = dmgFloor();
     pipMat.uniforms.uLow.value = lowNow + 1e-4;
-    pipMat.uniforms.uT.value = T;
     _plR.setFromMatrixColumn(camera.matrixWorld, 0);
     _plU.setFromMatrixColumn(camera.matrixWorld, 1);
     const pPos = pipMesh.geometry.attributes.position.array;
@@ -2065,16 +2112,31 @@ export function createEnemySystem(opts) {
       const dd = (e.pos.x - cx0) * (e.pos.x - cx0) + (e.pos.z - cz0) * (e.pos.z - cz0);
       if (dd > PLATE_MAX_D * PLATE_MAX_D) continue;
       const headY = e.pos.y + e.h * 1.02;
-      // ── 체력 명패 ──
-      // 너비는 개체와 무관하게 고정하고, 최소 타격을 버티는 몹에게만 피격 후 잠시 보여 준다.
-      // 레벨에 따라 최소 타격량(lowNow)이 변하므로 표시 조건도 같은 값을 쓴다.
+      // ── 체력 바 ──
+      // ★★폭은 **한 값**이다(BAR_W). 개체마다 안 변한다.
+      //   여태는 「폭 = maxHp x PIP_W」였다 - "화면에서 같은 길이가 늘 같은 타수"라는
+      //   계약이었고 그건 그 자체로는 옳았지만, 오너가 화면에서 본 것은 그게 아니라
+      //   **1핍 잡몹의 13.9px 짜리 점**이었다(리더는 41.5px. 실측). 그래서 기각됐다.
+      //   → 「몇 대 더 때려야 하나」는 이제 셰이더의 **눈금**이 답한다(칸 = 칼 한 대).
+      //     길이가 하던 말을 눈금이 이어받았고, 바는 어느 몹 머리에서도 같은 바다.
+      // ★한 대에 죽는 놈은 안 그린다. 그 놈은 맞는 순간 시체가 되므로 바가 화면에 뜰
+      //   일 자체가 없다(= 뜨면 그게 거짓말이다. 늘 가득 찬 바만 보여 준다).
+      // ★18차: 그 조건을 `maxHp >= 2` 라고 적어 놨었다. 「핍 1 = 한 대」였을 때만 맞는
+      //   말이라, 칼 데미지를 반으로 줄이면 **두 대 버티는 1핍 잡몹의 바가 통째로
+      //   사라진다**(60% 가 그 놈이다). 뜻 그대로 다시 적는다 - "한 대 맞고도 사나".
+      //   DMG_SCALE=1 이면 maxHp > 1 = 정수 maxHp 에서 `>= 2` 와 완전히 같은 집합이다.
+      // ★19차: 상수 SWORD_DMG 자리를 **지금 레벨의 최저타**(lowNow)로 옮겼다.
+      //   뜻은 한 글자도 안 바뀐다("한 대 맞고도 사나"). 레벨이 오르면 그 답이
+      //   달라지므로 상수로 두면 그때부터 말이 안 맞는다.
       if (e.pipT > 0 && e.maxHp > lowNow + 1e-6 && pn < MAX_ENEMIES) {
         const o = pn * 4;
         const a = Math.min(1, e.pipT / PIP_FADE);
         const nMax = e.maxHp;
-        putPlate(pPos, pUv, o, e.pos.x, headY + PIP_H * 1.05, e.pos.z,
+        putPlate(pPos, pUv, o, e.pos.x, headY + PIP_H * 1.9, e.pos.z,
           BAR_W * 0.5, PIP_H * 0.5, 0, 1);
-        // 귀환 회복으로 생긴 소수 체력도 올림 없이 있는 그대로 채운다.
+        // ★올림(ceil)을 걷어냈다. 칸 그림일 때는 0.3 체력도 "한 칸"으로 올려야 했지만
+        //   연속 바는 남은 체력을 **있는 그대로** 그린다(귀환 회복 RETURN_HEAL 로
+        //   소수 체력이 실제로 생긴다 - 그때 바가 차오르는 게 보인다).
         const hpLeft = Math.max(0, Math.min(nMax, e.hp));
         for (let k = 0; k < 4; k++) {
           pipN[o + k] = nMax; pipHp[o + k] = hpLeft; pipA[o + k] = a;
@@ -3746,15 +3808,19 @@ export function createEnemySystem(opts) {
                })(),
                taps };
     },
-    // ── 체력 명패 계약 창구 (읽기 전용) ──
-    // 고정 폭·연속 채움·리벳 등급과 현재 저체력 문턱을 검증에 노출한다.
+    // ── ★체력 바 계약 창구 (읽기 전용) ──
+    // 「폭이 몹 종류와 무관하게 같은가 · 눈금이 한 대 단위인가」를 눈이 아니라 수로
+    // 확인하는 자리다. seg 는 **계약을 그대로 계산해 보여 준다** - 상수를 다시 적지 않고
+    // 셰이더와 같은 식(maxHp / SWORD_DMG)을 쓰므로 둘이 어긋날 수 없다.
     get bar() {
-      const rivets = {};
-      for (const mx of [1, 2, 3]) rivets[mx] = mx;
-      return { w: BAR_W, h: PIP_H, fixedW: true, continuous: true,
-               style: 'black-ledger', rivets,
+      const seg = {};
+      for (const mx of [1, 2, 3]) seg[mx] = Math.round(mx / SWORD_DMG);
+      return { w: BAR_W, h: PIP_H, fixedW: true, seg,
+               tickHalf: BAR_TICK_HW, tickAA: BAR_TICK_AA,
+               tickMul: BAR_TICK_MUL, tickLift: BAR_TICK_LIFT,
                show: PIP_SHOW, fade: PIP_FADE,
-               // lowUni 는 동치를 저체력으로 포함하기 위한 1e-4 여유를 포함한다.
+               // ★19차: 문턱은 이제 레벨을 탄다. lowHp = 지금 값(셰이더 유니폼과 같은 수),
+               //   lowUni = 셰이더가 실제로 들고 있는 값. 둘이 벌어지면 배선이 끊긴 것이다.
                lowHp: +dmgFloor().toFixed(4),
                lowUni: +pipMat.uniforms.uLow.value.toFixed(4),
                pip: SWORD_DMG };
@@ -3765,7 +3831,8 @@ export function createEnemySystem(opts) {
     // 그래서 상태를 세워 두는 창구를 판다(dmgTest·setFlashHold 와 같은 갈래다).
     //   i     = positions 순서(살아 있는 목록 인덱스)
     //   hp    = 남길 체력. 바 채움은 hp / maxHp 그대로다
-    //   maxHp = 최대 체력. 바 폭은 안 변하고 아래 리벳 개수만 변한다
+    //   maxHp = 그 놈의 최대 체력. **바 폭은 안 변하고 눈금 칸 수가 변한다**
+    //           (칸 = maxHp / 칼 한 대 → 1핍 2칸 · 2핍 4칸 · 리더 6칸). 안 주면 안 건드린다
     //   show  = 바가 떠 있을 시간(초). 크게 주면 촬영 내내 안 걷힌다
     pipTest(i, hp, maxHp, show) {
       const e = live[i | 0];
