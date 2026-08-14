@@ -876,24 +876,66 @@ body[data-ui-theme="abyss-hunter"] #uiPip::after {
   box-shadow: 0 0 9px var(--ah-cyan-glow), 0 0 2px #fff;
 }
 
-/* Overhead HP uses the shared ruler rail; this skin only owns its colors. */
-body[data-ui-theme="abyss-hunter"] #uiHpFloat {
-  --ohp-frame-hi: var(--ah-cyan-bright);
-  --ohp-frame-lo: var(--ah-cyan-dim);
-  --ohp-track: #03040a;
-  --ohp-tick: rgba(185, 244, 255, .52);
-  --ohp-tick-major: rgba(237, 252, 255, .90);
+/* Overhead HP */
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .track {
+  --cut-ink: rgba(184, 221, 235, .74);
+  background: #03040a;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .track::after {
+  box-shadow: inset 0 0 0 1px #020207, inset 0 0 0 2px rgba(181, 218, 232, .78);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .gh {
+  background: var(--ui-hp-ghost-fill);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="#2ee08a"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="46, 224, 138"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="46 224 138"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="138, 243, 209"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="138 243 209"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="ui-hp-high-fill"] {
+  background: var(--ui-hp-high-fill) !important;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="#e0c22e"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="224, 194, 46"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="224 194 46"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="255, 225, 154"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="255 225 154"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="ui-hp-mid-fill"] {
+  background: var(--ui-hp-mid-fill) !important;
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="#e04a2e"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="224, 74, 46"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="224 74 46"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="255, 154, 170"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="255 154 170"],
+body[data-ui-theme="abyss-hunter"] #uiHpFloat .fl[style*="ui-hp-low-fill"] {
+  background: var(--ui-hp-low-fill) !important;
 }
 
 body[data-ui-theme="abyss-hunter"] #uiHpFloat .lv {
-  border-color: var(--ah-violet-bright);
-  background: radial-gradient(circle at 35% 28%, #6146a1 0%, #211638 52%, #090610 100%);
-  box-shadow:
-    0 0 0 1px #05030b,
-    0 0 0 2px rgba(141, 98, 255, .72),
-    0 0 8px rgba(141, 98, 255, .22);
+  --cut-ink: var(--ah-violet);
+  background: var(--cut-lines), var(--ah-panel-fill-violet);
+  box-shadow: inset 0 0 0 1px var(--ah-violet),
+    inset 0 0 11px rgba(141, 98, 255, .28), 0 0 8px rgba(141, 98, 255, .16);
   color: var(--ah-violet-bright);
   text-shadow: 0 0 8px var(--ah-violet-glow);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat.hit .track {
+  --cut-ink: var(--ah-danger-bright);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat.hit .track::after {
+  box-shadow: inset 0 0 0 1px #020207, inset 0 0 0 2.5px var(--ah-danger-bright);
+}
+
+body[data-ui-theme="abyss-hunter"] #uiHpFloat.hit .gh {
+  background: linear-gradient(90deg, #fff, #ffb3c0);
 }
 
 /* Combo / skill callout */

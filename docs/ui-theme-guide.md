@@ -75,16 +75,14 @@ Bronze Story 토큰을 바꾸면 로딩 화면과 동적 HUD가 함께 따라오
 `#uiHpFloat` DOM/CSS이고, 몬스터 바는 `web/enemy.js`의 `pipMat` 월드 셰이더다.
 
 - 플레이어 높이: `#uiHpFloat`의 `height`와 같은 미디어 분기의 높이
-- 플레이어 눈금 간격/색: `#uiHpFloat .track::after`의 minor/major `repeating-linear-gradient`
-- 플레이어 테두리/눈금 색: `#uiHpFloat`의 `--ohp-frame-*`, `--ohp-tick*` 토큰
-- 플레이어 레벨 메달 크기: `#uiHpFloat`의 `--ohp-badge`
+- 플레이어 구분선 간격/색: `#uiHpFloat .fl`의 `repeating-linear-gradient`
 - 플레이어 고정색: `#uiHpFloat .fl`의 초록 그라데이션
 - 몬스터 폭/높이: `BAR_W`, `PIP_H`
 - 몬스터 테두리: `BAR_BORDER`
 - 몬스터 고정색: `pipBarFrag`의 `hpSeg`
 
-현재 플레이어는 23px(낮은 화면 19px)의 독립 레벨 메달과, 작은 눈금 9px/큰 눈금
-27px 간격을 가진 초록색 금속 자 게이지로 표현하며,
+현재 플레이어는 레벨 배지와 같은 16px(낮은 화면 14px)의 가는 초록 게이지에
+듬성듬성한 1px 구분선만 얹은 형태이고,
 몬스터는 기준 화면에서 약 5px인 붉은 단일 게이지다. 둘 다 체력 비율에 따라 색을
 바꾸지 않는다. 몬스터 바 높이를 바꾸면 셰이더 종횡비가 `BAR_W / PIP_H`에서 자동으로
 다시 계산되므로 다른 셰이더 수치를 함께 보정할 필요는 없다.

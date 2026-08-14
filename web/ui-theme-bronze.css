@@ -1000,25 +1000,64 @@ body[data-ui-theme="bronze-story"] #uiPip::after {
   box-shadow: 0 1px 2px #000;
 }
 
-/* Overhead HP: a brass ruler rail + a separate level medallion.
-   Keep these tokens together for quick visual tuning without touching HP logic. */
-body[data-ui-theme="bronze-story"] #uiHpFloat {
-  --ohp-frame-hi: #e4b56d;
-  --ohp-frame-lo: #70411d;
-  --ohp-track: #120f0b;
-  --ohp-tick: rgba(227, 179, 105, .58);
-  --ohp-tick-major: rgba(255, 225, 159, .92);
+/* Overhead HP */
+body[data-ui-theme="bronze-story"] #uiHpFloat .track {
+  --cut-ink: rgba(232, 197, 143, .82);
+  background: #120f0c;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat .track::after {
+  box-shadow:
+    inset 0 0 0 1px #21150e,
+    inset 0 0 0 2px rgba(229, 190, 130, .88);
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat .gh {
+  background: var(--ui-hp-ghost-fill);
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="#2ee08a"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="46, 224, 138"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="46 224 138"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="ui-hp-high-fill"] {
+  background: var(--ui-hp-high-fill) !important;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="#e0c22e"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="224, 194, 46"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="224 194 46"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="ui-hp-mid-fill"] {
+  background: var(--ui-hp-mid-fill) !important;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="#e04a2e"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="224, 74, 46"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="224 74 46"],
+body[data-ui-theme="bronze-story"] #uiHpFloat .fl[style*="ui-hp-low-fill"] {
+  background: var(--ui-hp-low-fill) !important;
 }
 
 body[data-ui-theme="bronze-story"] #uiHpFloat .lv {
-  border-color: var(--bs-gold-hi);
-  background: radial-gradient(circle at 35% 28%, #8b663d 0%, #3b2614 48%, #160e08 100%);
+  --cut-ink: var(--bs-gold);
+  background: var(--cut-lines), radial-gradient(circle at 36% 30%, #6a4a29, #291d14 72%);
   box-shadow:
-    0 0 0 1px #21150e,
-    0 0 0 2px rgba(239, 189, 79, .68),
-    0 3px 7px rgba(0, 0, 0, .52);
+    inset 0 0 0 1px #5b351c,
+    inset 0 0 0 2px rgba(239, 189, 79, .62),
+    0 3px 7px rgba(0, 0, 0, .48);
   color: var(--bs-gold-hi);
   text-shadow: 0 1px #000;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat.hit .track {
+  --cut-ink: #fff3d6;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat.hit .track::after {
+  box-shadow: inset 0 0 0 1px #21150e, inset 0 0 0 2.5px #fff3d6;
+}
+
+body[data-ui-theme="bronze-story"] #uiHpFloat.hit .gh {
+  background: linear-gradient(90deg, #fff8e5, #ffbd91);
 }
 
 /* Combo and skill callout */
