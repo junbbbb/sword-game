@@ -1227,13 +1227,14 @@ body.uiCleared #uiClearDim{opacity:1}
   background:var(--cut-lines);
   box-shadow:inset 0 0 0 1px rgba(2,5,11,.92),inset 0 0 0 2px rgba(214,240,255,.86)}
 #uiHpFloat .track i{top:0;bottom:0;left:0;border-radius:0}
-/* 가는 바코드 HP. 레벨 배지와 같은 높이를 쓰며, 실제 체력 폭이 줄면 오른쪽의 세로획부터
-   함께 사라진다. 획은 모두 1px로 두껍게 뭉치지 않게 한다.
-   체력 구간별 색상은 쓰지 않는다. 만피부터 빈사까지 --ui-green 한 색으로 고정한다. */
+/* 가는 분할 HP. 레벨 배지와 같은 높이를 쓰며, 실제 체력 폭이 줄면 오른쪽부터 함께
+   사라진다. 바탕은 확실한 초록으로 채우고 12px 간격의 1px 구분선만 얹는다.
+   체력 구간별 색상은 쓰지 않는다. 만피부터 빈사까지 같은 초록으로 고정한다. */
 #uiHpFloat .gh{display:none}
 #uiHpFloat .fl{
   background:repeating-linear-gradient(90deg,
-    var(--ui-green) 0 1px,transparent 1px 6px);
+    rgba(8,24,11,.72) 0 1px,transparent 1px 13px),
+    linear-gradient(180deg,#a6eb82 0%,#61c452 52%,#338c3b 100%);
   filter:saturate(1.08);transition:filter .2s ease}
 /* 레벨 뱃지. 같은 transform 노드 안에서 트랙 왼쪽에 붙는다 */
 #uiHpFloat .lv{--c:4px;--cut-ink:var(--ui-gold);

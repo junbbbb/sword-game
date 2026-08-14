@@ -44,7 +44,7 @@ UI는 기존 구조와 게임 로직을 유지한 채 색, 표면, 테두리, �
 Bronze Story 토큰을 바꾸면 로딩 화면과 동적 HUD가 함께 따라오게 한다. 하단/머리 위
 하단 체력처럼 JS와 공유해야 하는 완성 그라데이션은 `--ui-hp-*-fill`, 성장 바는
 `--ui-exp-fill`, 데미지 숫자는 `--fx-damage-*`에서 바꾼다. 플레이어 머리 위
-바코드 색은 `--ui-green` 한 값으로 고정된다.
+머리 위 바는 저체력 상태에 따라 색을 바꾸지 않는다.
 
 `--fx-damage-*` 다섯 값은 Three.js 재질로도 전달되므로 `#RGB` 또는 `#RRGGBB`
 형식으로 지정한다. `oklch()`나 `color-mix()` 같은 문법은 안전한 기본색에 폴백한다.
@@ -59,13 +59,14 @@ Bronze Story 토큰을 바꾸면 로딩 화면과 동적 HUD가 함께 따라오
 `#uiHpFloat` DOM/CSS이고, 몬스터 바는 `web/enemy.js`의 `pipMat` 월드 셰이더다.
 
 - 플레이어 높이: `#uiHpFloat`의 `height`와 같은 미디어 분기의 높이
-- 플레이어 바코드 굵기/간격: `#uiHpFloat .fl`의 `repeating-linear-gradient`
-- 플레이어 고정색: `--ui-green`
+- 플레이어 구분선 간격/색: `#uiHpFloat .fl`의 `repeating-linear-gradient`
+- 플레이어 고정색: `#uiHpFloat .fl`의 초록 그라데이션
 - 몬스터 폭/높이: `BAR_W`, `PIP_H`
 - 몬스터 테두리: `BAR_BORDER`
 - 몬스터 고정색: `pipBarFrag`의 `hpSeg`
 
-현재 플레이어는 레벨 배지와 같은 16px(낮은 화면 14px)의 가는 초록 바코드이고,
+현재 플레이어는 레벨 배지와 같은 16px(낮은 화면 14px)의 가는 초록 게이지에
+듬성듬성한 1px 구분선만 얹은 형태이고,
 몬스터는 기준 화면에서 약 5px인 붉은 단일 게이지다. 둘 다 체력 비율에 따라 색을
 바꾸지 않는다. 몬스터 바 높이를 바꾸면 셰이더 종횡비가 `BAR_W / PIP_H`에서 자동으로
 다시 계산되므로 다른 셰이더 수치를 함께 보정할 필요는 없다.
