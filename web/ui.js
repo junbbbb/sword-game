@@ -1517,32 +1517,23 @@ export function initUI() {
   const pipCap = pip.querySelector('.cap');
   pipCap.textContent = PIP_HINT;
 
-  // 표시 전용 성장 피드백. 처치 5회마다 오르는 기존 HUD 레벨을 크게 한 번 읽어 준다.
-  const levelUp = el('div', 'uiLevelUp');
-  levelUp.innerHTML = '<i class="sigil"></i><span class="eyebrow">성장 알림</span>'
-    + '<strong>레벨이 상승했습니다</strong><span class="level">LEVEL 1</span>';
-  const levelUpValue = levelUp.querySelector('.level');
+  // 레벨 상승은 화면 중앙 DOM 창을 만들지 않는다. 캐릭터 주변의 월드 빛만 부른다.
+  document.body.append(bg, title, banner, death, chip, dim, nav, pip);
 
-  document.body.append(bg, title, banner, death, chip, dim, nav, pip, levelUp);
-
-  let levelUpTimer = 0;
+  let levelUpAt = -9999;
+  let levelUpValue = 1;
   function showLevelUp(level) {
-    // 입장·경고·사망·결과처럼 화면을 소유하는 카드가 우선이다.
-    // 같은 틱에 처치 수와 클리어 상태가 함께 바뀌어도 각성 문구를 겹치지 않는다.
-    if (document.body.matches('.uiTitleOn,.uiBossIn,.uiCine,.uiDeathOn,.uiCleared')) return;
-    clearTimeout(levelUpTimer);
-    levelUpValue.textContent = 'LEVEL ' + level;
-    levelUp.classList.remove('on');
-    void levelUp.offsetWidth;
-    levelUp.classList.add('on');
-    levelUpTimer = setTimeout(() => levelUp.classList.remove('on'), 1900);
+    levelUpAt = performance.now();
+    levelUpValue = level;
+    const feel = window.__feel;
+    const target = window.__root;
+    if (feel && typeof feel.levelUp === 'function' && target) {
+      feel.levelUp(target, playerH() || 1.8);
+    }
   }
 
-  function hideLevelUp() {
-    clearTimeout(levelUpTimer);
-    levelUpTimer = 0;
-    levelUp.classList.remove('on');
-  }
+  // 기존 화면 카드 생명주기 호출과의 호환용. 이제 숨길 DOM 자체가 없다.
+  function hideLevelUp() {}
 
   // -------------------------------------------------------------------------
   // 계기판 도킹 (16차: 세 층 쌓기 -> **화면 하단 전폭 가로 띠 한 줄**)
@@ -2682,8 +2673,8 @@ export function initUI() {
                cine: document.body.classList.contains('uiCine'),
                bossIn: document.body.classList.contains('uiBossIn'),
                titleOn: document.body.classList.contains('uiTitleOn'),
-               levelUp: { on: levelUp.classList.contains('on'),
-                          value: levelUpValue.textContent },
+               levelUp: { on: performance.now() - levelUpAt < 1100,
+                          value: 'LEVEL ' + levelUpValue },
                // 기술 이름 콜아웃: 시스템 팝이 씌워졌는가 · 무슨 型 인가(판정 S14)
                callout: (() => {
                  const c = comboEl && comboEl.querySelector('.uiCall');
