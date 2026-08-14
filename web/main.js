@@ -2520,14 +2520,17 @@ const CHAR_CFG = {
   // 기본2(basic2) = 시작 캐릭터. Meshy 알몸 베이스에 우리 칼 7자루를 꿰고
   // slayer 무브셋 5종(Idle/Attack/Heavy/Wide/Jump)을 이식했다.
   //   blender/s31_basic2_body.py -> s24_moveset.py -> s27_kensa_native.py
-  // ★걷기·달리기는 **자기 네이티브 클립**이다(리타게팅 0). 이유는 보폭이다:
-  //   slayer 걷기를 이식하면 발 속도가 1.09 라 1.71 을 내려고 재생속도 1.57 이
-  //   필요하고, 그러면 한 걸음이 0.30초(분당 202걸음)짜리 종종걸음이 된다.
-  //   네이티브는 발 속도 1.412 라 재생속도 1.21 에서 한 걸음 0.44초(분당 136걸음)다.
-  // 실측 발 속도(게임 키 1.75 환산) 걷기 1.412 / 달리기 4.926.
-  //   걷기 1.71 / 1.412 = 1.21   달리기 3.20 / 4.926 = 0.65
+  // ★2026-08-14: Walk/Run 의 **하체만** Unity ToonSoldier 로 교체했다.
+  //   s42_basic2_soldier_legs.py 가 Soldier 골반 이동 + 양쪽 Thigh/Calf/Foot/Toe0
+  //   회전을 레스트 델타로 굽고, 현재 basic2 의 골반 회전·상체·팔·검 자세는
+  //   정규화 위상으로 유지한다. 전투/대기/점프 5종도 그대로다.
+  //   Soldier 원팩에는 Walk 가 없어 s12_soldier.py 가 Run 을 완화해 만든 34키
+  //   보행을 쓴다. Run 은 원본 infantry_combat_run 의 26키다.
+  // 보폭/Three 실제 클립 길이(게임 키 1.75 환산):
+  //   Walk 0.82065m · 1.1333초 -> 1.71m/s 에 ts 1.18 (약 125걸음/분)
+  //   Run  1.09320m · 0.8667초 -> 3.20m/s 에 ts 1.27 (약 176걸음/분)
   // 점프는 slayer 이식본이라 구간(초)이 kensa 와 같다.
-  basic2: { h: 1.75, walk: { spd: 1.71, ts: 1.21 }, run: { spd: 3.20, ts: 0.65 },
+  basic2: { h: 1.75, walk: { spd: 1.71, ts: 1.18 }, run: { spd: 3.20, ts: 1.27 },
             jump: { start: 0.00, rise: 0.20, fall: 0.40, land: 0.50, end: 0.73 } },
 };
 const DEF_CFG = { h: 1.75, walk: { spd: 1.8, ts: 1.0 }, run: { spd: 3.2, ts: 1.0 },
