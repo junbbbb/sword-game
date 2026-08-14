@@ -1188,67 +1188,52 @@ body.uiCleared #uiClearDim{opacity:1}
   opacity:0;transform:translate(-50%,-50%) scale(.94);visibility:hidden}
 #uiLevelUp.on{opacity:1;visibility:visible}
 
-/* ── 11) 머리 위 체력바 (오너 지시: 「체력바는 캐릭터 머리 위로, 롤처럼」) ──────
-   롤 문법 그대로다. 캐릭터 머리 위에 **월드를 따라다니는** 작은 트랙 하나.
-   ★아래 계기판의 체력 줄·숫자는 **그대로 둔다.** 롤도 머리 위 바와 하단 HUD 를
-     이중으로 쓴다. 하나를 없애면 「지금 몇 남았나」와 「위험한가」 중 하나가 죽는다.
-   ★폭은 **화면 px 고정**이다. 휠 줌(18~32m)으로 캐릭터가 커졌다 작아져도 바는 안 변한다.
-   ★자리는 JS 가 **transform 으로만** 쓴다. left/top 을 매 프레임 쓰면 레이아웃이 돈다. */
-#uiHpFloat{position:fixed;left:0;top:0;z-index:5;width:84px;height:16px;
+/* ── 11) 머리 위 체력바 ─────────────────────────────────────────────────────
+   레벨은 별도 메달, HP는 작은/큰 눈금이 남는 얇은 금속 자로 분리한다.
+   폭은 화면 px 고정이고, 자리는 JS 가 transform 으로만 쓴다. */
+#uiHpFloat{--ohp-badge:23px;
+  --ohp-frame-hi:var(--ui-edge-on);--ohp-frame-lo:var(--ui-edge);
+  --ohp-track:rgba(3,7,5,.94);--ohp-tick:rgba(5,17,8,.78);--ohp-tick-major:rgba(1,7,3,.94);
+  position:fixed;left:0;top:0;z-index:5;width:84px;height:16px;
   pointer-events:none;user-select:none;opacity:0;overflow:visible;
   border:0;border-radius:0;background:transparent;box-shadow:none;
   transition:opacity .18s ease;will-change:transform}
 #uiHpFloat.on{opacity:1}
 #uiHpFloat i{position:absolute;left:0;top:0;bottom:0;display:block}
-/* ★★17차 모서리 수리: 이 트랙도 테를 **덮개(::after)** 가 진다.
-   inset 그림자는 자식 밑에 깔리므로, 만체력이면 채움이 흰 테를 통째로 덮어
-   머리 위 바에 테가 없었다(모서리도 채움이 잘린 단면만 보였다).
-   ★바깥 그림자(0 2px 6px)는 애초에 clip-path 가 통째로 잘라 먹고 있었다 -
-     한 번도 그려진 적이 없는 겹이라 지운다(살리려면 filter 인데, 매 프레임
-     transform 이 도는 조각에 filter 를 걸 수는 없다). 흰 테가 그 일을 대신한다. */
-/* ★★★오너 지시(17차): 「내 캐릭터 머리 위에 체력바 테두리 좀 넣어줘」.
-   실측하면 테는 이미 있었는데(위 17차 수리) **한 겹뿐이라 만체력에서 안 읽혔다** -
-   창백한 선(214,240,255) 위아래가 밝은 초록 채움이라 색차가 거의 없었다
-   (채움 (60,230,150) vs 테 (171,237,226) = 밝기 차 10% 미만. hp_full 실측).
-   그래서 **두 겹**으로 간다 - 바깥 1px 은 먹선, 그 안 1px 이 창백한 헤어라인이다:
-     · 먹선은 밝은 지형·밝은 채움 **양쪽**에 대고 윤곽을 세운다(바 밖에서 보는 선)
-     · 창백한 선은 판의 언어를 지킨다(카드 헤어라인. 계기판 타일과 같은 색)
-   ★두 겹의 순서는 box-shadow 목록 순서다 - **먼저 적은 것이 위에 그려진다.**
-     먹선(1px)이 0~1 을, 창백선(2px)이 0~2 를 덮되 0~1 은 먹선에 가려 1~2 만 남는다.
-   ★빗변(모서리 45도)은 --cut-ink 한 색이라 거기서는 창백선 한 겹이다. 3px 짜리
-     모서리라 눈으로는 안 끊겨 보인다(끊겨 보이면 --cw 를 올리는 한 줄이다). */
-#uiHpFloat .track{--c:3px;--cut-ink:rgba(214,240,255,.78);
-  position:absolute;inset:0;overflow:hidden;border:0;border-radius:0;
-  background:rgba(2,5,11,.92)}
-#uiHpFloat .track::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:2;
-  background:var(--cut-lines);
-  box-shadow:inset 0 0 0 1px rgba(2,5,11,.92),inset 0 0 0 2px rgba(214,240,255,.86)}
+/* 양끝 브래킷과 위·아래 레일이 테를 맡고, ::after는 눈금만 얹는다. */
+#uiHpFloat .track{--c:0px;--cut-lines:none;
+  position:absolute;inset:0;overflow:visible;border:0;border-radius:1px;clip-path:none;
+  background:var(--ohp-track);box-shadow:0 2px 4px rgba(0,0,0,.48)}
+#uiHpFloat .track::before{content:'';position:absolute;inset:-2px -3px;z-index:3;pointer-events:none;
+  background:
+    linear-gradient(90deg,var(--ohp-frame-hi) 0 7px,transparent 7px calc(100% - 7px),var(--ohp-frame-hi) calc(100% - 7px)) 0 0/100% 1px no-repeat,
+    linear-gradient(90deg,var(--ohp-frame-lo) 0 7px,transparent 7px calc(100% - 7px),var(--ohp-frame-lo) calc(100% - 7px)) 0 100%/100% 1px no-repeat,
+    linear-gradient(180deg,var(--ohp-frame-hi),var(--ohp-frame-lo)) 0 0/2px 100% no-repeat,
+    linear-gradient(180deg,var(--ohp-frame-hi),var(--ohp-frame-lo)) 100% 0/2px 100% no-repeat}
+#uiHpFloat .track::after{content:'';position:absolute;inset:1px 3px;pointer-events:none;z-index:2;
+  background:
+    linear-gradient(90deg,rgba(255,255,255,.28),rgba(255,255,255,.04)) 0 0/100% 1px no-repeat,
+    repeating-linear-gradient(90deg,var(--ohp-tick-major) 0 2px,transparent 2px 27px) 0 0/100% 8px no-repeat,
+    repeating-linear-gradient(90deg,var(--ohp-tick) 0 1px,transparent 1px 9px) 0 0/100% 4px no-repeat,
+    linear-gradient(90deg,rgba(0,0,0,.16),rgba(0,0,0,.56)) 0 100%/100% 1px no-repeat}
 #uiHpFloat .track i{top:0;bottom:0;left:0;border-radius:0}
-/* 가는 분할 HP. 레벨 배지와 같은 높이를 쓰며, 실제 체력 폭이 줄면 오른쪽부터 함께
-   사라진다. 바탕은 확실한 초록으로 채우고 12px 간격의 1px 구분선만 얹는다.
-   체력 구간별 색상은 쓰지 않는다. 만피부터 빈사까지 같은 초록으로 고정한다. */
+/* 채움은 고정 초록이다. 눈금은 채움이 아니라 트랙에 있어 빈 구간에도 기준이 남는다. */
 #uiHpFloat .gh{display:none}
 #uiHpFloat .fl{
-  background:repeating-linear-gradient(90deg,
-    rgba(8,24,11,.72) 0 1px,transparent 1px 13px),
-    linear-gradient(180deg,#a6eb82 0%,#61c452 52%,#338c3b 100%);
+  background:linear-gradient(180deg,#a6eb82 0%,#61c452 52%,#338c3b 100%);
   filter:saturate(1.08);transition:filter .2s ease}
-/* 레벨 뱃지. 같은 transform 노드 안에서 트랙 왼쪽에 붙는다 */
-#uiHpFloat .lv{--c:4px;--cut-ink:var(--ui-gold);
-  position:absolute;right:calc(100% - 3px);top:50%;z-index:3;
-  width:16px;height:16px;transform:translateY(-50%);
+/* 레벨은 바와 다른 언어의 둥근 메달로 분리해, 숫자가 한눈에 먼저 잡힌다. */
+#uiHpFloat .lv{--c:0px;--cut-lines:none;
+  position:absolute;right:calc(100% + 5px);top:50%;z-index:4;
+  width:var(--ohp-badge);height:var(--ohp-badge);transform:translateY(-50%);
   display:flex;align-items:center;justify-content:center;
-  border:0;border-radius:0;background:var(--cut-lines),rgba(24,17,6,.94);
-  box-shadow:inset 0 0 0 1px var(--ui-gold),inset 0 0 10px rgba(230,160,40,.30);
+  border:1px solid var(--ui-gold);border-radius:50%;background:radial-gradient(circle at 35% 28%,#806039 0%,#382513 48%,#160e08 100%);
+  box-shadow:0 0 0 1px rgba(20,12,5,.92),0 0 0 2px rgba(229,171,85,.62),0 3px 7px rgba(0,0,0,.52);
   color:var(--ui-gold);font-family:var(--ui-font);
-  font-size:9.5px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
-  text-shadow:0 0 8px rgba(255,187,61,.6)}
-/* 맞은 순간에는 외곽선과 밝기만 짧게 반응한다. 체력 잔량과 관계없는 피격 피드백이며
-   바코드의 색상과 획 수 계산은 바꾸지 않는다. */
-#uiHpFloat.hit .track{--cut-ink:#fff;--cw:1.5px}
-/* ★맞은 순간에도 **먹선은 남긴다.** 두 겹 중 안쪽만 흰색으로 태운다(바깥까지 흰색이면
-   밝은 지형 위에서 그 프레임만 윤곽이 사라진다). */
-#uiHpFloat.hit .track::after{box-shadow:inset 0 0 0 1px rgba(2,5,11,.92),inset 0 0 0 2.5px #fff}
+  font-size:10.5px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
+  text-shadow:0 1px #000}
+/* 맞은 순간에는 고정 눈금·테두리와 초록 채움만 짧게 밝힌다. */
+#uiHpFloat.hit .track::before,#uiHpFloat.hit .track::after{filter:brightness(1.34)}
 #uiHpFloat.hit .fl{filter:saturate(1.08) brightness(1.16);transition:none}
 
 /* ── 12) 좁은 창 (판정 S2) ───────────────────────────────────────────────────
@@ -1355,8 +1340,8 @@ body.uiCleared #uiClearDim{opacity:1}
   #uiSkills .sk[data-k="Jump"]::after{top:18px;height:9px}
   #eBar{height:18px}
   #stHud{bottom:76px}
-  #uiHpFloat{width:68px;height:14px}
-  #uiHpFloat .lv{width:14px;height:14px;font-size:9px}
+  #uiHpFloat{width:68px;height:14px;--ohp-badge:19px}
+  #uiHpFloat .lv{right:calc(100% + 4px);font-size:9px}
   /* ★안내판 아래끝이 계기판 윗선을 넘지 않게 줄 간격만 줄인다.
      글자 크기는 마지막에 건드린다는 순서 그대로다. */
   #help{line-height:1.45;padding:8px 12px 9px}
@@ -2691,7 +2676,7 @@ export function initUI() {
                           rect: [Math.round(r.left), Math.round(r.top),
                                  Math.round(r.width), Math.round(r.height)],
                           fill: hpFill.style.width, ghost: hpGhost.style.width,
-                          ink: 'fixed-barcode', hit: hpFloat.classList.contains('hit'),
+                          ink: 'fixed-ruler', hit: hpFloat.classList.contains('hit'),
                           charH: h, head };
                })(),
                // 좁은 창에서 계기판이 화면 안에 다 들어오는가(판정 S2)
