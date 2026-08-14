@@ -1944,12 +1944,12 @@ export function createEnemySystem(opts) {
   const DMG_TINT_HIT = damageThemeColor('--fx-damage-normal', [0.74, 0.84, 0.94]);
   const DMG_TINT_SKILL = damageThemeColor('--fx-damage-critical', [0.58, 0.25, 0.90]);
   const DMG_TINT_KILL = damageThemeColor('--fx-damage-kill', [0.90, 0.26, 0.035]);
-  const DMG_RIM = damageThemeColor('--fx-damage-accent', [0.52, 0.70, 0.86]);
+  const DMG_RIM = damageThemeColor('--fx-damage-accent', [1.0, 1.0, 1.0]);
   const DMG_OUTLINE = damageThemeColor('--fx-damage-outline', [0.004, 0.012, 0.028]);
   const dmgMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, depthTest: false, fog: false,
     side: THREE.DoubleSide, blending: THREE.NormalBlending,
-    // 딥 네이비 키라인 + 차가운 백청색 헤어라인. ★선형 HDR 이다.
+    // 어두운 키라인 + 흰색 테두리. ★선형 HDR 이다.
     // CSS 색은 THREE.Color가 sRGB에서 선형으로 바꾼 값이 셰이더에 들어간다.
     uniforms: { uTex: { value: null },
                 uOl: { value: new THREE.Vector3(...DMG_OUTLINE) },

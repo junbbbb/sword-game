@@ -77,7 +77,7 @@ body[data-ui-theme="abyss-hunter"] {
 
   /* Canvas damage-number palette. */
   --fx-damage-normal: #eaf8ff;
-  --fx-damage-accent: #69e4ff;
+  --fx-damage-accent: #ffffff;
   --fx-damage-critical: #a987ff;
   --fx-damage-kill: #ff536f;
   --fx-damage-outline: #080713;

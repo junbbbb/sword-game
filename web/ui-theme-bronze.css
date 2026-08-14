@@ -77,7 +77,7 @@ body[data-ui-theme="bronze-story"] {
 
   /* Canvas damage-number palette. Keep as hex/rgb for Three.js color parsing. */
   --fx-damage-normal: #fff8e8;
-  --fx-damage-accent: #f2c65c;
+  --fx-damage-accent: #ffffff;
   --fx-damage-critical: #ff9d54;
   --fx-damage-kill: #ff6757;
   --fx-damage-outline: #21150e;
