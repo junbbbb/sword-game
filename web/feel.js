@@ -19,6 +19,12 @@ const SLOW_T = 0.25;         // 무리 전멸 슬로모
 const SLOW_SCALE = 0.35;
 const BLOOM_PULSE = 0.15;    // 전멸 순간 블룸 가산량
 const BLOOM_PULSE_T = 0.30;
+
+// ── 레벨 상승 (캐릭터 부착 월드 연출) ──
+// 화면을 가리는 알림창 대신 발밑의 얇은 고리와 몸을 타고 오르는 빛만 남긴다.
+// 실제 시간으로 1초 안에 끝나므로 히트스톱 중에도 성장 신호가 또렷하게 읽힌다.
+const LEVEL_UP_T = 0.96;
+const LEVEL_UP_SPARKS = 14;
 // ── 사망 슬로모 (v84 QA S2) ──
 // 실측 근거: 죽는 순간 화면에서 유일하게 바뀌는 게 「落」카드뿐이라, 여섯 번 죽는
 // 동안 한 번도 "죽었다"로 안 읽혔다(2026-08-10 QA). 카드를 키우는 것만으로는
@@ -1621,6 +1627,117 @@ export function createFeel(opts) {
     ringMat.needsUpdate = true;
   }, undefined, () => { /* 없으면 링 없이 간다 */ });
 
+  // ── 레벨 상승 빛 ──
+  // DOM 알림과 무관한 월드 연출이다. 기하는 시작할 때 한 번만 만들고, 레벨이 오를 때는
+  // 위치·알파·버텍스만 갱신한다. 매번 Mesh/Material 을 새로 만들지 않으므로 GC가 없다.
+  const levelRoot = new THREE.Group();
+  levelRoot.name = 'level-up-light';
+  levelRoot.visible = false;
+  scene.add(levelRoot);
+
+  const levelGroundMat = new THREE.MeshBasicMaterial({
+    color: 0xf1a83a, transparent: true, opacity: 0, depthWrite: false, fog: false,
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+  });
+  const levelRiseMat = new THREE.MeshBasicMaterial({
+    color: 0xffedbd, transparent: true, opacity: 0, depthWrite: false, fog: false,
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+  });
+  // 반지름은 캐릭터 키의 비율이다. 2.4m 캐릭터 기준 최대 지름 약 1.55m로 몸 주변만 쓴다.
+  const levelGroundRing = new THREE.Mesh(new THREE.RingGeometry(0.285, 0.315, 48), levelGroundMat);
+  levelGroundRing.rotation.x = -Math.PI / 2;
+  levelGroundRing.position.y = 0.025;
+  levelGroundRing.renderOrder = 12;
+  levelGroundRing.frustumCulled = false;
+  levelRoot.add(levelGroundRing);
+
+  const levelRiseRing = new THREE.Mesh(new THREE.RingGeometry(0.205, 0.222, 40), levelRiseMat);
+  levelRiseRing.rotation.x = -Math.PI / 2;
+  levelRiseRing.position.y = 0.08;
+  levelRiseRing.renderOrder = 13;
+  levelRiseRing.frustumCulled = false;
+  levelRoot.add(levelRiseRing);
+
+  // 카메라 쪽만 보는 세로 베일. 텍스처 없이 셰이더에서 중심 심·상승 띠를 만든다.
+  // 화면 전체 플래시가 아니라 캐릭터 키 안에 머물도록 로컬 크기를 0..1 로 고정한다.
+  const levelGlowMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, depthTest: true, fog: false,
+    blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    uniforms: {
+      uProgress: { value: 0 },
+      uAlpha: { value: 0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main(){
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform float uProgress;
+      uniform float uAlpha;
+      void main(){
+        float x = abs(vUv.x - 0.5) * 2.0;
+        float body = pow(max(0.0, 1.0 - x), 3.4);
+        float yFade = smoothstep(0.02, 0.18, vUv.y)
+                    * (1.0 - smoothstep(0.70, 1.0, vUv.y));
+        float liftY = 0.10 + uProgress * 0.72;
+        float lift = exp(-pow((vUv.y - liftY) * 8.0, 2.0))
+                   * pow(max(0.0, 1.0 - x), 2.0);
+        float energy = body * yFade * 0.34 + lift * 0.62;
+        if (energy * uAlpha < 0.004) discard;
+        vec3 gold = vec3(1.12, 0.58, 0.16);
+        vec3 ivory = vec3(1.42, 1.18, 0.70);
+        vec3 col = mix(gold, ivory, clamp(body * 0.72 + lift, 0.0, 1.0));
+        gl_FragColor = vec4(col, energy * uAlpha);
+      }`,
+  });
+  const levelGlow = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 1.16), levelGlowMat);
+  levelGlow.position.y = 0.56;
+  levelGlow.renderOrder = 11;
+  levelGlow.frustumCulled = false;
+  levelRoot.add(levelGlow);
+
+  // 상승 스파크는 점 스프라이트가 아니라 짧은 세로 선이다. 텍스처 없는 네모 점보다
+  // 쿼터뷰에서 가볍고, 14가닥 x 2버텍스라 활성 중 갱신 비용도 사실상 없다.
+  const levelSparkPos = new Float32Array(LEVEL_UP_SPARKS * 2 * 3);
+  const levelSparkGeo = new THREE.BufferGeometry();
+  levelSparkGeo.setAttribute('position', new THREE.BufferAttribute(levelSparkPos, 3));
+  const levelSparkMat = new THREE.LineBasicMaterial({
+    color: 0xffe8a5, transparent: true, opacity: 0, depthWrite: false, fog: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const levelSparks = new THREE.LineSegments(levelSparkGeo, levelSparkMat);
+  levelSparks.renderOrder = 14;
+  levelSparks.frustumCulled = false;
+  levelRoot.add(levelSparks);
+
+  // 같은 패턴이 매번 정북에서 시작하지 않도록 발화할 때 회전값만 바꾼다.
+  // 씨앗 자체는 고정해 레벨업마다 배열을 다시 만들지 않는다.
+  const levelSparkSeed = [];
+  const levelFract = n => n - Math.floor(n);
+  for (let i = 0; i < LEVEL_UP_SPARKS; i++) {
+    const a = levelFract(Math.sin((i + 1) * 91.73) * 43758.5453);
+    const b = levelFract(Math.sin((i + 1) * 47.11) * 24634.6345);
+    const c = levelFract(Math.sin((i + 1) * 13.57) * 15731.7431);
+    levelSparkSeed.push({
+      ang: a * Math.PI * 2,
+      radius: 0.105 + b * 0.155,
+      delay: c * 0.34,
+      lift: 0.72 + b * 0.28,
+      len: 0.025 + a * 0.035,
+    });
+  }
+
+  let levelTarget = null;
+  let levelAge = LEVEL_UP_T;
+  let levelHeight = 2.4;
+  let levelCount = 0;
+  let levelSpin = 0;
+  const levelAnchor = new THREE.Vector3();
+  const levelStaticAnchor = new THREE.Vector3();
+
   // ★플립북 시트를 여기서 직접 읽는다(main.js 를 안 건드리려고).
   //   못 읽으면 절차 폴백으로 그린다 - 게임은 그대로 돈다.
   // ★밉맵을 끈다. 칸이 서로 붙어 있어서 밉 레벨이 올라가면 **옆 칸 그림이 섞인다**
@@ -1883,6 +2000,105 @@ export function createFeel(opts) {
     return ringAt(_rayA.x + _rayD.x * t, _rayA.z + _rayD.z * t);
   }
 
+  // 플레이어 루트(Object3D), 루트의 position(Vector3), 또는 {x,y,z} 모두 받는다.
+  // Vector3를 넘긴 경우도 매 프레임 다시 읽으므로 이동하는 캐릭터에 그대로 붙어 간다.
+  function levelAnchorFrom(target) {
+    let t = typeof target === 'function' ? target() : target;
+    if (!t) return false;
+    if (t.isObject3D && typeof t.getWorldPosition === 'function') {
+      t.getWorldPosition(levelAnchor);
+      return true;
+    }
+    if (t.position && Number.isFinite(t.position.x) && Number.isFinite(t.position.z)) t = t.position;
+    if (!Number.isFinite(t.x) || !Number.isFinite(t.z)) return false;
+    levelAnchor.set(t.x, Number.isFinite(t.y) ? t.y : groundLevel(t.x, t.z), t.z);
+    return true;
+  }
+
+  // UI가 레벨 변화를 감지한 순간 부르는 단 하나의 문.
+  // target을 생략하면 평시에도 열려 있는 __root를 우선 사용하고,
+  // 개발 진단 객체의 __dbg.root를 마지막 보험으로 쓴다.
+  function levelUp(target, height) {
+    const fallback = window.__root || (window.__dbg && window.__dbg.root);
+    levelTarget = target || fallback || null;
+    if (!levelAnchorFrom(levelTarget)) return false;
+    levelStaticAnchor.copy(levelAnchor);
+    let h = typeof height === 'function' ? height() : height;
+    h = Number(h);
+    levelHeight = Number.isFinite(h) && h > 0 ? Math.max(1.0, Math.min(3.2, h)) : 2.4;
+    levelAge = 0;
+    levelCount++;
+    levelSpin = (levelCount * 2.3999632297) % (Math.PI * 2); // 황금각: 반복 도장 느낌 방지
+    levelRoot.visible = true;
+    updateLevelUp(0);
+    return true;
+  }
+
+  // 실제 시간으로 늙힌다. 히트스톱 때문에 레벨업 빛이 2~3초 남아 화면을 가리지 않는다.
+  function updateLevelUp(rawDt) {
+    if (levelAge >= LEVEL_UP_T) return;
+    if (!levelAnchorFrom(levelTarget)) levelAnchor.copy(levelStaticAnchor);
+    levelRoot.position.copy(levelAnchor);
+    levelRoot.scale.setScalar(levelHeight);
+
+    const p = Math.max(0, Math.min(1, levelAge / LEVEL_UP_T));
+    const enter = Math.min(1, p / 0.10);
+    const fadeP = Math.max(0, (p - 0.60) / 0.40);
+    const fade = 1 - fadeP * fadeP;
+    const bell = Math.pow(Math.max(0, Math.sin(p * Math.PI)), 0.72);
+    const easeOut = 1 - (1 - p) * (1 - p);
+
+    // 발밑 고리는 빠르게 넓어지고, 두 번째 고리는 몸을 훑으며 올라간다.
+    levelGroundRing.scale.setScalar(0.72 + easeOut * 0.40);
+    levelGroundMat.opacity = 0.42 * enter * fade;
+    levelRiseRing.position.y = 0.08 + easeOut * 0.83;
+    levelRiseRing.scale.setScalar(0.82 + p * 0.28);
+    levelRiseMat.opacity = 0.58 * bell * fade;
+
+    // 베일은 월드의 y축을 지키면서 카메라를 향한다(완전 빌보드처럼 눕지 않는다).
+    const dx = camera.position.x - levelRoot.position.x;
+    const dz = camera.position.z - levelRoot.position.z;
+    levelGlow.rotation.set(0, Math.atan2(dx, dz), 0);
+    levelGlowMat.uniforms.uProgress.value = p;
+    levelGlowMat.uniforms.uAlpha.value = 0.58 * bell * fade;
+
+    for (let i = 0; i < LEVEL_UP_SPARKS; i++) {
+      const s = levelSparkSeed[i];
+      const o = i * 6;
+      const q = (p - s.delay) / Math.max(0.001, 1 - s.delay);
+      if (q <= 0 || q >= 1) {
+        levelSparkPos[o] = levelSparkPos[o + 1] = levelSparkPos[o + 2] = 0;
+        levelSparkPos[o + 3] = levelSparkPos[o + 4] = levelSparkPos[o + 5] = 0;
+        continue;
+      }
+      const a = s.ang + levelSpin + q * 0.34;
+      const radius = s.radius * (0.88 + q * 0.42);
+      const x = Math.cos(a) * radius;
+      const z = Math.sin(a) * radius;
+      const y = 0.055 + q * s.lift;
+      const len = s.len * (0.75 + (1 - q) * 0.45);
+      levelSparkPos[o] = x;
+      levelSparkPos[o + 1] = y;
+      levelSparkPos[o + 2] = z;
+      levelSparkPos[o + 3] = x * 1.025;
+      levelSparkPos[o + 4] = y + len;
+      levelSparkPos[o + 5] = z * 1.025;
+    }
+    levelSparkGeo.attributes.position.needsUpdate = true;
+    levelSparkMat.opacity = 0.68 * bell * fade;
+
+    levelAge += Math.max(0, Number.isFinite(rawDt) ? rawDt : 0);
+    if (levelAge >= LEVEL_UP_T) {
+      levelAge = LEVEL_UP_T;
+      levelRoot.visible = false;
+      levelGroundMat.opacity = 0;
+      levelRiseMat.opacity = 0;
+      levelSparkMat.opacity = 0;
+      levelGlowMat.uniforms.uAlpha.value = 0;
+      levelTarget = null;
+    }
+  }
+
   // ── 검증용 프레임 번호 ──
   // ★"임팩트 프레임이 정확히 1프레임인가"는 **렌더된 프레임 수**로만 잴 수 있다.
   //   시간(ms)으로 재면 프레임 길이가 흔들릴 때 1프레임인지 2프레임인지 못 가린다.
@@ -1969,6 +2185,8 @@ export function createFeel(opts) {
     updateBursts(rawDt * timeScale);
     // 칼끝 포말 마루. 같은 게임시계·같은 1/24 칸이며, 데이터가 안 오면 조용히 비어 있다.
     updateFoamCrests(rawDt * timeScale);
+    // 레벨 상승 빛. UI 창을 대체하는 캐릭터 부착 신호라 실제 시간으로 짧게 끝낸다.
+    updateLevelUp(rawDt);
 
     // 링. 지면 데칼이라 자리는 한 번 정하면 그대로고 크기·투명도만 간다.
     // ★아래 early return 보다 먼저 와야 한다. 붓자국이 다 사라진 뒤에도 링은 남는다.
@@ -2000,12 +2218,25 @@ export function createFeel(opts) {
         m.quaternion.copy(camera.quaternion);
         m.scale.set(1e-5, 1e-5, 1);
       }
+      // 레벨업 때 처음 셰이더를 굽느라 끊기지 않게 세로 베일도 같은 3프레임에 예열한다.
+      // 알파 0 · 미소 크기라 부팅 화면에는 한 픽셀도 남지 않는다.
+      if (levelAge >= LEVEL_UP_T) {
+        levelRoot.visible = true;
+        levelRoot.position.copy(camera.position).addScaledVector(_fwd, OVER_Z);
+        levelRoot.scale.setScalar(1e-5);
+        levelGlowMat.uniforms.uAlpha.value = 0;
+      }
       if (warm === 0) {
         for (const m of [slashMesh, lineMesh, impMesh]) m.visible = false;
         popMesh.position.set(0, 0, 0);
         popMesh.quaternion.identity();
         popMesh.scale.set(1, 1, 1);
         popMesh.visible = true;          // 팝은 늘 켜 둔다(알파 0 이면 전부 discard)
+        if (levelAge >= LEVEL_UP_T) {
+          levelRoot.visible = false;
+          levelRoot.position.copy(levelStaticAnchor);
+          levelRoot.scale.setScalar(levelHeight);
+        }
       }
       return;
     }
@@ -2300,8 +2531,11 @@ export function createFeel(opts) {
     // ★"이펙트가 화면의 몇 %인가"는 **이펙트를 껐다 켠 두 장의 차이**로만 정확히 잰다.
     //   색으로 마스크를 추리면 배경의 하늘·물까지 걸려서 숫자가 거짓말을 한다.
     //   그림에는 아무 영향이 없다(배열 하나를 내줄 뿐이다).
-    fxMeshes: [slashMesh, lineMesh, impMesh, impfMesh, popMesh, foamMesh, ringMesh, burstMesh],
+    fxMeshes: [slashMesh, lineMesh, impMesh, impfMesh, popMesh, foamMesh, ringMesh, burstMesh,
+               levelRoot],
     step, updateShake, shakeOffset, updateOverlay, slash, speedLines, shake,
+    // 화면 중앙 팝업 없이 캐릭터에 붙는 0.96초 성장 빛. target은 Object3D/Vector3 모두 가능.
+    levelUp,
     // ★v99 16-FX main.js 한 줄 통로.
     // a,b = 칼날 선분, wake = 0..1, rootPos/charH = B 리본과 같은 바깥축을 만드는 기준.
     // 벡터는 main.js가 재사용하므로 함수 안에서 즉시 복사한다. 호출이 없어도 빈 층이다.
@@ -2498,6 +2732,14 @@ export function createFeel(opts) {
                        t: +ringT.toFixed(3), op: +ringMat.opacity.toFixed(3),
                        at: [+ringMesh.position.x.toFixed(2), +ringMesh.position.y.toFixed(3),
                             +ringMesh.position.z.toFixed(2)] },
+               // visible은 부팅 3프레임 셰이더 예열 때도 true가 된다.
+               // 실제 레벨업 상태는 불투명도가 아니라 수명 시계로 판정해야
+               // 부팅/이펙트 A-B 캡처가 가짜 레벨업으로 계측되지 않는다.
+               levelUp: { on: levelAge < LEVEL_UP_T, draw: levelRoot.visible, n: levelCount,
+                          t: +Math.min(levelAge, LEVEL_UP_T).toFixed(3),
+                          duration: LEVEL_UP_T, height: +levelHeight.toFixed(2),
+                          at: [+levelRoot.position.x.toFixed(2), +levelRoot.position.y.toFixed(3),
+                               +levelRoot.position.z.toFixed(2)] },
                // 각 슬롯이 지금 무슨 색인가(감청 분기가 먹었는지 눈 없이 확인)
                tint: slashMat.uniforms.uEdge.value.map(c => '#' + c.getHexString()),
                kind: detectKind() ? 'water' : 'kill' };
