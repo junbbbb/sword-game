@@ -1941,7 +1941,7 @@ export function createEnemySystem(opts) {
     } catch (_) { /* 폴백 사용 */ }
     return fallback.slice();
   }
-  const DMG_TINT_HIT = damageThemeColor('--fx-damage-normal', [0.74, 0.84, 0.94]);
+  const DMG_TINT_HIT = damageThemeColor('--fx-damage-normal', [0.087, 0.122, 0.181]);
   const DMG_TINT_SKILL = damageThemeColor('--fx-damage-critical', [0.58, 0.25, 0.90]);
   const DMG_TINT_KILL = damageThemeColor('--fx-damage-kill', [0.90, 0.26, 0.035]);
   const DMG_RIM = damageThemeColor('--fx-damage-accent', [1.0, 1.0, 1.0]);

@@ -76,7 +76,7 @@ body[data-ui-theme="abyss-hunter"] {
   --ui-exp-fill: linear-gradient(90deg, #4c2b8f 0%, #8d62ff 45%, #55d8f3 100%);
 
   /* Canvas damage-number palette. */
-  --fx-damage-normal: #eaf8ff;
+  --fx-damage-normal: #536276;
   --fx-damage-accent: #ffffff;
   --fx-damage-critical: #a987ff;
   --fx-damage-kill: #ff536f;

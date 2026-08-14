@@ -76,7 +76,7 @@ body[data-ui-theme="bronze-story"] {
   --ui-exp-fill: linear-gradient(90deg, #7b5224 0%, #d69638 46%, #ffe17e 100%);
 
   /* Canvas damage-number palette. Keep as hex/rgb for Three.js color parsing. */
-  --fx-damage-normal: #fff8e8;
+  --fx-damage-normal: #536276;
   --fx-damage-accent: #ffffff;
   --fx-damage-critical: #ff9d54;
   --fx-damage-kill: #ff6757;
