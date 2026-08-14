@@ -1,8 +1,44 @@
+/* Paperlogy is bundled so the HUD keeps the same Korean typography on every device. */
 @font-face {
-  font-family: "Galmuri11";
-  src: url("./ui-assets/fonts/Galmuri11-Bold.woff2") format("woff2");
+  font-family: "Paperlogy";
+  src: url("./ui-assets/fonts/Paperlogy-4Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./ui-assets/fonts/Paperlogy-5Medium.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./ui-assets/fonts/Paperlogy-6SemiBold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./ui-assets/fonts/Paperlogy-7Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./ui-assets/fonts/Paperlogy-8ExtraBold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./ui-assets/fonts/Paperlogy-9Black.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 900;
   font-display: swap;
 }
 
@@ -18,9 +54,9 @@
 body[data-ui-theme="bronze-story"] {
   color-scheme: dark;
 
-  --bs-font-ui: "Galmuri11", "NeoDunggeunmo", "DungGeunMo", "Apple SD Gothic Neo",
+  --bs-font-ui: "Paperlogy", "Apple SD Gothic Neo",
     "Noto Sans KR", "Malgun Gothic", sans-serif;
-  --bs-font-display: "Galmuri11", "NeoDunggeunmo", "DungGeunMo", "Apple SD Gothic Neo",
+  --bs-font-display: "Paperlogy", "Apple SD Gothic Neo",
     "Noto Sans KR", "Malgun Gothic", sans-serif;
 
   --bs-night-0: #0b0a08;

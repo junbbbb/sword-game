@@ -56,8 +56,11 @@ Bronze Story 테마용 `512 × 512` 스킬 스프라이트다. 위치 계약은 
 - 원본 생성 크기: `1254 × 1254` PNG
 - 게임용 변환: `512 × 512`, WebP 품질 91
 
-## `fonts/Galmuri11-Bold.woff2`
+## `fonts/Paperlogy-4Regular.woff2` ~ `Paperlogy-9Black.woff2`
 
-주요 제목과 알림 문구에 쓰는 한글 픽셀 폰트다. Galmuri v2.40.4의 공식 WOFF2를
-자체 호스팅한다. SIL Open Font License 1.1 원문과 저작권 고지는
-`fonts/OFL-Galmuri.md`에 함께 보관한다.
+게임 전체 UI에 쓰는 Paperlogy 웹폰트다. 400·500·600·700·800·900 실제 굵기를
+자체 호스팅해 기기별 한글 글꼴 차이를 없앤다. 선언과 무게 매핑은
+`ui-theme-bronze.css` 상단, 출처·라이선스 고지는 `fonts/Paperlogy-NOTICE.md`에 있다.
+
+`fonts/Galmuri11-Bold.woff2`와 `fonts/OFL-Galmuri.md`는 이전 UI를 되돌릴 때를 위해
+보관한다. 현재 활성 UI에서는 사용하지 않는다.

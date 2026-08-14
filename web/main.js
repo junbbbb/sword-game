@@ -3462,7 +3462,7 @@ const cp = (() => {
   '#cp{position:fixed;right:14px;top:42px;width:244px;z-index:8;max-height:calc(100vh - 128px);' +
   'overflow-y:auto;padding:10px 11px 11px;border:1px solid #24455f;border-radius:9px;' +
   'background:rgba(5,10,17,0.84);color:#a9c4d8;font-size:12px;line-height:1.45;letter-spacing:.2px;' +
-  'font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif;user-select:none}' +
+  'font-family:"Paperlogy",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif;user-select:none}' +
   '#cp::-webkit-scrollbar{width:6px}#cp::-webkit-scrollbar-thumb{background:#24455f;border-radius:3px}' +
   '#cp .t{color:#7fd8ff;font-weight:700;font-size:12.5px;letter-spacing:.6px}' +
   '#cp .miss{margin-top:3px;font-size:11px;color:#6f8496}#cp .miss b{color:#ff9a7a;font-weight:600}' +

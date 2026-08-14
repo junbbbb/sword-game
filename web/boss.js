@@ -591,7 +591,7 @@ export function createBossSystem(opts) {
   st.textContent =
     '#bHud{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:6;' +
     'pointer-events:none;user-select:none;text-align:center;width:min(520px,74vw);' +
-    'font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif}' +
+    'font-family:"Paperlogy",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif}' +
     '#bGoal{font-size:14px;letter-spacing:1px;color:#cfe4f5;text-shadow:0 1px 4px #000;' +
     'opacity:.92}' +
     '#bGoal i{font-style:normal;color:#ffc23a}' +
@@ -605,7 +605,7 @@ export function createBossSystem(opts) {
     'pointer-events:none;opacity:0;transition:opacity .4s;text-align:center;' +
     'padding:26px 44px;border:1px solid #2c4a63;border-radius:12px;' +
     'background:rgba(4,8,14,.82);box-shadow:0 0 60px rgba(20,60,110,.5);' +
-    'font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif}' +
+    'font-family:"Paperlogy",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif}' +
     '#bClear h1{font-size:30px;font-weight:800;letter-spacing:6px;color:#8fe8ff;' +
     'text-shadow:0 0 22px #1f7fd0;margin-bottom:16px}' +
     '#bClear table{margin:0 auto;font-size:14px;color:#7b93a8;border-spacing:14px 5px}' +

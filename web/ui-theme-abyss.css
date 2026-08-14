@@ -4,9 +4,9 @@
 body[data-ui-theme="abyss-hunter"] {
   color-scheme: dark;
 
-  --ah-font-ui: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+  --ah-font-ui: "Paperlogy", -apple-system, BlinkMacSystemFont,
     "Apple SD Gothic Neo", "Segoe UI", "Malgun Gothic", "Noto Sans KR", sans-serif;
-  --ah-font-display: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo",
+  --ah-font-display: "Paperlogy", "Apple SD Gothic Neo",
     "Segoe UI", "Malgun Gothic", sans-serif;
 
   --ah-iron-0: #020207;

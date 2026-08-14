@@ -32,7 +32,7 @@ UI는 기존 구조와 게임 로직을 유지한 채 색, 표면, 테두리, �
 
 | 의미 | Bronze Story 토큰 | 용도 |
 |---|---|---|
-| 서체 | `--bs-font-ui`, `--bs-font-display` | 수치, 픽셀풍 제목/알림 |
+| 서체 | `--bs-font-ui`, `--bs-font-display` | Paperlogy 수치, 제목, 알림 |
 | 바탕 단계 | `--bs-night-*`, `--bs-charcoal*` | 먹색 배경과 판 깊이 |
 | 판 표면 | `--bs-panel*`, `--bs-panel-fill*` | 카드, 도크, 보조판 |
 | 글자 | `--bs-cream*`, `--bs-parchment`, `--bs-muted` | 주 정보, 설명, 비활성 정보 |
@@ -48,6 +48,22 @@ Bronze Story 토큰을 바꾸면 로딩 화면과 동적 HUD가 함께 따라오
 
 `--fx-damage-*` 다섯 값은 Three.js 재질로도 전달되므로 `#RGB` 또는 `#RRGGBB`
 형식으로 지정한다. `oklch()`나 `color-mix()` 같은 문법은 안전한 기본색에 폴백한다.
+
+## 서체: Paperlogy
+
+게임의 로딩 화면, HUD, 팝업, 보스/결과창, 은신 안내와 캔버스에 구운 피해 숫자까지
+`Paperlogy`를 사용한다. 폰트는 외부 CDN에 의존하지 않도록
+`web/ui-assets/fonts/`에 번들되어 있다.
+
+- `4Regular` = 400, `5Medium` = 500, `6SemiBold` = 600
+- `7Bold` = 700, `8ExtraBold` = 800, `9Black` = 900
+- `web/ui-theme-bronze.css` 상단의 `@font-face`와 `--bs-font-*`가 정본이다.
+- 로딩 직전 기본 글꼴은 `web/index.html`, 동적으로 주입되는 보조 HUD는
+  `web/{ui,enemy,boss,level2,stealth,main}.js`의 `Paperlogy` 선언을 따른다.
+
+무게를 바꾸려면 기존 `font-weight`만 조절한다. 폰트 파일명이나 `font-family` 이름을
+바꾸면 캔버스 숫자/표식도 함께 수정해야 한다. 라이선스·출처는
+`web/ui-assets/fonts/Paperlogy-NOTICE.md`에 기록한다.
 
 색은 의미를 유지한다. 팔레트를 바꿔도 체력=생존, 적색=보스/피격,
 금색=성장/보상, 청동색=선택/행동이라는 역할은 섞지 않는다. 투명도, 그라데이션,

@@ -1550,7 +1550,7 @@ export function createEnemySystem(opts) {
     g.textAlign = 'center'; g.textBaseline = 'middle';
     // ★획이 굵어야 34m 에서 남는다. 먹 테두리(18px)를 두르고 속을 종이색으로 채운다.
     //   테두리가 없으면 밝은 흙바닥 위에서 글자가 통째로 사라진다.
-    g.font = '700 104px "Nanum Myeongjo", AppleMyungjo, Georgia, "Times New Roman", serif';
+    g.font = '700 104px "Paperlogy", "Apple SD Gothic Neo", sans-serif';
     g.lineJoin = 'round';
     const glyph = (ch, i) => {
       const cx = S * i + S / 2, cy = S / 2 + 4;
@@ -1654,10 +1654,9 @@ export function createEnemySystem(opts) {
     const g = cv.getContext('2d');
     g.clearRect(0, 0, cv.width, cv.height);
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    // 어비스 HUD의 얇고 날카로운 인상: 협폭 고중량 숫자 + 각진 키라인.
-    // 협폭체가 없는 기기에서도 고중량 산세리프로 떨어져 획은 유지한다.
-    g.font = '900 96px "Avenir Next Condensed", "Arial Narrow", "Roboto Condensed", ' +
-             '"Helvetica Neue", "Apple SD Gothic Neo", Arial, sans-serif';
+    // HUD와 같은 Paperlogy로 숫자까지 한 벌로 맞춘다. 캔버스 텍스처라서 아래에서
+    // 웹폰트가 준비된 뒤 한 번 더 굽는다(첫 프레임의 시스템 폴백이 남지 않게 한다).
+    g.font = '900 96px "Paperlogy", "Apple SD Gothic Neo", Arial, sans-serif';
     g.lineJoin = 'miter'; g.lineCap = 'butt'; g.miterLimit = 4;
     // 키라인은 밝은 바닥에서 백청 테가 먹히지 않을 정도만 남긴다.
     for (let row = 0; row < DIG_ROWS; row++) {
@@ -1849,6 +1848,31 @@ export function createEnemySystem(opts) {
   dmgMesh.renderOrder = 8;            // 핍·표식(7)보다 위. 숫자는 아무것에도 안 가린다
   try { dmgMat.uniforms.uTex.value = makeDigitTexture(); } catch (err) {
     if (DEV) console.warn('[enemy] 숫자 텍스처를 못 구웠다. 숫자 없이 돈다.', err);
+  }
+  // CanvasTexture는 웹폰트가 나중에 준비되어도 스스로 다시 그려지지 않는다. 처음에는
+  // 즉시 폴백으로 그려 게임을 막지 않고, Paperlogy가 준비되면 두 텍스처만 안전하게 교체한다.
+  if (document.fonts?.load) {
+    Promise.all([
+      document.fonts.load('700 104px "Paperlogy"', '?'),
+      document.fonts.load('900 96px "Paperlogy"', '0123456789'),
+    ]).then(() => {
+      try {
+        const old = markMat.uniforms.uTex.value;
+        markMat.uniforms.uTex.value = makeMarkTexture();
+        old?.dispose?.();
+      } catch (err) {
+        if (DEV) console.warn('[enemy] Paperlogy 표식 재생성 실패.', err);
+      }
+      try {
+        const old = dmgMat.uniforms.uTex.value;
+        dmgMat.uniforms.uTex.value = makeDigitTexture();
+        old?.dispose?.();
+      } catch (err) {
+        if (DEV) console.warn('[enemy] Paperlogy 숫자 재생성 실패.', err);
+      }
+    }).catch(() => {
+      // 네트워크/캐시 문제가 있어도 이미 구운 시스템 폴백으로 게임은 계속한다.
+    });
   }
   // 뭉치 풀. 자릿수는 별도 배열에 담는다(뭉치당 DMG_MAX_DIGITS 칸, **1의 자리부터**).
   const dmgPops = [];
@@ -2482,7 +2506,7 @@ export function createEnemySystem(opts) {
   const st = document.createElement('style');
   st.textContent =
     '#eHud{position:fixed;left:16px;bottom:16px;z-index:6;user-select:none;pointer-events:none;' +
-    'font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif}' +
+    'font-family:"Paperlogy",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif}' +
     '#eBar{width:230px;height:13px;border:1px solid #2c4a63;border-radius:7px;background:#0b1320;overflow:hidden}' +
     '#eFill{height:100%;width:100%;background:linear-gradient(90deg,#2ee08a,#7ff0c0);' +
     'transition:width .12s linear}' +
@@ -2497,7 +2521,7 @@ export function createEnemySystem(opts) {
     '#eDead{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);z-index:7;' +
     'pointer-events:none;font-size:34px;font-weight:800;letter-spacing:3px;color:#ff7b7b;' +
     'text-shadow:0 0 20px #6a0d18,0 3px 6px #000;opacity:0;' +
-    'font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif}';
+    'font-family:"Paperlogy",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif}';
   document.head.appendChild(st);
   const hud = document.createElement('div');
   hud.id = 'eHud';

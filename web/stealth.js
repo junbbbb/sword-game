@@ -894,7 +894,7 @@ st.textContent =
   '#stHud{position:fixed;left:50%;bottom:62px;transform:translateX(-50%);z-index:6;' +
   'pointer-events:none;user-select:none;font-size:13px;font-weight:700;letter-spacing:1px;' +
   'padding:5px 14px;border-radius:14px;opacity:0;transition:opacity .16s;white-space:nowrap;' +
-  'font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif}' +
+  'font-family:"Paperlogy",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",sans-serif}' +
   '#stHud.on{opacity:1}' +
   '#stHud.hide{color:#8ff0b6;background:rgba(6,26,16,.72);border:1px solid #2b7a52;' +
   'text-shadow:0 0 10px #0d6b3c}' +

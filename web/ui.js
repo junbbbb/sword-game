@@ -18,7 +18,7 @@
 //   모서리: 전부 둥글다. 각진 판은 이 벌에 하나도 없다(11차와 정반대)
 //   발광 : **안 쓴다.** 존재감은 테의 또렷함과 글자 밑 딱딱한 그림자 한 겹으로 낸다
 //   카드 : 위 가운데 민트 탭 노치 + 왼쪽 변에 걸친 동그란 아이콘 뱃지(이 벌의 서명)
-//   글자 : 볼드 산세리프(Pretendard 계열 시스템 스택, 700~800). 숫자는 tabular
+//   글자 : Paperlogy 볼드 산세리프(700~800). 숫자는 tabular
 //   포인트: 민트(라벨·탭) · 노랑(목표·강조) · 빨강(경고·체력) 셋뿐
 //   경고 : 같은 판에 붉은 변주(보스 조우 · 사망). 판 색은 안 바꾼다
 //
@@ -148,13 +148,10 @@ const RESPAWN_LEAD = 0.55;
 // ---------------------------------------------------------------------------
 // 서체
 // ---------------------------------------------------------------------------
-// ★시스템창은 활자다. 붓 서체(RFBrush)를 UI 에서 은퇴시키고 깨끗한 산세리프로 간다.
-//   Pretendard 를 먼저 부르되 **번들하지 않는다** - 로컬에 깔린 사람은 그걸 쓰고,
-//   없으면 곧바로 OS 기본 고딕으로 떨어진다(맥=Apple SD Gothic Neo). 두 벌 다
-//   시스템창 문법에 맞는 균일한 획이라 그림이 안 흔들린다.
-// ★웹폰트를 안 받으므로 「맨몸으로 떴다가 바뀌는」 깜빡임 자체가 없어졌다
-//   (붓 시절에는 그것 때문에 preload 두 줄이 필요했다. index.html 에서 걷어냈다).
-const SANS = "'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,"
+// ★시스템창은 Paperlogy 한 벌로 통일한다. 400~900 WOFF2를 프로젝트에 직접
+//   번들해 운영체제마다 한글 모양이 달라지지 않는다. 실제 @font-face 정본은
+//   ui-theme-bronze.css 상단이고, 이 스택은 테마를 끈 기본 UI의 보험이다.
+const SANS = "'Paperlogy',-apple-system,BlinkMacSystemFont,"
   + "'Apple SD Gothic Neo','Segoe UI','Malgun Gothic','Noto Sans KR',sans-serif";
 
 // ---------------------------------------------------------------------------
@@ -232,8 +229,8 @@ const CSS = `
   /* 그림자 한 겹. 입체 오프셋(0 4px 0 …)은 이 벌에 하나도 없다 */
   --ui-drop:0 8px 22px rgba(0,0,0,.55);
 }
-/* 가짜 굵기·가짜 기울임 금지. ★800 을 부르면 Pretendard(있으면) 나 Apple SD Gothic Neo
-   의 **진짜 굵은 자소**로 떨어진다. 없는 굵기를 만들어 내면 획이 뭉개진다. */
+/* 가짜 굵기·가짜 기울임 금지. 400~900 Paperlogy 실중량을 번들했으므로 없는
+   굵기를 만들어 내면 획이 뭉개지는 일을 막는다. */
 body{font-synthesis:none;-webkit-font-synthesis:none}
 
 /* ── 컷코너 한 벌 ────────────────────────────────────────────────────────────
@@ -2031,9 +2028,7 @@ export function initUI() {
       if (e) ro.observe(e);
     }
   }
-  // 서체 도착도 잡아 둔다(ResizeObserver 가 없는 낡은 브라우저의 보험).
-  // ★11차에 웹폰트를 은퇴시켰지만 이 줄은 남긴다 - Pretendard 가 로컬에 깔린
-  //   기계에서는 여전히 「시스템 고딕 → Pretendard」 로 한 번 다시 그려진다.
+  // 서체 도착 뒤 한 번 더 안전 영역을 잰다(웹폰트 폭 차이 보험).
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(dropSafe);
 
   function safeBox() {
