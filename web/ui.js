@@ -1197,7 +1197,7 @@ body.uiCleared #uiClearDim{opacity:1}
      이중으로 쓴다. 하나를 없애면 「지금 몇 남았나」와 「위험한가」 중 하나가 죽는다.
    ★폭은 **화면 px 고정**이다. 휠 줌(18~32m)으로 캐릭터가 커졌다 작아져도 바는 안 변한다.
    ★자리는 JS 가 **transform 으로만** 쓴다. left/top 을 매 프레임 쓰면 레이아웃이 돈다. */
-#uiHpFloat{position:fixed;left:0;top:0;z-index:5;width:84px;height:12px;
+#uiHpFloat{position:fixed;left:0;top:0;z-index:5;width:84px;height:24px;
   pointer-events:none;user-select:none;opacity:0;overflow:visible;
   border:0;border-radius:0;background:transparent;box-shadow:none;
   transition:opacity .18s ease;will-change:transform}
@@ -1227,11 +1227,15 @@ body.uiCleared #uiClearDim{opacity:1}
   background:var(--cut-lines);
   box-shadow:inset 0 0 0 1px rgba(2,5,11,.92),inset 0 0 0 2px rgba(214,240,255,.86)}
 #uiHpFloat .track i{top:0;bottom:0;left:0;border-radius:0}
-/* 잔상. 방금 깎여 나간 만큼이 잠깐 남았다가 따라 줄어든다(폭은 JS 가 매 프레임 쓴다).
-   ★채움보다 **뒤에** 깔린다(문서 순서). 그래야 줄어든 구간에서만 보인다. */
-#uiHpFloat .gh{background:var(--ui-hp-ghost-fill);transition:background .2s ease}
-/* 채움. 색(초록/노랑/빨강)은 enemy.js 의 규칙을 그대로 쓴다 - 뜻이 걸린 색이라 안 바꾼다 */
-#uiHpFloat .fl{filter:saturate(1.06);transition:filter .2s ease}
+/* 바코드 HP. 레벨 배지와 같은 높이를 쓰며, 실제 체력 폭이 줄면 오른쪽의 세로획부터
+   함께 사라진다. 굵은 획/가는 획을 한 묶음으로 반복해 숫자 없이도 잔량이 읽힌다.
+   체력 구간별 색상은 쓰지 않는다. 만피부터 빈사까지 --ui-green 한 색으로 고정한다. */
+#uiHpFloat .gh{display:none}
+#uiHpFloat .fl{
+  background:repeating-linear-gradient(90deg,
+    var(--ui-green) 0 2px,transparent 2px 4px,
+    var(--ui-green) 4px 8px,transparent 8px 10px);
+  filter:saturate(1.08);transition:filter .2s ease}
 /* 레벨 뱃지. 같은 transform 노드 안에서 트랙 왼쪽에 붙는다 */
 #uiHpFloat .lv{--c:5px;--cut-ink:var(--ui-gold);
   position:absolute;right:calc(100% - 3px);top:50%;z-index:3;
@@ -1242,16 +1246,13 @@ body.uiCleared #uiClearDim{opacity:1}
   color:var(--ui-gold);font-family:var(--ui-font);
   font-size:11.5px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
   text-shadow:0 0 8px rgba(255,187,61,.6)}
-/* 맞은 순간. ★번쩍이는 것은 **방금 깎여 나간 칸**(잔상)이다. 남은 체력을 하얗게
-   태우면 그 순간 색(초록/노랑/빨강)이 사라져서 「얼마나 위험한가」를 못 읽는다.
-   ★남은 쪽 밝기는 1.2 를 넘기지 않는다. 1.45 로 두니 옅은 쪽 끝이 흰색으로 타서
-     초록 바가 통째로 청백색으로 읽혔다(f08 실측 (191,255,255)). 색이 곧 뜻이다. */
+/* 맞은 순간에는 외곽선과 밝기만 짧게 반응한다. 체력 잔량과 관계없는 피격 피드백이며
+   바코드의 색상과 획 수 계산은 바꾸지 않는다. */
 #uiHpFloat.hit .track{--cut-ink:#fff;--cw:1.5px}
 /* ★맞은 순간에도 **먹선은 남긴다.** 두 겹 중 안쪽만 흰색으로 태운다(바깥까지 흰색이면
    밝은 지형 위에서 그 프레임만 윤곽이 사라진다). */
 #uiHpFloat.hit .track::after{box-shadow:inset 0 0 0 1px rgba(2,5,11,.92),inset 0 0 0 2.5px #fff}
-#uiHpFloat.hit .fl{filter:saturate(1.06) brightness(1.2);transition:none}
-#uiHpFloat.hit .gh{background:rgba(255,247,240,.95);transition:none}
+#uiHpFloat.hit .fl{filter:saturate(1.08) brightness(1.16);transition:none}
 
 /* ── 12) 좁은 창 (판정 S2) ───────────────────────────────────────────────────
    ★13차와 같은 두 분기를 그대로 쓴다(새 벽을 만들지 않는다). 깎는 순서도 같다 -
@@ -1357,7 +1358,7 @@ body.uiCleared #uiClearDim{opacity:1}
   #uiSkills .sk[data-k="Jump"]::after{top:18px;height:9px}
   #eBar{height:18px}
   #stHud{bottom:76px}
-  #uiHpFloat{width:68px;height:10px}
+  #uiHpFloat{width:68px;height:21px}
   #uiHpFloat .lv{width:21px;height:21px;font-size:10.5px}
   /* ★안내판 아래끝이 계기판 윗선을 넘지 않게 줄 간격만 줄인다.
      글자 크기는 마지막에 건드린다는 순서 그대로다. */
@@ -2431,10 +2432,6 @@ export function initUI() {
   const HP_FADE = 1.15;          // 잔상이 따라 줄어드는 속도(1초에 체력바 몇 배)
   const HP_HOLD = 0.14;          // 맞고 나서 잔상이 버티는 시간(초)
   const HP_FLASH = 180;          // 맞은 순간 밝아지는 시간(ms)
-  // ★색은 enemy.js 의 규칙을 그대로 옮긴 것이다. 뜻이 걸린 색이라 여기서 안 바꾼다.
-  const HP_INK = ['var(--ui-hp-low-fill)',     // 25% 이하
-                  'var(--ui-hp-mid-fill)',     // 50% 이하
-                  'var(--ui-hp-high-fill)'];   // 그 위
 
   let fltModel = null, fltH = 0;                 // 지금 몸 · 그 키(m)
   function playerH() {
@@ -2455,7 +2452,7 @@ export function initUI() {
   addEventListener('resize', measureFloat);
 
   let fltX = -9999, fltY = -9999, fltOn = false;
-  let fltR = -1, fltBand = -1;        // 지금 그려 둔 채움 비율 · 색 단계
+  let fltR = -1;                       // 지금 그려 둔 채움 비율
   let ghostR = 0, ghostHold = 0;      // 잔상 비율 · 버티는 시간(초)
   let fltT = 0, hitTimer = 0;
 
@@ -2503,8 +2500,6 @@ export function initUI() {
       }
       fltR = r;
       hpFill.style.width = (r * 100).toFixed(2) + '%';
-      const band = r > 0.5 ? 2 : (r > 0.25 ? 1 : 0);
-      if (band !== fltBand) { fltBand = band; hpFill.style.background = HP_INK[band]; }
     }
 
     // ── 잔상 ──
@@ -2701,7 +2696,7 @@ export function initUI() {
                           rect: [Math.round(r.left), Math.round(r.top),
                                  Math.round(r.width), Math.round(r.height)],
                           fill: hpFill.style.width, ghost: hpGhost.style.width,
-                          ink: fltBand, hit: hpFloat.classList.contains('hit'),
+                          ink: 'fixed-barcode', hit: hpFloat.classList.contains('hit'),
                           charH: h, head };
                })(),
                // 좁은 창에서 계기판이 화면 안에 다 들어오는가(판정 S2)
