@@ -11,6 +11,10 @@
      전환한다. 자세한 규칙: docs/ui-theme-guide.md -->
 <link rel="stylesheet" href="./ui-theme-abyss.css">
 <link rel="stylesheet" href="./ui-theme-bronze.css">
+<!-- 19차 마감 겹. 독립 테마가 아니라 Bronze Story 위에 얹는 덧겹이라
+     body 의 data-ui-theme 는 그대로 두고 data-ui-frame 만 더 받는다.
+     되돌리기 = body 에서 data-ui-frame="vine" 한 토막을 지운다. -->
+<link rel="stylesheet" href="./ui-theme-vine.css">
 <link rel="preload" href="./ui-assets/fonts/Paperlogy-7Bold.woff2"
       as="font" type="font/woff2" crossorigin>
 <!-- ★11차 파도(시스템창 전환)에서 붓 웹폰트 preload 두 줄을 걷어냈다.
@@ -178,7 +182,7 @@
     color:var(--ui-txt); font-variant-numeric:tabular-nums; text-shadow:none; }
 </style>
 </head>
-<body data-ui-theme="bronze-story">
+<body data-ui-theme="bronze-story" data-ui-frame="vine">
 <canvas id="cv"></canvas>
 <div id="load">
   <div class="win">

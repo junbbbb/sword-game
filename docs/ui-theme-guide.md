@@ -12,13 +12,67 @@ UI는 기존 구조와 게임 로직을 유지한 채 색, 표면, 테두리, �
 ```html
 <link rel="stylesheet" href="./ui-theme-abyss.css">
 <link rel="stylesheet" href="./ui-theme-bronze.css">
-<body data-ui-theme="bronze-story">
+<link rel="stylesheet" href="./ui-theme-vine.css">
+<body data-ui-theme="bronze-story" data-ui-frame="vine">
 ```
 
-- 현재 시안: `data-ui-theme="bronze-story"`
+- 현재 시안: `data-ui-theme="bronze-story"` + 마감 겹 `data-ui-frame="vine"`
 - 이전 시안: `data-ui-theme="abyss-hunter"`
 - 끄기: `data-ui-theme` 속성을 제거한다.
 - 다른 테마로 전환: 속성값만 새 테마 이름으로 바꾼다.
+
+## Bronze Vine 마감 겹 (19차, 2026-08-18)
+
+`ui-theme-vine.css`는 **독립 테마가 아니라 Bronze Story 위에 얹는 덧겹**이다.
+독립 테마로 만들면 `body[data-ui-theme="..."]` 스코프가 갈려서 44KB를 통째로
+복사해야 하므로, `data-ui-theme`는 그대로 두고 `data-ui-frame` 하나를 더 받는다.
+
+```
+되돌리기 = body 에서 data-ui-frame="vine" 한 토막을 지운다
+          -> Bronze Story(+Paperlogy)가 화소까지 그대로 돌아온다(19차에 검증)
+```
+
+레퍼런스(웹툰 시스템창)를 화소로 재서 **어긋난 셋만** 갈아 끼웠다.
+
+| 부분 | Bronze Story | Bronze Vine (레퍼런스 실측) |
+|---|---|---|
+| 판 바탕 | 세로 그라데이션 + 주사선, 따뜻함 | `#272727` **평면 무채색** |
+| 테 | 굵기 같은 **겹줄** (방향 없음) | **홑겹 베벨**, 위 변 마루 `#E6B78E` · 옆 변 마루 `#AA764E` (**빛이 위에서**) |
+| 모서리 | 각진 잎·방패, **네 귀 전부** | 둥근 봉 당초문, **좌상+우하 대각 한 쌍** |
+
+- 색·두께·장식 크기는 `ui-theme-vine.css` 상단 `--vn-*` 토큰에서 먼저 고친다.
+- 레일 마루는 바깥 끝이 아니라 **레일의 40~44% 지점**에 둔다. 바깥 끝에 두면
+  판 둘레가 형광펜으로 그은 것처럼 뜬다.
+- 장식은 가상요소가 아니라 **배경 겹**이다. `.win::before/::after`와
+  `#bClear::before/::after`가 이미 다 차 있어서(그중 하나는 창 이름 **글자**를
+  `content`로 들고 있다) 가상요소를 쓸 수 없다.
+- 이 판들은 **진짜 `border`를 두르지 않는다**(ui.js 254~258줄 규칙). 레일은
+  배경 겹으로 그린다.
+- **서체는 이 겹이 건드리지 않는다.** 레퍼런스 글자는 픽셀 서체지만 오너가
+  `86b5a2f`에서 Paperlogy로 정했다. 픽셀 서체가 지던 「시스템의 목소리」 역할은
+  **낫표 「」**(`#uiTitle .lore`, `#uiDeath .cnt`)가 대신 진다.
+- **상시 HUD(계기판·목표 배너·나침반·머리 위 바)에는 덩굴을 안 얹었다.**
+  레퍼런스는 '시스템 창' 한 종류의 문법이고, 전투 중 상시로 떠 있는 띠에
+  당초문을 두르면 눈이 장식에 붙는다. 확장은 오너 결정 사항이다.
+
+### 당초문 에셋 다시 굽기
+
+`web/tex/ui_vine_{tl,tr,bl,br}.webp`는 codex ImageGen 산출물을 두 단계로 가공한다.
+
+```bash
+# ① 초록 크로마키 -> 투명 (알파를 연속값으로 뽑고 디스필한다)
+python3 tools/ui_chroma.py <초록배경.png> <keyed.png> --size 640
+
+# ② 광도로 실측 팔레트를 강제 + 잉크 상자로 자르기 + 네 모서리 뒤집기
+python3 tools/bake_ui_vine.py <keyed.png> web/tex --size 256 --dim 0.86
+```
+
+- 생성물은 **채도가 매번 튄다.** 색을 프롬프트로 맞추려 하지 말고 ②의 램프에 맡긴다.
+- `--dim`은 장식을 레일보다 어둡게 눌러 같은 금속으로 읽히게 하는 값이다.
+- ②는 **잉크 상자로 자른다.** 안 자르면 장식이 판 안쪽에 얌전히 앉아서
+  레퍼런스처럼 레일에 걸터앉지 않는다.
+- `codex exec`에 **`-i` 입력 이미지를 둘 이상 넣지 말 것.** 10분을 넘겨도
+  파일이 안 나온다. codex 자체 크로마키 제거도 쓰지 말 것(알파가 봉 몸통을 파먹는다).
 
 각 테마 규칙은 자기 `body[data-ui-theme="..."]` 아래로 제한한다. 테마 CSS는
 `ui.js`의 동적 기본 스타일보다 먼저 로드되지만, `body[...]`를 더한 높은 선택자
