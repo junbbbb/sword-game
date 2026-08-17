@@ -1,4 +1,4 @@
-// 소리. 전부 WebAudio 로 그 자리에서 합성한다. 외부 파일 0개.
+// 소리. 기본은 WebAudio 합성이고, **베는 소리 한 장만 녹음 파일**이다(19차).
 //
 // 왜 합성인가: 파일을 쓰면 로딩·경로·라이선스가 붙고, 무엇보다 **매번 똑같은 소리**가
 // 난다. 한 판에 고블린을 서른 마리 베는 게임에서 같은 명중음이 서른 번 나면 그때부터
@@ -7,9 +7,25 @@
 // 오너 지시: 명중음은 "칼로 뭔가 써는 ASMR" 결로.
 //   그래서 명중음을 한 덩어리로 안 만든다. **세 겹을 10~20ms 씩 어긋나게** 깐다.
 //     1) 공기 가르는 소리 (40ms, 고역)
-//     2) 살 가르는 소리   (60ms, 1.2~2.4kHz) ← 여기가 ASMR 의 정체다
+//     2) 살 가르는 소리   (60ms) ← 여기가 ASMR 의 정체다. **19차부터 녹음 파일이다**
 //     3) 저역 퍽          (100ms, 90~120Hz)
 //   한 번에 겹쳐 치면 "퍽" 하나로 뭉쳐서 밋밋해진다.
+//
+// ── 19차: 살 가르는 겹만 실물 녹음으로 (SFX_HIT_V19) ──
+// 오너가 freesound 음원을 직접 골라 왔다("이 소리로 몬스터 써는 소리"). 합성 노이즈로
+// 흉내내던 2번 겹을 그 녹음으로 갈아끼운다. 1·3번 겹(공기·퍽)은 그대로 둔다 —
+// **녹음에는 타격 순간이 없기 때문이다.** 원본은 앞 130ms 가 사실상 무음이고 에너지가
+// 뒤에서 부푸는 결이라, 그것만 틀면 "언제 맞았는지" 가 사라진다. 때가 언제인지는
+// 합성 겹이 잡고(0ms 공기 · 30ms 퍽), 무엇을 벤 것인지는 녹음이 말한다.
+// 음원 가공 내역과 출처·라이선스는 web/sfx/NOTICE.md 에 적어 뒀다(CC-BY 4.0, 표기 의무).
+//
+// ★롤백: 아래 SFX_HIT_V19 를 false 로. 파일을 아예 안 읽고 옛 합성 겹으로 돌아간다.
+//   파일이 404 나 디코드 실패로 안 와도 **자동으로 같은 자리로 돌아간다**(폴백 내장).
+//
+// ── 19차 둘째: 휘두름이 채찍으로 들리던 것 (SFX_SWING_V19) ──
+// 오너 지적으로 따로 고쳤다. 원인·처방은 SFX_SWING_V19 상수 옆에 길게 적어 뒀다.
+// 한 줄로: **주파수가 위로만 올라가던 것**을 호로 바꿨다(올라가는 스윕 = 채찍).
+// 두 스위치는 서로 독립이다. 타격만 되돌리거나 휘두름만 되돌릴 수 있다.
 //
 // ★★자동재생 정책: 사용자 입력 전에는 AudioContext 가 suspended 라 아무 소리도 안 난다.
 //   "구현했는데 소리가 안 나는" 상태의 100% 원인이 이것이다. 그래서 컨텍스트를
@@ -22,7 +38,49 @@ const MASTER = 0.55;
 //   요괴 비명을 얹자마자 **처치음의 첫 두 겹(공기·살)이 20ms 페이드로 잘려 나갔다.**
 //   ASMR 결의 정체가 그 두 겹이라 상한을 올리는 게 맞다. 9겹이라도 전부 0.05~0.9초
 //   짜리 짧은 소리고 컴프레서를 지나므로 뭉치지 않는다.
-const MAX_VOICES = 9;
+// ★9 -> 14 (19차). 같은 사고가 이미 나 있었다: 2026-08-10 에 9 로 올려 놓고도
+//   **처치(7겹) + 요괴 비명(3겹) = 10** 이라 그때부터 지금까지 처치음 첫 겹이
+//   계속 잘리고 있었다(실전투 측정에서 상한을 치는 게 확인된다).
+//   19차가 처치에 베는 소리 한 겹을 더 얹으므로 다시 세면:
+//     처치 8 + 요괴 비명 3 + 무리 전멸 3 = **14**
+//   임의의 여유가 아니라 "한 프레임에 실제로 겹칠 수 있는 최대치"다. 전부 0.05~0.9초
+//   짜리 짧은 소리고 컴프레서를 지나므로 이 수가 늘어도 뭉치지 않는다.
+const MAX_VOICES = 14;
+
+// ── 19차 베는 소리(녹음) ──
+// false 로 두면 파일을 아예 안 읽고 옛 합성 겹으로 돌아간다(롤백 한 줄).
+const SFX_HIT_V19 = true;
+const SLICE_URL = './sfx/slice.wav';
+// 재생 음량. **귀로 고른 값이 아니라 옛 소리와 맞춰 잰 값이다.**
+//   master 뒤 레벨미터(level())로 옛 합성 명중과 6회 평균을 비교해서 맞췄다.
+//   0.24 로 시작했더니 rms +1.5dB / peak +3.9dB 로 명중만 커졌다 -> 0.18 에서
+//   **rms +0.55dB / peak +1.74dB** 로 앉았다. rms(체감 음량)가 같으면 맞은 것이고,
+//   peak 이 조금 높은 건 녹음의 순간 결이 합성 노이즈보다 날카로워서다(그게 목적이다).
+const SLICE_HIT = 0.18;
+// 처치는 한 겹 더 굵게. 이 값에서 처치 전체가 옛 처치 대비 rms +0.3dB = 사실상 동일하다
+// (겹을 하나 더 얹었는데 안 커진 건 컴프레서가 먹어 준 것이다).
+const SLICE_KILL = 0.30;
+
+// ── 19차 휘두름: 채찍 -> 칼바람 ──
+// 오너: "칼 휘두를 때 무슨 채찍 소리가 나냐. 그냥 칼 소리(휘두르는 소리) 나야 하는 거
+//   아니냐. 좀 크진 않게."
+// ★왜 채찍으로 들렸나(고치기 전에 원인부터). 옛 휘두름은 두 겹 다
+//   **주파수가 처음부터 끝까지 위로만 올라갔다**(520 -> 2650Hz). 그런데 채찍 소리의
+//   정체가 정확히 그거다 - 끝으로 갈수록 올라가다 딱 터지는 상승 스윕.
+//   칼이 공기를 가르는 소리는 반대로 **호를 그린다**: 다가올 땐 올라가고 지나가면
+//   내려간다(도플러). 게다가 옛 봉투는 길이의 14% 에서 최대를 치고 바로 꺼져서
+//   "부는 소리"가 아니라 "때리는 소리"의 몸을 하고 있었다. 올라가는 음 + 앞에서
+//   터지는 봉투 = 채찍. 원인이 둘 다 모양이라 음량을 줄여도 채찍은 안 없어진다.
+// ★고친 것: ①주파수를 호로(중간에 정점, 뒤로 내려감) ②봉투를 부풀렸다 꺼지게
+//   (정점이 45% 지점 = 칼이 눈앞을 지나는 순간) ③Q 를 낮춰(1.5 -> 0.8) 쨍한 결 대신
+//   바람 결로 ④고역 겹도 **내려가게** 뒤집었다(올라가면 그게 바로 채찍의 크랙이다).
+// ★음량: 오너 지시대로 낮춘다. 실측해 보니 **큰 기술(X·C)이 명중음보다 컸다**
+//   (rms 0.0314 vs 0.0289). 휘두름은 배경이고 타격이 주인공이라 위계가 뒤집혀 있었다.
+// ★롤백: SFX_SWING_V19 를 false 로. 옛 소리가 그대로 나온다(코드를 지우지 않았다).
+const SFX_SWING_V19 = true;
+// 피치 흔들기 ±10%(오너 지시). 30마리를 같은 소리로 베면 그때부터 잡음이다.
+// ★재생속도라 길이도 같이 변한다(77ms -> 70~86ms). 이 정도는 오히려 결이 산다.
+const SLICE_VARY = 0.20;
 const STREAK_WINDOW = 2.0;   // 이 시간 안에 또 잡으면 처치음이 반음 올라간다
 const STREAK_MAX = 8;
 const DEMON_CRY_GAP = 0.09;  // 이 간격 안의 두 번째 비명은 안 낸다(전멸이 합창이 된다)
@@ -58,6 +116,36 @@ export function createSfx() {
   // 마지막 스윙이 무엇이었나. **feel.js 가 붓자국 색을 고르는 데 쓴다**
   // (3연타=진홍 / 수면참·횡일섬=감청). 소리와 그림이 같은 신호를 봐야 안 어긋난다.
   let lastSwing = null;
+  // 19차 베는 소리
+  let sliceBuf = null;       // 디코드 끝난 것. null 이면 합성 겹으로 폴백한다
+  let sliceBytes = null;     // 프리페치해 둔 원본 바이트
+  let sliceState = SFX_HIT_V19 ? 'fetching' : 'off';
+  let slices = 0;            // 검증용 누적 재생 수
+
+  // ── 파일 받기: ctx 보다 먼저 ──
+  // ★첫 재생에서 디코드하면 그 한 방이 늦는다. 그래서 둘로 쪼갠다.
+  //   바이트 받기는 ctx 가 필요 없으니 **지금 당장**(모듈 뜨는 순간) 시작하고,
+  //   디코드만 unlock() 으로 미룬다. 사람이 첫 입력을 하고 요괴에게 붙기까지는
+  //   최소 몇 초라, 77ms 짜리 한 장 디코드(1ms 남짓)는 그 사이에 끝난다.
+  if (SFX_HIT_V19) {
+    fetch(SLICE_URL + location.search)
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+      .then(b => { sliceBytes = b; sliceState = 'bytes'; if (ctx) decodeSlice(); })
+      .catch(e => { sliceState = 'failed'; console.warn('[sfx] 베는 소리 못 받음, 합성으로 간다:', e.message); });
+  }
+
+  // 디코드. Safari 구버전은 프로미스를 안 돌려줘서 콜백 꼴도 같이 받는다.
+  function decodeSlice() {
+    if (!ctx || !sliceBytes || sliceBuf) return;
+    const bytes = sliceBytes;
+    sliceBytes = null;                      // decodeAudioData 가 버퍼를 가져간다(재시도 불가)
+    const ok = (buf) => { sliceBuf = buf; sliceState = 'ready'; };
+    const no = (e) => { sliceState = 'failed'; console.warn('[sfx] 베는 소리 디코드 실패, 합성으로 간다:', e && e.message); };
+    try {
+      const p = ctx.decodeAudioData(bytes, ok, no);
+      if (p && p.then) p.then(ok, no);
+    } catch (e) { no(e); }
+  }
 
   // ── 시동 ──
   function unlock() {
@@ -85,6 +173,7 @@ export function createSfx() {
       ana.fftSize = 2048;
       master.connect(ana);
       ready = true;
+      decodeSlice();      // 바이트가 이미 와 있으면 여기서 디코드가 끝난다
     }
     if (ctx.state === 'suspended') ctx.resume();
     // ★여기서 켠다. unlock 은 첫 입력에서만 불리므로 자동재생 정책에 안 걸린다.
@@ -192,6 +281,56 @@ export function createSfx() {
     src.connect(dl); dl.connect(g2); g2.connect(dl);
     dl.connect(lp); lp.connect(g); g.connect(comp);
     src.start(t0, Math.random()); src.stop(t0 + dur + 0.03);
+    keep(g, t0 + dur);
+  }
+
+  // ── 벽돌 5: 베는 소리 한 장(녹음) ──
+  // 다른 벽돌과 달리 노이즈가 아니라 실제 파일이다. 배선은 똑같이 comp 를 지나므로
+  // 컴프레서·덕킹·M 음소거·보이스 상한이 **전부 그대로 먹는다**(따로 손댈 게 없다).
+  // 반환값으로 "냈는지"를 알려준다. 못 냈으면 부른 쪽이 옛 합성 겹으로 메운다.
+  function slice(t0, peak, rate) {
+    if (!ready || !sliceBuf) return false;
+    const src = ctx.createBufferSource();
+    src.buffer = sliceBuf;
+    src.playbackRate.value = (rate || 1) * (1 + (Math.random() - 0.5) * SLICE_VARY);
+    const g = ctx.createGain();
+    // ★게인 봉투를 안 씌운다. 녹음이 이미 자기 봉투를 갖고 있고(앞 1.5ms 페이드인,
+    //   뒤 7ms 페이드아웃까지 구워 놨다) 여기서 또 씌우면 결이 뭉갠다.
+    //   노이즈 벽돌들이 봉투를 쓰는 건 원본이 **끝없는 화이트노이즈**라서다.
+    g.gain.setValueAtTime(Math.max(0.0001, peak), t0);
+    src.connect(g); g.connect(comp);
+    src.start(t0);
+    const dur = sliceBuf.duration / src.playbackRate.value;
+    src.stop(t0 + dur + 0.02);
+    keep(g, t0 + dur);
+    slices++;
+    return true;
+  }
+
+  // ── 벽돌 6: 칼바람 한 번 (19차) ──
+  // noise() 와 재료는 같은데 **모양이 다르다**. noise() 는 주파수가 한 방향으로만 가고
+  // 봉투가 앞(14%)에서 터진다 - 때리는 소리의 몸이다. 여기는 둘 다 호를 그린다.
+  //   주파수: fc*0.55 -> fc(45% 지점) -> fc*0.40   = 다가왔다 지나가는 도플러
+  //   음량  : 0 -> peak(같은 45% 지점) -> 0        = 부풀었다 빠지는 바람
+  // 두 정점을 같은 자리에 맞추는 게 요점이다. 어긋나면 "휙"이 두 번 들린다.
+  function whoosh(t0, dur, fc, peak, Q, rate) {
+    if (!ready) return;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf; src.loop = true;
+    src.playbackRate.value = (rate || 1) * vary();
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = Q;
+    const tPk = t0 + dur * 0.45;
+    bp.frequency.setValueAtTime(Math.max(20, fc * 0.55), t0);
+    bp.frequency.exponentialRampToValueAtTime(Math.max(20, fc), tPk);
+    bp.frequency.exponentialRampToValueAtTime(Math.max(20, fc * 0.40), t0 + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), tPk);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(bp); bp.connect(g); g.connect(comp);
+    src.start(t0, Math.random() * 1.5);
+    src.stop(t0 + dur + 0.02);
     keep(g, t0 + dur);
   }
 
@@ -315,9 +454,19 @@ export function createSfx() {
     lastSwing = { kind: 'light', at: performance.now() };
     if (!ready) return;
     const t = now(), k = power === undefined ? 1 : power;
-    const f = rnd(520, 780) * k;
-    noise(t, 0.17 / k, 'bandpass', f * 0.55, f * 3.4, 1.5, 0.16 * k, 1);
-    noise(t + 0.02, 0.12 / k, 'highpass', 2200, 5200, 0.7, 0.055 * k, 1);
+    if (!SFX_SWING_V19) {                       // 옛 소리(롤백용). 위로만 올라간다 = 채찍
+      const f = rnd(520, 780) * k;
+      noise(t, 0.17 / k, 'bandpass', f * 0.55, f * 3.4, 1.5, 0.16 * k, 1);
+      noise(t + 0.02, 0.12 / k, 'highpass', 2200, 5200, 0.7, 0.055 * k, 1);
+      return;
+    }
+    const dur = 0.20 / k;
+    // ★중심 주파수를 매번 흔든다(1150~1500). 3연타가 같은 음이면 그게 반복감의 정체다.
+    //   whoosh 안에서 재생속도도 ±8% 로 또 흔들리므로 세 번이 확실히 다른 소리가 된다.
+    whoosh(t, dur, rnd(1150, 1500) * k, 0.085 * k, 0.8, 1);
+    // 공기 결 한 겹. **내려간다** - 옛 소리는 여기가 2200 -> 5200 으로 올라가서
+    // 끝에 크랙이 섰다(채찍의 정체). 자리도 뒤(+12ms)로 밀어 본체 뒤에 숨긴다.
+    whoosh(t + 0.012, dur * 0.72, rnd(2600, 3300) * k, 0.026 * k, 0.5, 1);
   }
 
   // 큰 기술(수면참·횡일섬). 더 크고 길게 + 물결 반짝임.
@@ -327,10 +476,21 @@ export function createSfx() {
     lastSwing = { kind: 'heavy', at: performance.now() };
     if (!ready) return;
     const t = now();
-    noise(t, 0.34, 'bandpass', 260, 2600, 1.1, 0.24, 0.85);
-    noise(t + 0.05, 0.26, 'highpass', 1400, 4800, 0.8, 0.10, 1);
-    shimmer(t + 0.06, 0.42, rnd(0.004, 0.009), 0.075);
-    tone(t + 0.02, 0.30, 'sine', 120, 58, 0.10);
+    if (!SFX_SWING_V19) {                       // 옛 소리(롤백용)
+      noise(t, 0.34, 'bandpass', 260, 2600, 1.1, 0.24, 0.85);
+      noise(t + 0.05, 0.26, 'highpass', 1400, 4800, 0.8, 0.10, 1);
+      shimmer(t + 0.06, 0.42, rnd(0.004, 0.009), 0.075);
+      tone(t + 0.02, 0.30, 'sine', 120, 58, 0.10);
+      return;
+    }
+    // 큰 기술도 같은 문법이다. 다만 더 길고(0.36s) 더 낮게(760~950) 지나간다
+    // = 더 큰 칼이 더 느리게 지나가는 그림. 채찍처럼 위로 째지 않는다.
+    whoosh(t, 0.36, rnd(760, 950), 0.115, 0.9, 0.85);
+    whoosh(t + 0.04, 0.26, rnd(2300, 2900), 0.032, 0.5, 1);
+    // ★물결 반짝임과 저역은 남긴다. 이 두 겹이 "물의 호흡"의 표식이라
+    //   빼면 수면참·횡일섬이 그냥 센 평타로 들린다. 음량만 낮춘다.
+    shimmer(t + 0.06, 0.42, rnd(0.004, 0.009), 0.045);
+    tone(t + 0.02, 0.30, 'sine', 120, 58, 0.062);
   }
 
   // 명중. 세 겹을 어긋나게 깐다(위 주석 참고).
@@ -338,8 +498,11 @@ export function createSfx() {
     if (!ready) return;
     const t = now(), k = power === undefined ? 1 : power;
     noise(t, 0.040, 'highpass', 3400, 6200, 0.6, 0.11 * k, 1);              // 공기
-    noise(t + 0.014, 0.062, 'bandpass', rnd(2400, 1900), rnd(1300, 1150),   // 살
-          2.6, 0.20 * k, 1);
+    // 살 - 19차부터 녹음이다. 자리(+14ms)는 옛 합성 겹 그대로다. 공기가 먼저 지나가고
+    // 그 뒤에 살이 갈라져야 두 겹으로 들린다. 파일이 없으면 옛 겹이 그대로 나온다.
+    if (!slice(t + 0.014, SLICE_HIT * k))
+      noise(t + 0.014, 0.062, 'bandpass', rnd(2400, 1900), rnd(1300, 1150),
+            2.6, 0.20 * k, 1);
     noise(t + 0.030, 0.10, 'lowpass', rnd(120, 90), 60, 0.9, 0.26 * k, 1);  // 퍽
     tone(t + 0.030, 0.09, 'sine', rnd(118, 92), 52, 0.16 * k);
   }
@@ -354,6 +517,11 @@ export function createSfx() {
     lastKill = T;
     const semi = Math.pow(2, streak / 12);
     noise(t, 0.050, 'highpass', 2600, 4800, 0.6, 0.10, 1);
+    // ★19차. 처치에도 같은 녹음을 얹는다. 명중만 실물이면 **더 중요한 순간이 더
+    //   싸구려로 들린다.** 대신 기존 겹은 하나도 안 뺐다 - 처치는 명중보다 굵어야
+    //   구분되고, 그 굵기가 아래 젖은 겹들에서 나온다. streak 반음을 재생속도로
+    //   넣어서 연속 처치에 녹음도 같이 올라간다(합성 겹과 한 몸으로 움직인다).
+    slice(t + 0.016, SLICE_KILL, semi);
     // 젖은 소리 = 대역이 넓고 아래로 미끄러진다
     noise(t + 0.016, 0.15, 'bandpass', 1500 * semi, 520 * semi, 1.4, 0.30, 1);
     noise(t + 0.020, 0.10, 'bandpass', 780 * semi, 300 * semi, 3.2, 0.16, 0.8);
@@ -576,6 +744,9 @@ export function createSfx() {
       return { ctx: ctx ? ctx.state : 'none', ready, muted,
                voices: voices.filter(v => v.end > now()).length,
                played, streak, deaths, cries,
+               // 19차 베는 소리. state 가 'ready' 가 아니면 합성 겹이 나오고 있는 것이다
+               slice: { on: SFX_HIT_V19, state: sliceState, played: slices,
+                        dur: sliceBuf ? +sliceBuf.duration.toFixed(3) : 0 },
                amb: amb ? { on: true, nodes: amb.nodes,
                             bus: +amb.bus.gain.value.toFixed(4),
                             wind: +amb.wind.gain.value.toFixed(4),
