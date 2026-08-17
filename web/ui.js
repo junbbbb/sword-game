@@ -1194,7 +1194,10 @@ body.uiCleared #uiClearDim{opacity:1}
      이중으로 쓴다. 하나를 없애면 「지금 몇 남았나」와 「위험한가」 중 하나가 죽는다.
    ★폭은 **화면 px 고정**이다. 휠 줌(18~32m)으로 캐릭터가 커졌다 작아져도 바는 안 변한다.
    ★자리는 JS 가 **transform 으로만** 쓴다. left/top 을 매 프레임 쓰면 레이아웃이 돈다. */
-#uiHpFloat{position:fixed;left:0;top:0;z-index:5;width:84px;height:16px;
+/* ★19차 토큰. 롤 실물을 실측해 뽑은 두 수를 여기 한 자리에 모은다(아래 뱃지·테 절 참조).
+   --ohp-badge-w/h = 레벨 뱃지 크기 · --ohp-gap = 테 안쪽 먹 틈(롤의 셋째 겹). */
+#uiHpFloat{--ohp-badge-w:19px;--ohp-badge-h:20px;--ohp-gap:rgba(5,7,10,.88);
+  position:fixed;left:0;top:0;z-index:5;width:84px;height:16px;
   pointer-events:none;user-select:none;opacity:0;overflow:visible;
   border:0;border-radius:0;background:transparent;box-shadow:none;
   transition:opacity .18s ease;will-change:transform}
@@ -1223,9 +1226,31 @@ body.uiCleared #uiClearDim{opacity:1}
 #uiHpFloat .track::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:2;
   background:var(--cut-lines);
   box-shadow:inset 0 0 0 1px rgba(2,5,11,.92),inset 0 0 0 2px rgba(214,240,255,.86)}
+/* ★★★오너 지시(19차): 「롤은 테두리가 안에 흰색, 그 밖에 검정색이라 구분이 잘 된다」.
+   ★먼저 **재 봤다.** 위 두 겹(먹선 -> 창백선)은 이미 그 순서였고, 화소도 그렇게 나왔다
+     (renders/history/v99_wave19/overhead_bar/metric_before.json, dsf3 컷):
+       밝은 초원  지형 208.3 -> 먹선 23.0(1px) -> 창백선 193.9(1px) -> 채움 201
+       어두운 던전 지형  3.3 -> 먹선 23.0(1px) -> 창백선 193.9(1px) -> 채움 201
+     즉 **순서는 맞았는데 겹이 하나 모자랐다.** 두 자리에서 선이 죽는다:
+       · 밝은 지형 만체력 - 창백선 193.9 vs 채움 201 = 밝기 차 **7**(안 보인다)
+       · 어두운 던전   - 먹선 23.0 vs 지형 17.6 = 밝기 차 **5**(안 보인다)
+     둘 다 "선 하나가 옆칸에 먹힌" 것이고, 롤은 그 자리에 **한 겹 더** 깔아 막았다.
+   ★롤 실측(공식 Health bar guide 886x682 · 실전 1920x1080 두 장, ref/ 폴더):
+       바깥 -> 안 = 먹 그림자 1px · **밝은 프레임 2px** · **먹 틈 2px** · 채움
+       (가이드 y105~106 밝음 -> y107~108 먹 -> y109 채움. 실전 컷도 같은 순서)
+     우리 바는 16px 이라 롤의 23px 을 그대로 못 옮긴다 -> 각 겹을 1px 로 눌러
+     **먹 1 · 밝음 1 · 먹 1 = 3px**(롤 5/23 = 21.7% vs 우리 3/16 = 18.8%).
+   ★이 셋째 겹만 **::before** 로 따로 깐다. ::after 는 스킨 파일(ui-theme-*.css)이
+     box-shadow 를 통째로 덮는 자리라 여기서 손대면 스킨이 이긴다. ::before 는
+     어느 스킨도 안 쓰는 빈 자리라, 여기 한 줄이 모든 스킨에 그대로 간다.
+   ★z-index 가 곧 순서다. 채움(.gh/.fl)은 z 가 없으니 **z-index:1 이면 채움 위**,
+     ::after(z-index:2)는 그 위다 - 먹 틈이 채움을 가리고, 창백선이 먹 틈을 안 먹는다. */
+#uiHpFloat .track::before{content:'';position:absolute;inset:2px;pointer-events:none;z-index:1;
+  box-shadow:inset 0 0 0 1px var(--ohp-gap)}
 #uiHpFloat .track i{top:0;bottom:0;left:0;border-radius:0}
-/* 가는 분할 HP. 레벨 배지와 같은 높이를 쓰며, 실제 체력 폭이 줄면 오른쪽부터 함께
-   사라진다. 바탕은 확실한 초록으로 채우고 12px 간격의 1px 구분선만 얹는다.
+/* 가는 분할 HP. 실제 체력 폭이 줄면 오른쪽부터 사라진다(19차부터 레벨 뱃지는 이 바보다
+   위아래로 2px 씩 크다 - 높이를 따라가지 않는다).
+   바탕은 확실한 초록으로 채우고 12px 간격의 1px 구분선만 얹는다.
    체력 구간별 색상은 쓰지 않는다. 만피부터 빈사까지 같은 초록으로 고정한다. */
 #uiHpFloat .gh{display:none}
 #uiHpFloat .fl{
@@ -1233,15 +1258,39 @@ body.uiCleared #uiClearDim{opacity:1}
     rgba(8,24,11,.72) 0 1px,transparent 1px 13px),
     linear-gradient(180deg,#a6eb82 0%,#61c452 52%,#338c3b 100%);
   filter:saturate(1.08);transition:filter .2s ease}
-/* 레벨 뱃지. 같은 transform 노드 안에서 트랙 왼쪽에 붙는다 */
+/* 레벨 뱃지. 같은 transform 노드 안에서 트랙 왼쪽에 붙는다.
+   ★★★오너 지시(19차): 「레벨 그거 조금 키워. 옆에 체력바보다. 그럼 크겠지?」
+   ★수치는 **롤을 재서** 정했다(ref/lol_measure.json · ref/hb_guide.jpg · ref/lol_ingame.jpg):
+       공식 Health bar guide  뱃지 25x27 · 바 23  -> 뱃지/바 **1.174**
+       실전 1920x1080 컷      뱃지 25x26 · 바 22  -> 뱃지/바 **1.182**
+       가로/세로 = 0.926 · 0.962 (거의 정사각, 세로가 아주 조금 길다)
+       둘 다 **바와 세로 중심이 같고**(위아래로 2px 씩 넘긴다) **딱 붙어 있다**(틈 0).
+   ★16 x 1.178 = 18.8 인데 **19px 을 쓰면 안 된다.** 16px 바 한가운데에 홀수 높이를
+     translateY(-50%) 로 세우면 -9.5px = **반 픽셀**에 서고, 그러면 1px 테가 두 줄
+     회색으로 번진다(같은 함정이 아래 updateHpFloat 의 Math.round 주석에 적혀 있다).
+     -> **20px**(짝수, -10px 정수). 비는 1.25 로 롤보다 6% 크지만, 우리 바가 롤보다
+        7px 얇아서 비를 그대로 쓰면 넘김이 1.5px 밖에 안 된다. 20px 이면 넘김이
+        **위아래 2px** 로 롤의 넘김과 **절대값이 같다** - 눈에 보이는 건 이쪽이다.
+   ★가로는 실측 비 0.944 를 그대로 - 20 x 0.944 = 18.9 -> 19px.
+   ★★7bec8db 를 오너가 스스로 물린 적이 있다(46fdd9a). 그 판은 뱃지를 23px **원형**
+     메달로 바꾸고 바에서 5px 떼어 놨고, 바는 눈금 자로 갈아엎었다. 되돌린 이유를
+     그 diff 에서 읽으면 **"크기"가 아니라 "말투를 바꾼 것"** 이다 - 그래서 이번엔
+     컷코너 네모·붙임·바코드 채움·피격 번쩍을 **한 글자도 안 건드리고 크기만** 만졌다.
+   ★글자는 9.5 -> 10.5px. 뱃지가 커진 만큼 숫자도 커지되(오너가 "키워"라고 했다)
+     비례로 늘리지는 않는다 - 롤의 숫자/뱃지는 0.30 인데 우리는 이미 0.42 라
+     같이 늘리면 글자가 판을 꽉 채운다. 10.5px 이면 0.37 로 롤 쪽으로 내려온다. */
 #uiHpFloat .lv{--c:4px;--cut-ink:var(--ui-gold);
   position:absolute;right:calc(100% - 3px);top:50%;z-index:3;
-  width:16px;height:16px;transform:translateY(-50%);
+  width:var(--ohp-badge-w);height:var(--ohp-badge-h);transform:translateY(-50%);
   display:flex;align-items:center;justify-content:center;
   border:0;border-radius:0;background:var(--cut-lines),rgba(24,17,6,.94);
-  box-shadow:inset 0 0 0 1px var(--ui-gold),inset 0 0 10px rgba(230,160,40,.30);
+  /* ★뱃지도 바와 **같은 이중 테**다(먼저 적은 겹이 위에 그려진다 - 먹선이 0~1 을,
+     금선이 1~2 를 맡는다). 스킨(bronze-story)은 이 자리를 자기 색으로 덮지만
+     순서는 이미 같다(먹 #5b351c 바깥 · 금 1px 안쪽 - 19차 실측으로 확인). */
+  box-shadow:inset 0 0 0 1px rgba(2,5,11,.92),inset 0 0 0 2px var(--ui-gold),
+    inset 0 0 10px rgba(230,160,40,.30);
   color:var(--ui-gold);font-family:var(--ui-font);
-  font-size:9.5px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
+  font-size:10.5px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
   text-shadow:0 0 8px rgba(255,187,61,.6)}
 /* 맞은 순간에는 외곽선과 밝기만 짧게 반응한다. 체력 잔량과 관계없는 피격 피드백이며
    바코드의 색상과 획 수 계산은 바꾸지 않는다. */
@@ -1355,8 +1404,10 @@ body.uiCleared #uiClearDim{opacity:1}
   #uiSkills .sk[data-k="Jump"]::after{top:18px;height:9px}
   #eBar{height:18px}
   #stHud{bottom:76px}
-  #uiHpFloat{width:68px;height:14px}
-  #uiHpFloat .lv{width:14px;height:14px;font-size:9px}
+  /* ★좁은 창에서도 **넘김을 위아래 2px 로 유지**한다(14 + 2 + 2 = 18px, 짝수라
+     translateY(-50%) 가 -9px 정수다). 가로는 같은 실측 비 0.944 -> 18 x 0.944 = 17px. */
+  #uiHpFloat{width:68px;height:14px;--ohp-badge-w:17px;--ohp-badge-h:18px}
+  #uiHpFloat .lv{font-size:10px}
   /* ★안내판 아래끝이 계기판 윗선을 넘지 않게 줄 간격만 줄인다.
      글자 크기는 마지막에 건드린다는 순서 그대로다. */
   #help{line-height:1.45;padding:8px 12px 9px}
