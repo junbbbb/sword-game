@@ -31,6 +31,12 @@
 // ★붓 서체(RFBrush)는 11차에 UI 에서 은퇴했다. web/fonts/ 의 woff2 두 벌은
 //   **지우지 않았다**(다른 곳에서 참조할 수 있다). 여기서는 @font-face 도 preload 도 안 건다.
 
+// ★20차. 품목표·아이콘 시트 규격의 **정본은 items.js** 다. 여기서 상수를 다시
+//   적으면 칸 번호가 갈리는 날이 온다(그날 아무도 안 알아챈다).
+//   ★location.search 를 그대로 붙인다 - main.js 가 같은 URL 로 이미 받아 놓았으므로
+//     이 import 는 캐시에서 즉시 풀린다(모듈 인스턴스도 한 벌로 공유된다).
+const ITM = await import('./items.js' + location.search);
+
 // ---------------------------------------------------------------------------
 // 문구. ★오너가 바꿀 곳은 여기 하나다. 아래 코드에는 문구가 안 박혀 있다.
 // ---------------------------------------------------------------------------
@@ -1421,6 +1427,144 @@ body.uiCleared #uiClearDim{opacity:1}
   #uiDeath .win{padding:56px 26px 20px}
 }
 
+/* ══ 20차 · 아이템 주머니 + 획득 줄 ═════════════════════════════════════════
+   오너 지시: "메이플스토리처럼 아이템 드랍되게해줘 아이템창도 만들고."
+
+   ── 문법은 새로 만들지 않는다 ─────────────────────────────────────────────
+   19차가 세운 청동 문법을 그대로 쓴다: **먹판(#272727 평면) + 홑겹 베벨 레일
+   (위가 밝고 옆이 어둡다 = 빛이 위에서 온다) + 당초문 대각 한 쌍 + 낫표 제목.**
+   ★색·레일은 ui-theme-vine.css 의 --vn-* 를 **그대로 물려받는다**(그 파일이 정본).
+     여기 적힌 리터럴은 **덧겹을 껐을 때만** 쓰이는 대비값이다 - var() 하나가 못
+     풀리면 background 선언이 통째로 죽기 때문에 대비값 없이 쓸 수 없다.
+   ★당초문은 --vn-tl/--vn-br 이 있을 때만 붙는다(없으면 none). 즉 index.html 에서
+     data-ui-frame="vine" 을 빼면 이 판도 같이 레일만 남는다 - 되돌림이 한 벌이다.
+
+   ── 자리 ────────────────────────────────────────────────────────────────
+   오른쪽 아래. 계기판(하단 전폭 띠) **위**, 우상단 수치판 **아래**다. 왼쪽 위
+   도움말 판과도 안 겹친다. 획득 줄은 반대쪽(왼쪽 아래)이라 둘이 서로 안 문다.
+   ★열려 있어도 게임은 안 멈춘다(오너 지시). 그래서 판은 화면의 24%를 넘지 않는다.
+
+   ★★한글 줄에 flex+gap 을 안 쓴다. 「엽전」과 「+1」을 flex 항목으로 나누면 조사·
+     기호 사이가 gap 만큼 벌어져 한 문장이 두 조각으로 읽힌다(13차 조사 분리 함정).
+     획득 줄은 인라인 요소 + margin 으로만 짠다. grid 는 **슬롯 격자**에만 쓴다. */
+#uiBag{
+  /* 청동 램프. 실측 정본은 ui-theme-vine.css 의 머리말이다 */
+  --bg-spec:var(--vn-spec,#fdefc9);
+  --bg-hi:var(--vn-hi,#e6b78e);
+  --bg-side:var(--vn-side,#aa764e);
+  --bg-mid:var(--vn-mid,#b1794b);
+  --bg-deep:var(--vn-deep,#59412b);
+  --bg-plate:var(--vn-plate,#272727);
+  --bg-amber:var(--vn-amber,#fab90a);
+  --bg-out:var(--vn-out,#0c1416);
+  --bg-rail:var(--vn-rail,6px);
+  --bg-orn:60px;                 /* 작은 판이라 큰 카드(92px)보다 한 치수 줄인다 */
+  --bg-cell:clamp(38px,4.4vh,46px);
+  --bg-gap:5px;
+  --bg-rail-top:var(--vn-rail-top,linear-gradient(180deg,
+    #392e21 0 1px,#825a39 1px 2px,#e6b78e 2px 3px,
+    #d8a274 3px 4px,#b1794b 4px 5px,#59412b 5px 6px,transparent 6px));
+  --bg-rail-bot:var(--vn-rail-bot,linear-gradient(0deg,
+    #392e21 0 1px,#59412b 1px 3px,#825a39 3px 4px,
+    #59412b 4px 5px,#392e21 5px 6px,transparent 6px));
+  --bg-rail-lft:var(--vn-rail-lft,linear-gradient(90deg,
+    #392e21 0 1px,#825a39 1px 2px,#aa764e 2px 4px,
+    #825a39 4px 5px,#392e21 5px 6px,transparent 6px));
+  --bg-rail-rgt:var(--vn-rail-rgt,linear-gradient(270deg,
+    #392e21 0 1px,#825a39 1px 2px,#aa764e 2px 4px,
+    #825a39 4px 5px,#392e21 5px 6px,transparent 6px));
+  position:fixed;z-index:8;
+  right:clamp(12px,1.4vw,24px);bottom:clamp(88px,11.5vh,116px);
+  padding:calc(var(--bg-rail) + 26px) calc(var(--bg-rail) + 11px)
+          calc(var(--bg-rail) + 10px);
+  border:0;border-image:none;clip-path:none;border-radius:0;
+  font-family:var(--ui-font);color:var(--ui-txt);
+  font-variant-numeric:tabular-nums;
+  background:
+    var(--vn-tl,none) no-repeat left top / var(--bg-orn) var(--bg-orn),
+    var(--vn-br,none) no-repeat right bottom / var(--bg-orn) var(--bg-orn),
+    var(--bg-rail-top) no-repeat left top / 100% var(--bg-rail),
+    var(--bg-rail-bot) no-repeat left bottom / 100% var(--bg-rail),
+    var(--bg-rail-lft) no-repeat left top / var(--bg-rail) 100%,
+    var(--bg-rail-rgt) no-repeat right top / var(--bg-rail) 100%,
+    linear-gradient(var(--bg-plate),var(--bg-plate));
+  box-shadow:0 0 0 1px var(--bg-out),0 14px 30px rgba(0,0,0,.66);
+  opacity:0;transform:translateY(9px);pointer-events:none;
+  transition:opacity .17s ease,transform .17s ease}
+body.uiBagOn #uiBag{opacity:1;transform:none;pointer-events:auto}
+/* 제목. 레일 안쪽 위에 앉는다. 낫표는 「시스템의 목소리」 표식이다(19차 규칙) */
+#uiBag .bgHd{position:absolute;left:0;right:0;top:calc(var(--bg-rail) + 7px);
+  text-align:center;font-size:12px;font-weight:800;letter-spacing:.18em;
+  color:var(--bg-hi);text-shadow:none;pointer-events:none}
+#uiBag .bgHd::before{content:'「';color:var(--bg-side);letter-spacing:0}
+#uiBag .bgHd::after{content:'」';color:var(--bg-side);letter-spacing:0}
+/* 격자. ★grid 는 여기만 쓴다(칸 크기가 같은 상자들이라 조사 분리와 무관하다) */
+#uiBag .bgGrid{display:grid;grid-template-columns:repeat(4,var(--bg-cell));
+  grid-auto-rows:var(--bg-cell);gap:var(--bg-gap)}
+/* 빈 칸. 안으로 파인 홈이라야 물건이 그 안에 놓인 것으로 읽힌다 */
+#uiBag .sl{position:relative;width:var(--bg-cell);height:var(--bg-cell);
+  background:linear-gradient(180deg,#1a1917,#131211);
+  box-shadow:inset 0 0 0 1px rgba(89,65,43,.85),inset 0 2px 7px rgba(0,0,0,.62);
+  transition:box-shadow .12s ease}
+/* ★★image-rendering 을 **안 건다**. 1차 시트(32px 블록 픽셀아트)일 때는 pixelated
+   가 정답이었지만 그 그림이 「마인크래프트 같다」로 기각됐다. 2차 시트는 부드러운
+   셀셰이딩 일러스트(256px 원본을 40px 로 줄여 쓴다)라, pixelated 를 걸면 곡선
+   외곽선이 계단으로 부서져서 도로 픽셀아트가 된다. 브라우저 기본 보간이 맞다. */
+#uiBag .sl .ic{position:absolute;inset:3px;background-repeat:no-repeat;
+  pointer-events:none}
+/* 개수. 앰버는 「성장·보상이 걸린 숫자」 자리다(19차) */
+#uiBag .sl .n{position:absolute;right:2px;bottom:1px;pointer-events:none;
+  font-size:11px;font-weight:800;line-height:1.1;color:var(--bg-amber);
+  text-shadow:0 1px 0 #14100c,0 0 4px rgba(0,0,0,.9)}
+/* 물건이 든 칸만 테가 산다. 쓸 수 있는 칸(물약)은 한 단 더 밝고 손가락이 바뀐다 */
+#uiBag .sl.has{box-shadow:inset 0 0 0 1px var(--bg-mid),inset 0 2px 7px rgba(0,0,0,.55)}
+#uiBag .sl.use{cursor:pointer}
+#uiBag .sl.has:hover{box-shadow:inset 0 0 0 1px var(--bg-hi),inset 0 0 12px rgba(214,150,56,.22)}
+#uiBag .sl.use:active{transform:translateY(1px)}
+/* 발밑 한 줄. 「무엇을 할 수 있나」만 적는다 */
+#uiBag .bgFoot{margin-top:9px;font-size:11px;font-weight:600;letter-spacing:.01em;
+  color:var(--ui-mute);text-align:center}
+/* 툴팁. ★판 **위쪽 바깥**에 오른쪽 맞춤으로 뜬다. 칸마다 좌우로 따라다니게 하면
+   오른쪽 열에서 화면 밖으로 흘러나간다(판이 화면 오른 끝에 붙어 있다). */
+#uiBag .tip{position:absolute;right:0;bottom:calc(100% + 7px);
+  padding:5px 10px 6px;white-space:nowrap;pointer-events:none;
+  font-size:11.5px;font-weight:700;color:var(--ui-txt);
+  background:linear-gradient(var(--bg-plate),var(--bg-plate));
+  box-shadow:0 0 0 1px var(--bg-out),inset 0 0 0 1px rgba(170,118,78,.62),
+             0 8px 18px rgba(0,0,0,.6);
+  opacity:0;transition:opacity .12s ease}
+#uiBag .tip.on{opacity:1}
+#uiBag .tip i{font-style:normal;color:var(--bg-side);margin-left:.45em}
+
+/* ── 획득 줄 (메이플 픽업 메시지) ────────────────────────────────────────────
+   왼쪽 아래. 계기판 위에 서고, 새 줄이 아래에 붙으면서 먼저 온 줄들이 위로 밀린다
+   (bottom 을 못박아 두면 그 방향이 저절로 나온다).
+   ★계기판·나침반·마커와 안 문다: 계기판은 화면 아래 전폭 띠(높이 8~9%)라 그 위로
+     피하고, 나침반·마커는 화면 **가장자리 중앙부**를 돈다. */
+#uiPick{position:fixed;left:clamp(12px,1.3vw,22px);
+  bottom:clamp(92px,12vh,122px);z-index:8;
+  pointer-events:none;user-select:none;font-family:var(--ui-font);
+  font-variant-numeric:tabular-nums}
+#uiPick .pk{display:block;margin-top:3px;padding:3px 9px 4px;
+  font-size:12.5px;line-height:1.25;white-space:nowrap;
+  background:linear-gradient(90deg,rgba(20,17,13,.90),rgba(20,17,13,.42));
+  box-shadow:inset 0 0 0 1px rgba(170,118,78,.40);
+  animation:pkIn .16s ease-out both;
+  transition:opacity .34s ease,transform .34s ease}
+#uiPick .pk.out{opacity:0;transform:translateY(-6px)}
+/* 아이콘. ★인라인 블록이다. flex 로 나누면 「엽전」과 「+1」 사이가 벌어진다 */
+#uiPick .pk i{display:inline-block;width:19px;height:19px;
+  vertical-align:-4px;margin-right:.38em;background-repeat:no-repeat}
+#uiPick .pk b{font-weight:700;color:#f2e6d2}
+#uiPick .pk em{font-style:normal;font-weight:800;color:var(--vn-amber,#fab90a);
+  margin-left:.4em}
+/* 희귀한 것은 한 단 밝게. 색을 늘리지 않고 **밝기**로만 가른다 */
+#uiPick .pk.rare b{color:#cfeeff}
+#uiPick .pk.rare{box-shadow:inset 0 0 0 1px rgba(120,190,220,.55)}
+/* 물약을 마신 줄은 체력이 오른 줄이라 초록이다(뜻이 걸린 색) */
+#uiPick .pk.heal em{color:var(--ui-green)}
+@keyframes pkIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+
 /* ══ 연출이 화면을 소유한다 (판정 S4 · S5 · S6 · S7) ═══════════════════════
    ★★이 블록은 **반드시 이 파일 CSS 의 맨 끝**에 있어야 한다. 여기 적힌 선택자는
      전부 (0,2,0) 이라 「body.uiHelpOff #uiHelpChip{opacity:1}」 같은 앞쪽 규칙과
@@ -1441,6 +1585,7 @@ body.uiCleared #uiClearDim{opacity:1}
    ★#uiDeath(사망 카드)의 표는 위쪽 3) 절에 그대로 둔다. */
 body.uiTitleOn #help,body.uiTitleOn #uiHelpChip,body.uiTitleOn #uiDock,
 body.uiTitleOn #bHud,body.uiTitleOn #stat,body.uiTitleOn #stHud,
+body.uiTitleOn #uiPick,
 body.uiTitleOn #uiHpFloat{
   opacity:.06;
   /* ★들어올 때는 **빠르게** 물린다(판정 S4). 예전 값 .5s 는 카드가 진해지는 구간과
@@ -1452,7 +1597,15 @@ body.uiCine #help,body.uiCine #uiHelpChip,body.uiCine #uiDock,
 body.uiCine #bHud,body.uiCine #stat,body.uiCine #stHud,body.uiCine #uiHpFloat,
 body.uiCleared #help,body.uiCleared #uiHelpChip,body.uiCleared #uiDock,
 body.uiCleared #stat,body.uiCleared #stHud,
+body.uiCine #uiPick,body.uiCleared #uiPick,body.uiBossIn #uiPick,
+body.uiDeathOn #uiPick,
 body.uiCleared #uiHpFloat{opacity:0;transition:opacity .22s ease}
+/* ★주머니는 **물리기만 하는 게 아니라 닫는다**(아래 JS 의 setBag(false)). 여기 규칙은
+   그 사이 한 프레임을 위한 보험이다 - 판이 반쯤 열린 채로 연출 위에 남으면 안 된다.
+   ★body.uiBagOn 규칙과 특이도가 같으므로(0,2,0) **반드시 그 뒤**에 있어야 이긴다. */
+body.uiTitleOn #uiBag,body.uiBossIn #uiBag,body.uiCine #uiBag,
+body.uiCleared #uiBag,body.uiDeathOn #uiBag{
+  opacity:0;pointer-events:none;transition:opacity .18s ease}
 /* 인라인 opacity 를 쓰는 둘(나침반·마커)만 !important. 인라인은 클래스 규칙을 이긴다 */
 body.uiTitleOn #uiNav,body.uiTitleOn #uiPip{opacity:.06!important}
 body.uiBossIn #uiNav,body.uiBossIn #uiPip,
@@ -1850,12 +2003,212 @@ export function initUI() {
     else if (e.code === 'KeyC') lastSkill = 'Wide';
     else if (e.code === 'KeyZ' || e.code === 'Space') lastSkill = '';
     if (e.code === 'KeyH') { toggleHelp(); return; }
+    // ★20차. I = 아이템 주머니. 이 키도 게임이 안 쓰던 빈 키다(main.js·enemy.js·
+    //   boss.js·stealth.js 어디에도 KeyI 가 없다). preventDefault 는 안 한다.
+    if (e.code === 'KeyI') { toggleBag(); return; }
+    // Esc 는 **열려 있을 때만** 먹는다. 안 그러면 main.js 의 개발용 미리보기 종료가
+    //   같은 키를 쓰고 있으므로 그쪽 뜻을 여기서 가로채는 셈이 된다.
+    if (e.code === 'Escape' && bagOn) { setBag(false); return; }
     // R = 층 재시작. 창을 짧게 한 번 더 틀고 한 판치 상태를 되돌린다.
     if (e.code === 'KeyR') { newRun(); return; }
   });
   // 키보드만 입력이 아니다. 휠 줌·클릭도 "이 사람은 이제 조작 중"이라는 신호다.
   addEventListener('pointerdown', armHelp, { passive: true });
   addEventListener('wheel', armHelp, { passive: true });
+
+  // -------------------------------------------------------------------------
+  // 4-b) 아이템 주머니 + 획득 줄 (20차)
+  // -------------------------------------------------------------------------
+  // ★이 절도 이 파일의 규칙을 지킨다: **DOM 만 만진다.** 무엇을 몇 개 가졌는지는
+  //   items.js 가 쥐고 있고 여기서는 window.__items 를 **읽기만** 한다. 유일한 쓰기가
+  //   물약 클릭(IT.use)인데, 그것도 items.js 의 창구를 부르는 것이지 수를 직접 안 만진다.
+  // ★열려 있어도 게임은 안 멈춘다(오너 지시). 그래서 판이 pointer-events 를 갖는
+  //   유일한 겹이 되는데, main.js 는 마우스 클릭을 아무 데도 안 쓰므로 조작을 안 먹는다.
+  const BAG_SLOTS = 16;                 // 4 x 4. 품목이 다섯이라 넉넉하다
+  const BAG_TITLE = '아이템';
+  const BAG_HINT_EMPTY = '요괴를 베면 떨어진다';
+  const BAG_HINT_USE = '물약을 누르면 마신다';
+  const BAG_FULL_LINE = '체력이 가득 차 있다';
+  const PICK_HOLD = 1900;               // 획득 줄이 그대로 서 있는 시간
+  const PICK_FADE = 340;
+  const PICK_MERGE = 1400;              // 이 안에 같은 것을 또 주우면 줄을 안 늘리고 수만 올린다
+  const PICK_MAX = 6;                   // 화면에 동시에 설 수 있는 줄 수
+
+  const bagEl = el('div', 'uiBag');
+  bagEl.innerHTML = '<div class="bgHd"></div><div class="tip"></div>'
+    + '<div class="bgGrid"></div><div class="bgFoot"></div>';
+  bagEl.querySelector('.bgHd').textContent = BAG_TITLE;
+  const bagGrid = bagEl.querySelector('.bgGrid');
+  const bagTip = bagEl.querySelector('.tip');
+  const bagFoot = bagEl.querySelector('.bgFoot');
+  const bagSlots = [];
+  for (let i = 0; i < BAG_SLOTS; i++) {
+    const s = document.createElement('div');
+    s.className = 'sl';
+    s.innerHTML = '<i class="ic"></i><b class="n"></b>';
+    bagGrid.appendChild(s);
+    bagSlots.push(s);
+  }
+  const pickBox = el('div', 'uiPick');
+  document.body.append(bagEl, pickBox);
+
+  // 시트 한 칸을 배경으로 얹는다. ★칸 규격(줄·칸 수)은 items.js 가 정본이라
+  //   여기서 다시 세지 않고 그 상수로 나눈다.
+  function iconStyle(node, cell) {
+    const cols = ITM.ATLAS_COLS, rows = ITM.ATLAS_ROWS;
+    node.style.backgroundImage = 'url(' + ITM.ATLAS_URL + ')';
+    node.style.backgroundSize = (cols * 100) + '% ' + (rows * 100) + '%';
+    const px = cols > 1 ? ((cell % cols) / (cols - 1)) * 100 : 0;
+    const py = rows > 1 ? (Math.floor(cell / cols) / (rows - 1)) * 100 : 0;
+    node.style.backgroundPosition = px + '% ' + py + '%';
+  }
+
+  let bagOn = false;
+  // 마지막으로 그린 내용. 같으면 DOM 을 한 글자도 안 건드린다.
+  // ★null 로 시작한다. 빈 문자열로 두면 **빈 주머니의 서명과 같아서** 첫 그리기가
+  //   통째로 건너뛴다(발밑 한 줄이 영원히 빈 채로 남는다. 실제로 밟았다).
+  let bagSig = null;
+  function refreshBag() {
+    const IT = window.__items;
+    const have = IT ? IT.bag : {};
+    // 순서는 **품목표 순서로 고정**한다. 주운 순서로 두면 하나 쓸 때마다 칸이 춤춘다.
+    const rows = [];
+    for (const d of ITM.ITEMS) { const n = have[d.id] || 0; if (n > 0) rows.push({ d, n }); }
+    const sig = rows.map(r => r.d.id + ':' + r.n).join(',');
+    if (sig === bagSig) return;
+    bagSig = sig;
+    let hasPotion = false;
+    for (let i = 0; i < BAG_SLOTS; i++) {
+      const s = bagSlots[i], r = rows[i];
+      const ic = s.firstElementChild, nn = s.lastElementChild;
+      if (!r) {
+        s.className = 'sl'; s.dataset.id = '';
+        ic.style.backgroundImage = 'none'; nn.textContent = '';
+        continue;
+      }
+      // ★쓸 수 있는 칸에만 use 를 붙인다. 나머지는 표시만이라 손가락도 안 바뀐다
+      const usable = r.d.id === 'potion';
+      if (usable) hasPotion = true;
+      s.className = 'sl has' + (usable ? ' use' : '');
+      s.dataset.id = r.d.id;
+      iconStyle(ic, r.d.cell);
+      // 1개짜리에 「1」을 찍으면 칸마다 숫자가 붙어서 개수가 안 읽힌다
+      nn.textContent = r.n > 1 ? String(r.n) : '';
+    }
+    bagFoot.textContent = hasPotion ? BAG_HINT_USE : BAG_HINT_EMPTY;
+  }
+
+  function setBag(on) {
+    bagOn = !!on;
+    document.body.classList.toggle('uiBagOn', bagOn);
+    if (bagOn) { bagSig = null; refreshBag(); }
+    else bagTip.classList.remove('on');
+  }
+  function toggleBag() { setBag(!bagOn); }
+
+  // ── 툴팁 ──
+  // 판 **위쪽 바깥**에 오른쪽 맞춤으로 한 줄. 칸을 따라다니지 않는 이유는 CSS 주석에 있다.
+  bagGrid.addEventListener('mouseover', (e) => {
+    const s = e.target.closest ? e.target.closest('.sl') : null;
+    if (!s || !s.dataset.id) { bagTip.classList.remove('on'); return; }
+    const d = ITM.ITEM_BY_ID[s.dataset.id];
+    if (!d) { bagTip.classList.remove('on'); return; }
+    bagTip.textContent = d.name;
+    const sub = document.createElement('i');
+    sub.textContent = '· ' + (ITM.TIER_NAME[d.tier] || '')
+      + (d.id === 'potion' ? ' · 체력 ' + ITM.USE_HEAL + ' 회복' : '');
+    bagTip.appendChild(sub);
+    bagTip.classList.add('on');
+  });
+  bagGrid.addEventListener('mouseleave', () => bagTip.classList.remove('on'));
+
+  // ── 클릭 = 쓴다 ──
+  // 지금 쓰이는 물건은 물약 하나뿐이다. 나머지 칸은 눌러도 아무 일도 안 일어난다.
+  bagGrid.addEventListener('click', (e) => {
+    const s = e.target.closest ? e.target.closest('.sl') : null;
+    if (!s || !s.dataset.id) return;
+    const IT = window.__items;
+    if (!IT || !IT.use) return;
+    const d = ITM.ITEM_BY_ID[s.dataset.id];
+    if (!d || d.id !== 'potion') return;
+    const r = IT.use('potion');
+    if (r && r.ok) {
+      pushPick(d.cell, '체력', '+' + r.healed, 'heal', '');
+      bagSig = null; refreshBag();
+    } else if (r && r.reason === 'full') {
+      // ★만피면 **안 쓴다**(오너 지시). 그냥 무시하면 "클릭이 씹혔다"로 읽히므로
+      //   왜 안 줄었는지 한 줄로 답한다.
+      pushPick(d.cell, BAG_FULL_LINE, '', '', '');
+    }
+  });
+
+  // ── 획득 줄 ──
+  // 새 줄이 아래에 붙고 먼저 온 줄들이 위로 밀린다(#uiPick 이 bottom 으로 못박혀 있다).
+  let lastPick = null;
+  function armPickTimers(node) {
+    clearTimeout(node._t1); clearTimeout(node._t2);
+    node.classList.remove('out');
+    node._t1 = setTimeout(() => node.classList.add('out'), PICK_HOLD);
+    node._t2 = setTimeout(() => {
+      node.remove();
+      if (lastPick && lastPick.node === node) lastPick = null;
+    }, PICK_HOLD + PICK_FADE);
+  }
+  // id 를 주면 **같은 물건을 연달아 주울 때 줄을 안 늘린다**(엽전 다섯 개에 다섯 줄이
+  // 쌓이면 그건 알림이 아니라 벽이다). 수만 올리고 수명을 다시 잰다.
+  function pushPick(cell, label, plus, cls, id) {
+    const t = performance.now();
+    if (id && lastPick && lastPick.id === id && lastPick.node.isConnected
+        && t - lastPick.at < PICK_MERGE) {
+      lastPick.n++; lastPick.at = t;
+      const em = lastPick.node.querySelector('em');
+      if (em) em.textContent = '+' + lastPick.n;
+      armPickTimers(lastPick.node);
+      return;
+    }
+    const node = document.createElement('div');
+    node.className = 'pk' + (cls ? ' ' + cls : '');
+    const ic = document.createElement('i');
+    if (cell >= 0) iconStyle(ic, cell);
+    const b = document.createElement('b');
+    b.textContent = label;
+    node.append(ic, b);
+    if (plus) { const em = document.createElement('em'); em.textContent = plus; node.appendChild(em); }
+    pickBox.appendChild(node);
+    while (pickBox.children.length > PICK_MAX) pickBox.firstElementChild.remove();
+    armPickTimers(node);
+    lastPick = id ? { id, n: 1, node, at: t } : null;
+  }
+
+  // main.js 의 onPickup 이 부른다(items.js -> main.js -> 여기).
+  function itemPicked(def) {
+    if (!def) return;
+    pushPick(def.cell, def.name, '+1', def.tier === 'rare' ? 'rare' : '', def.id);
+    if (bagOn) { bagSig = null; refreshBag(); }
+  }
+
+  function clearPicks() {
+    lastPick = null;
+    while (pickBox.firstChild) pickBox.firstChild.remove();
+  }
+
+  // ── 도움말 한 줄 ──
+  // ★index.html 은 다른 파일 소유라 안 건드린다. 판이 붙은 뒤 여기서 줄 하나를 끼운다.
+  //   자리는 R(층 재시작) 앞이다 - 「내 것을 다루는」 줄들 곁이 맞는 자리다.
+  (function addBagHelpRow() {
+    const help = document.getElementById('help');
+    if (!help || help.querySelector('.hBag')) return;
+    const row = document.createElement('div');
+    row.className = 'hRow hBag';
+    row.innerHTML = '<span class="ks"><span class="k">I</span></span>'
+      + '<span class="t">아이템 주머니 열기 / 닫기</span>';
+    let anchor = null;
+    for (const r of help.querySelectorAll('.hRow')) {
+      const k = r.querySelector('.k');
+      if (k && k.textContent === 'R') { anchor = r; break; }
+    }
+    if (anchor) help.insertBefore(row, anchor); else help.appendChild(row);
+  })();
 
   // -------------------------------------------------------------------------
   // 한 판이 새로 시작될 때 되돌릴 것들
@@ -1879,6 +2232,10 @@ export function initUI() {
     // ★죽어 있는 동안 R 을 눌렀으면 사망 창과 입장 창이 겹친다. 층을 다시 시작하는
     //   순간의 답은 입장 창 쪽이므로 사망 창을 먼저 내린다.
     hideDeath();
+    // ★20차. 주머니 자체는 main.js resetRun 이 비운다(items.reset). 여기서는 화면에
+    //   남아 있는 획득 줄을 걷고, 열려 있으면 빈 판을 다시 그린다.
+    clearPicks();
+    bagSig = null; refreshBag();
     showTitle(true);
   }
 
@@ -2623,6 +2980,17 @@ export function initUI() {
     updateHp();
     fixSword();
     fixMute();
+    // ── ★20차. 주머니 ──
+    // 열려 있을 때만 훑는다(닫혀 있으면 비교 한 번으로 끝난다). refreshBag 은 내용이
+    // 안 바뀌면 DOM 을 한 글자도 안 건드리므로 20Hz 로 불러도 비용이 서명 비교 하나다.
+    // ★연출이 화면을 소유하면 **닫는다**(CSS 로 물리기만 하면 연출이 끝나는 순간
+    //   반쯤 열린 판이 도로 튀어나온다 - 도움말 판이 11차에 밟은 그 함정이다).
+    if (bagOn) {
+      const b = document.body.classList;
+      if (b.contains('uiCleared') || b.contains('uiCine')
+          || b.contains('uiBossIn') || b.contains('uiDeathOn')) setBag(false);
+      else refreshBag();
+    }
 
     if (enemy) {
       const d = enemy.dead;
@@ -2662,6 +3030,8 @@ export function initUI() {
   const api = {
     showTitle, showBanner, showLevelUp, toggleHelp,
     setHelp,
+    // ★20차. main.js 의 onPickup 이 부르는 창구 하나 + 검증용 여닫이 둘.
+    itemPicked, toggleBag, setBag,
     get state() {
       return { helpOff, bannerDone, dead: wasDead, floor: FLOOR.name,
                deathCard: death.classList.contains('on'), diedAt: lastDiedStamp,
@@ -2710,6 +3080,21 @@ export function initUI() {
                           sword: swordEl ? swordEl.textContent : null,
                           cells: dock.children.length }; })(),
                help: { off: helpOff, touched: helpTouched },
+               // 주머니: 열렸나 · 몇 칸이 찼나 · 판이 화면 안에 다 들어오나 ·
+               //   획득 줄이 몇 줄 서 있나. 촬영 없이 회귀를 잡는 창구다.
+               bag: (() => {
+                 const r = bagEl.getBoundingClientRect();
+                 return { on: bagOn, sig: bagSig,
+                          filled: bagEl.querySelectorAll('.sl.has').length,
+                          usable: bagEl.querySelectorAll('.sl.use').length,
+                          foot: bagFoot.textContent,
+                          rect: [Math.round(r.left), Math.round(r.top),
+                                 Math.round(r.width), Math.round(r.height)],
+                          fits: r.left >= 0 && r.right <= innerWidth
+                                && r.top >= 0 && r.bottom <= innerHeight,
+                          picks: Array.from(pickBox.children).map(e => e.textContent),
+                          helpRow: !!document.querySelector('#help .hBag') };
+               })(),
                // 연출이 화면을 소유하는 중인가(판정 S6·S7 검증 창구)
                cine: document.body.classList.contains('uiCine'),
                bossIn: document.body.classList.contains('uiBossIn'),

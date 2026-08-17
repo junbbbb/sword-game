@@ -346,6 +346,8 @@ function resetRun() {
   trailBuf.length = 0; spray.length = 0;
   if (hurtDirEl) { hurtDirEl.classList.remove('on'); hurtDirT = 0; }
   sfx.stopTell();                  // 보스 예고음이 판을 넘어 이어지면 안 된다
+  // ★주머니와 바닥에 널린 물건도 판을 넘기지 않는다(이 판의 리셋 문화 그대로).
+  if (window.__items) window.__items.reset();
 }
 addEventListener('keydown', e => {
   keys[e.code] = true;
@@ -4831,6 +4833,27 @@ function makeHitSeg(a, b) {
   return hitA;
 }
 
+// ── 아이템 드랍 (20차) ────────────────────────────────────────────────────
+// ★롤백 = 이 한 줄을 false 로. 그러면 아래 items 가 null 이 되고 스폰·업데이트·
+//   주머니·아이템창(ui.js 가 window.__items 를 보고 켠다)이 통째로 안 돈다.
+const ITEMS_ON = true;
+const { createItemSystem } = await import('./items.js' + location.search);
+const items = ITEMS_ON ? createItemSystem({
+  scene, camera, level,
+  getPlayer: () => root.position,
+  // 물약 사용의 실물. enemy.js 가 플레이어 체력을 쥐고 있으므로 그쪽 창구를 부른다.
+  //   ★enemies 는 아래에서 만들어지지만, 이 화살표는 **부를 때** 평가되므로
+  //     선언 순서를 뒤집을 필요가 없다(TDZ 는 호출 시점에 이미 풀려 있다).
+  heal: (n) => (window.__enemy && window.__enemy.heal) ? window.__enemy.heal(n) : 0,
+  // 주운 그 순간. 화면 좌하단 픽업 줄은 ui.js 가 진다.
+  onPickup: (def, have) => {
+    if (window.__ui && window.__ui.itemPicked) window.__ui.itemPicked(def, have);
+    // 소리는 **희귀한 것에만** 낸다. 엽전마다 종을 치면 그게 잡음이 된다.
+    if (def.tier === 'rare') sfx.token();
+  },
+}) : null;
+window.__items = items;
+
 const enemies = createEnemySystem({
   scene, camera,
   // 무리 자리는 맵이 정한다(level1.json 의 mobs[]). 마릿수·반경은 enemy.js 가 정한다.
@@ -4848,6 +4871,8 @@ const enemies = createEnemySystem({
     // ★타격 지점 참격(feel.impactSlash)은 여기서 안 지운다. 한 장이 0.17~0.25초라
     //   되살아나기(초 단위)까지 어차피 다 지나가 있다.
     trailBuf.length = 0; spray.length = 0;
+    // ★죽으면 주머니도 바닥의 물건도 비운다(오너 지시. R 재시작과 같은 규칙).
+    if (items) items.reset();
   },
   // ── 칼이 닿는 그 프레임 ──
   // 여기 한 줄 한 줄이 "처치하는 맛"이다. 순서에 뜻이 있다:
@@ -4886,6 +4911,10 @@ const enemies = createEnemySystem({
         feel.pop(h.x, h.y, h.z, 1.15);
       }
       spawnInk(h.x, h.y, h.z, swingDir.x, swingDir.y, swingDir.z, 26, 1.35);
+      // ★아이템 드랍. **처치 프레임의 그 자리**에서 튄다. 시체가 눕는 자리도,
+      //   플레이어 발밑도 아니다 - 벤 점에서 나와야 "이 한 대가 떨어뜨렸다"로 읽힌다.
+      //   h.leader 는 enemy.js 가 같은 콜백에 실어 준다(두목은 드랍률·희귀도가 높다).
+      if (items) items.spawnFromKill(h.x, h.y, h.z, h.leader);
       // ★무리 전멸의 먹링은 **마지막으로 벤 자리**에 편다. 좌표를 안 넘기면 feel.js 가
       //   직전 붓자국의 화면 좌표를 월드로 되짚는다(한 프레임만 지나도 못 찾고 버린다).
       if (h.wiped) { feel.wipe(h.x, h.y, h.z); sfx.wipe(); }
@@ -5507,6 +5536,13 @@ function tick() {
       heavy,
       paused: preview.on,
     });
+    // ── 아이템 드랍 (20차) ──
+    // ★요괴·보스 **뒤에** 돈다. 이번 프레임에 벤 놈이 떨어뜨린 물건이 같은 프레임에
+    //   첫 위치를 잡아야 한 프레임 늦게 나타나지 않는다.
+    // ★dt 는 게임시간이다(히트스톱·슬로모가 이미 곱해져 있다). 세상이 멎는 그 105ms
+    //   동안 물건만 혼자 튀어오르면 처치의 정지가 통째로 무너진다.
+    if (items) items.update(dt, preview.on || cleared);
+
     // ── 휘두름 소리 ──
     // ★스윙 번호가 올라가는 그 프레임에 낸다. 키를 누른 순간이 아니다.
     //   3연타 클립 하나에 스윙이 셋이라 키 입력에 맞추면 소리가 한 번만 나고,

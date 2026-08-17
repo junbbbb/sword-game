@@ -2756,7 +2756,9 @@ export function createEnemySystem(opts) {
         // 머리 위 체력 바를 띄운다. 맞은 놈만 1.2초. (죽으면 아래에서 despawn 되니 안 뜬다)
         e.pipT = PIP_SHOW;
         hits++;
-        const grp = e.grp;
+        // ★20차: isLeader 를 여기서 잡아 둔다. 아래 despawn 이 e.spot 을 지우므로
+        //   처치 콜백에서 읽으면 두목이 늘 졸개로 보인다(아이템 드랍 등급이 갈린다).
+        const grp = e.grp, isLeader = !!(e.spot && e.spot.leader);
         if (grp) aggroGroup(grp);                   // 맞으면 그 무리가 같이 온다
         // ★엡실론이 붙었다. 18차까지는 한 대가 0.5(IEEE754 정확값)라 3 - 0.5x6 = 0 이
         //   오차 없이 떨어졌는데, 흔들림·레벨이 붙으면서 그 보장이 사라졌다.
@@ -2828,7 +2830,9 @@ export function createEnemySystem(opts) {
           wiped = true;
           for (const s of grp.spots) if (s.enemy) { wiped = false; break; }
         }
-        onHit({ kill: killed, wiped, swing: swingId,
+        // ★20차. leader 한 칸만 늘렸다(새 콜백을 만들지 않는다). 아이템 드랍이
+        //   "두목은 더 좋은 걸 떨어뜨린다"를 이 한 글자로 가린다.
+        onHit({ kill: killed, wiped, swing: swingId, leader: isLeader,
                 x: hx, y: hy, z: hz,
                 nx: _cutW.x, ny: _cutW.y, nz: _cutW.z, kx, kz });
       }
@@ -3615,6 +3619,10 @@ export function createEnemySystem(opts) {
     // ★소수점이 생긴다. 겹쳐 맞을 때 흡수분만큼 깎여 8·2·2 처럼 들어가기 때문이다
     //   (아래 damagePlayer 의 새는 통). 화면에는 체력바 폭이라 눈에 안 띈다.
     get hp() { return +hp.toFixed(1); },
+    // ★20차. 회복 창구(물약). damagePlayer 에 음수를 넣는 길은 막혀 있고(그 클램프는
+    //   버그를 한 번 잡은 자리다) 막혀 있어야 맞다. **실제로 오른 만큼**을 돌려주므로
+    //   부르는 쪽이 "만피라 안 먹었다"를 그 수 하나로 안다(0 이면 안 썼다).
+    heal(n) { if (dead) return 0; const b = hp; hp = Math.min(PLAYER_MAX_HP, hp + Math.max(0, +n || 0)); return +(hp - b).toFixed(1); },
     get count() { return live.length; },
     get chasing() { let c = 0; for (const e of live) if (e.mode === 1) c++; return c; },
     // 두리번거리는 중인 놈 수. "숨었더니 정말 놓쳤나"를 숫자로 본다.
