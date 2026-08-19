@@ -3852,6 +3852,10 @@ function bootGate(rawDt) {
 // ★선언이 play() 보다 **앞**에 있어야 한다. 로딩 중 activateChar 가 play('Idle') 를
 //   부르는데, let 은 선언 전에 읽으면 ReferenceError 다(TDZ). 값은 파일 끝에서 채운다.
 let multi = null;
+// ★요괴 동기화(2단계 1차)도 같은 이유로 여기서 선언한다. 아래 enemies 의 onHit 이
+//   이 이름을 읽는데, 값을 채우는 자리는 파일 끝(멀티 기동부)이다. const 로 뒤에
+//   두면 그 사이에 칼이 한 번만 닿아도 TDZ 로 게임이 죽는다(ARROW_ON 에서 밟은 함정).
+let mpEnemy = null;
 // ★지금 도는 클립 이름. **play() 에 적어 두는 방식은 틀렸다** - 공격 셋(tryAttack·
 //   tryHeavy·tryWide)은 play() 를 거치지 않고 액션을 직접 조작한다(3연타를 내려면
 //   클립 시간을 단수 진입점으로 점프시켜야 해서다). 그래서 그 방식으로는 공격이
@@ -5111,6 +5115,20 @@ window.__arrows = arrows;
 // ═══════════════════════════════════════════════════════════════════════════
 const MP_FX_ON = true;     // false = 남의 이펙트가 통째로 안 생긴다(rig·화살 시스템도 안 만든다)
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ── 멀티 2단계 1차: 요괴를 방장 기준으로 하나로 ──
+// 방장 한 명만 enemy.js 를 굴리고(스폰·AI·이동·공격·피해), 참가자는 받은 상태를
+// **그림으로만** 그린다. 인디 스팀 멀티의 사실상 표준(방장 권위)이고, 스팀으로 가면
+// 이 구조 그대로 Steam Networking 을 탄다.
+//   · 방장 화면  = 혼자 하던 판과 한 글자도 안 다르다(+ 10Hz 송신 하나)
+//   · 참가자 화면 = 같은 요괴가 같은 자리에서 같이 죽는다. 아직 **때리지는 못한다**
+//     (참가자의 피해 판정은 2차 몫이다. 지금은 칼도 화살도 요괴를 못 건드린다)
+// ★★롤백 스위치는 아래 MP_ENEMY_ON **한 줄이고 정의는 여기 한 곳뿐이다.**
+//   false 면 mpenemy.js 를 아예 안 읽고 enemies.setNetMode 도 안 부른다 =
+//   요괴가 예전처럼 **각자 로컬**로 돌아간다(1단계 그대로).
+// ═══════════════════════════════════════════════════════════════════════════
+const MP_ENEMY_ON = true;
+
 // 원격 궤적 벌 수 상한. 지금 상정 인원이 2~4명이고, 한 벌이 약 27KB + 1 드로우콜이다.
 // 넘치면 **먼저 붙은 사람** 것을 지킨다(나중 사람은 아바타만 뜨고 이펙트가 없다).
 const MP_FX_MAX = 4;
@@ -5437,6 +5455,10 @@ const enemies = createEnemySystem({
   // 여기 한 줄 한 줄이 "처치하는 맛"이다. 순서에 뜻이 있다:
   //   멈춘다(히트스톱) -> 소리 -> 화면(참격 한 장·붓질·먹물). 소리가 늦으면 다 어긋난다.
   onHit: (h) => {
+    // ★멀티(방장)일 때만 값이 있다. **제일 먼저** 적는다 - 아래 연출 줄 중 하나가
+    //   던져도 "요괴가 맞았다"는 사실은 남에게 가야 한다. 혼자 하는 판에서는
+    //   mpEnemy 가 null 이라 비교 한 번으로 끝난다.
+    if (mpEnemy) mpEnemy.onHit(h);
     const sa = screenAngle(h.x, h.y, h.z, swingDir.x, swingDir.y, swingDir.z);
     // ★"N HIT" 은 여기서만 뜬다. 칼이 실제로 닿은 프레임이다.
     showHit();
@@ -5680,9 +5702,27 @@ ui.initUI();
   const _room = (_q.get('room') || '').trim();
   if (_room) {
     const _wp = new THREE.Vector3();
+    const _isHost = _q.get('host') === '1';
+    // ── 요괴를 방장 기준으로 하나로 (2단계 1차) ──
+    // ★모드를 **붙기 전에** 정한다. 공용 시그널링이라 방에 들어가는 데 십여 초가 걸리는데,
+    //   그 사이 참가자가 로컬 AI 로 요괴를 잡아 두면 붙는 순간 그게 전부 되살아난다
+    //   ("내가 잡은 게 살아났다" 로 보인다). 방장인지 참가자인지는 주소가 이미 안다.
+    if (MP_ENEMY_ON) {
+      const mpeMod = await import('./mpenemy.js' + location.search);
+      // ★층 이름은 getSelf 가 아바타 소식에 싣는 값과 **같은 식**이어야 한다.
+      //   두 곳이 어긋나면 "아바타는 경고가 뜨는데 요괴는 조용히 틀린" 판이 된다.
+      mpEnemy = mpeMod.createEnemySync({
+        enemies,
+        getMap: () => (IS_DUNGEON ? 'level2' : 'level1'),
+      });
+      enemies.setNetMode(_isHost ? 'host' : 'remote');
+    }
     const mpMod = await import('./mp.js' + location.search);
     multi = mpMod.createMultiplayer({
       THREE, scene, loader, glbUrl, CHAR_CFG, DEF_CFG,
+      // ★요괴 동기화. **스위치(MP_ENEMY_ON)의 정의는 위 한 곳**이고 mp.js 는
+      //   이 값이 null 인지만 본다(스위치를 두 벌 두면 반드시 어긋난다).
+      enemy: mpEnemy,
       // ★남의 공격 이펙트. **스위치(MP_FX_ON)의 정의는 main.js 한 곳**이고 mp.js 는
       //   이 값이 null 인지만 본다(스위치를 두 벌 두면 반드시 어긋난다).
       fx: mpFx,
@@ -5712,8 +5752,13 @@ ui.initUI();
         };
       },
     });
-    multi.start(_q.get('host') === '1' ? 'host' : 'join', _room)
-      .catch(e => console.warn('[mp] 연결 실패:', e && e.message));
+    multi.start(_isHost ? 'host' : 'join', _room)
+      .catch(e => {
+        console.warn('[mp] 연결 실패:', e && e.message);
+        // ★못 붙었으면 요괴를 내가 굴린다. 안 그러면 빈 들판에서 혼자 걷게 된다
+        //   (참가자 모드는 소식이 와야 요괴가 서는데, 올 데가 없다).
+        if (mpEnemy) enemies.setNetMode('local');
+      });
   }
 }
 

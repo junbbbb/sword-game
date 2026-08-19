@@ -1189,6 +1189,44 @@ const STUCK_WIN = 0.5;
 const STUCK_RATIO = 0.45;       // 절반도 못 갔으면 막힌 것으로 본다
 const SIDESTEP_T = 0.55;        // 옆걸음을 유지하는 시간
 
+// ---------------------------------------------------------------------------
+// ── 멀티: 요괴를 방장 기준으로 하나로 (2단계 1차) ──
+//
+// 이 파일이 아는 것은 셋뿐이다. ①내가 굴리는 쪽인가 그리는 쪽인가 ②상태를 어떻게
+// 숫자로 접는가 ③받은 숫자를 어떻게 세우는가. **언제 보낼지·누구에게 보낼지·
+// 얼마나 자주 보낼지는 mpenemy.js 가 정한다**(전송 정책은 그 파일 한 곳에 있다).
+//
+// ★스폰을 방송하지 않는다. 이 파일의 배치는 이미 **완전히 결정적**이기 때문이다 —
+//   자리(spot)는 맵 json 의 mobs[] 에서 나오고, 몸집·속도·체력·색은 전부
+//   hash1(spot.seed) 에서 나온다(Math.random 이 한 톨도 없다). 같은 맵이면 방장과
+//   참가자가 **같은 요괴를 같은 자리에** 만든다. 그래서 소식에는 "어느 자리가 지금
+//   살아 있고 어디에 서 있나"만 실으면 된다. 시드를 맞추는 수고도, 스폰 목록을
+//   보내는 대역폭도 둘 다 안 든다.
+// ★그 덕에 **신원(sid) = 자리 번호**다. 0 부터 센다. 요괴가 lastSwing:-1 로 태어나는
+//   것과 절대 안 겹친다(그 값과 비교하는 자리가 한 곳도 없다. 화살 id 를 -1 부터
+//   시작해 첫 발이 아무도 못 맞춘 21차 사고를 다시 밟지 않으려고 적어 둔다).
+//
+// 양자화(아래 상수)의 근거는 34m 쿼터뷰다. fov 20·거리 34 에서 월드 1m 는 화면
+// 약 27px 이므로 5cm = 1.4px, 2.8° 회전 = 고블린 어깨 폭 기준 1px 미만이다.
+// 눈에 안 보이는 자리에서 바이트를 아끼는 것이 요점이다.
+// ---------------------------------------------------------------------------
+const NET_POS_Q = 20;     // 좌표: 1/20m = 5cm 눈금. **집(spot.home) 기준 상대값**이라 대개 한두 바이트다
+const NET_YAW_Q = 128;    // 방위: 한 바퀴를 128 칸(2.81°)
+const NET_HP_Q = 4;       // 체력: 0.25핍 눈금. 한 대(0.5~0.96핍)가 늘 눈금 두 개 이상 움직인다
+const NET_STRIDE = 6;     // 개체 한 마리 = [sid, dx, dz, yaw, sa, hpq]
+const NET_EV_STRIDE = 12; // 사건 한 건 = [id, sid, kill, hx, hy, hz, dmg, nx, ny, nz, kx, kz]
+const NET_EV_Q = 20;      // 사건 좌표 눈금(5cm). 절단 법선·밀림 방향은 x100
+// 받은 자리를 따라붙는 속도(지수 감쇠). mp.js 의 아바타(16)와 같은 계열이되 한 단 빠르다 —
+// 요괴는 아바타보다 낮은 주기로 오므로 같은 값이면 눈에 띄게 처진다.
+const NET_LERP_K = 22;
+// ★외삽 상한(초). 마지막 두 소식으로 속도를 재서 그만큼 앞을 본다. 보간만 하면
+//   구조적으로 한 주기(100ms)만큼 뒤에 서게 되고, 요괴 추격 속도 2.5m/s 에서 그게
+//   25cm 다. 상한을 두는 이유는 방향이 꺾이는 순간 앞질러 나가지 않게 하려는 것이다.
+const NET_EXTRAP = 0.12;
+// 공격 클립이 도는 시간(초). 여태 update() 안에 식으로만 있던 값을 이름으로 꺼낸다 —
+// 참가자가 "공격이 얼마나 남았나"를 이 값으로 역산한다.
+const ATK_DUR = (ATK_TO - ATK_FROM) / ATK_TS;
+
 // 배치를 매번 똑같이 만들려고 Math.random 대신 쓴다.
 // 필드는 "어디에 뭐가 있다"를 외우는 곳이라 새로고침마다 달라지면 안 된다.
 function hash1(n) {
@@ -1298,6 +1336,11 @@ export function createEnemySystem(opts) {
       tx: 0, tz: 0,                // 직진이 아닐 때 향하는 경유점
       sideT: 0, sideS: 1,          // 옆걸음 잔여 시간 / 도는 방향(+1 우, -1 좌)
       wantD: 0, gotD: 0, chkT: 0,  // 막힘 감지: 내려던 거리 / 실제 간 거리 / 창 타이머
+      // ── 멀티(참가자에서만 산다) ──
+      // netOn = 방장 소식을 한 번이라도 받았나. netX/Z/Yaw = 마지막으로 받은 자리,
+      // netV* = 마지막 두 소식으로 잰 속도, netAge = 그 소식이 온 지 흐른 시간,
+      // wantEma = 화면에서 실제로 움직인 속도(클립 고르기의 근거).
+      netOn: false, netX: 0, netZ: 0, netYaw: 0, netVx: 0, netVz: 0, netAge: 0, wantEma: 0,
     });
   }
   const live = [];
@@ -2340,6 +2383,11 @@ export function createEnemySystem(opts) {
   if (!GROUPS.length) console.warn('[enemy] 무리 좌표를 못 받았다. 필드가 빈 채로 돈다.');
 
   const groups = [];
+  // ── 자리 번호(sid) ──
+  // 멀티에서 요괴를 가리키는 유일한 신원이다. 배치가 결정적이라 방장과 참가자가
+  // **같은 순서로 같은 자리**를 만든다 = 번호가 저절로 맞는다(맞추려고 보내는 값이 없다).
+  let sidN = 0;
+  const spotBySid = [];
   for (let gi = 0; gi < GROUPS.length; gi++) {
     const cfg = GROUPS[gi];
     const g = {
@@ -2357,13 +2405,16 @@ export function createEnemySystem(opts) {
     for (let k = 0; k < cfg.count; k++) {
       const ang = (k / cfg.count) * Math.PI * 2 + gi * 0.7;
       const rr = cfg.radius * (0.45 + 0.55 * hash1(gi * 31 + k));
-      g.spots.push({
+      const s = {
         home: homeAt(g.cx + Math.cos(ang) * rr, g.cz + Math.sin(ang) * rr),
         // 무리마다 한 마리는 두목이다. 크고 단단해서 어느 놈을 먼저 벨지 고르게 된다.
         leader: k === 0,
         seed: gi * 101 + k * 17,
         enemy: null,
-      });
+        sid: sidN++, g,          // 멀티 신원과 소속(참가자가 이 자리를 되살릴 때 쓴다)
+      };
+      g.spots.push(s);
+      spotBySid[s.sid] = s;
     }
     groups.push(g);
   }
@@ -2394,6 +2445,8 @@ export function createEnemySystem(opts) {
     e.flash = 0; e.kbT = 0; e.sqT = 0; e.kb.set(0, 0, 0);
     e.atkCd = 0.3 + hash1(spot.seed + 21) * 0.6;
     e.lastSwing = -1;
+    // 풀에서 돌려받은 몸이라 지난 판의 멀티 상태가 남아 있을 수 있다(참가자에서만 쓴다)
+    e.netOn = false; e.netVx = 0; e.netVz = 0; e.netAge = 0; e.wantEma = 0;
     e.atkT = 0; e.hitT = -1;
     e.wndT = 0; e.stunT = 0; e.pipT = 0;
     // 경로 재계산 시각을 개체마다 어긋나게 둔다(한 프레임에 40마리가 몰리면 튄다)
@@ -2774,6 +2827,9 @@ export function createEnemySystem(opts) {
         // ★20차: isLeader 를 여기서 잡아 둔다. 아래 despawn 이 e.spot 을 지우므로
         //   처치 콜백에서 읽으면 두목이 늘 졸개로 보인다(아이템 드랍 등급이 갈린다).
         const grp = e.grp, isLeader = !!(e.spot && e.spot.leader);
+        // ★멀티 신원도 같이 잡아 둔다(아래 despawn 이 e.spot 을 지운다 - isLeader 와 같은 이유).
+        //   -1 = 자리 없는 개체. 소식으로 나가는 값이라 여기서 한 번만 읽는다.
+        const eSid = e.spot ? e.spot.sid : -1;
         if (grp) aggroGroup(grp);                   // 맞으면 그 무리가 같이 온다
         // ★엡실론이 붙었다. 18차까지는 한 대가 0.5(IEEE754 정확값)라 3 - 0.5x6 = 0 이
         //   오차 없이 떨어졌는데, 흔들림·레벨이 붙으면서 그 보장이 사라졌다.
@@ -2847,7 +2903,11 @@ export function createEnemySystem(opts) {
         }
         // ★20차. leader 한 칸만 늘렸다(새 콜백을 만들지 않는다). 아이템 드랍이
         //   "두목은 더 좋은 걸 떨어뜨린다"를 이 한 글자로 가린다.
+        // ★sid·dmg 두 칸이 늘었다(2단계 1차). 새 콜백을 만들지 않는다 - 이 한 통로가
+        //   "칼이 닿은 그 프레임" 의 유일한 출구이고, 멀티 소식도 같은 사건이기 때문이다.
+        //   dmg 는 **화면에 뜨는 수**(x DMG_SHOW)다. 참가자가 같은 수를 띄운다.
         onHit({ kill: killed, wiped, swing: swingId, leader: isLeader,
+                sid: eSid, dmg: dmg * DMG_SHOW,
                 x: hx, y: hy, z: hz,
                 nx: _cutW.x, ny: _cutW.y, nz: _cutW.z, kx, kz });
       }
@@ -2889,6 +2949,10 @@ export function createEnemySystem(opts) {
   // 돌려주는 값 = 이번에 실제로 맞은 마릿수.
   function hitSegment(a, b, opts) {
     if (!a || !b) return 0;
+    // ★참가자는 요괴를 못 때린다(2단계 1차의 범위). 칼은 update() 가 위에서 갈려
+    //   애초에 doHits 까지 안 가지만, 화살은 arrow.js 가 **매 프레임 직접** 부르므로
+    //   여기서 막지 않으면 궁수 참가자만 혼자 요괴를 잡는다.
+    if (netMode === 2) return 0;
     const o = opts || {};
     const sSwing = swingId, sKind = atkKind, sCap = hitCap;
     _sPrevA.copy(_prevA); _sPrevB.copy(_prevB);
@@ -3083,7 +3147,10 @@ export function createEnemySystem(opts) {
   }
 
   function respawnPlayer() {
-    resetField();
+    // ★참가자는 들판을 안 건드린다. 요괴는 방장 것이라, 여기서 다시 깔면 방장이 이미
+    //   잡은 놈까지 되살아났다가 다음 전수 소식(1초 안)에 도로 사라진다 = 1초짜리 유령.
+    //   R 재시작·사망 부활 둘 다 이 한 줄을 지난다.
+    if (netMode !== 2) resetField();
     hp = PLAYER_MAX_HP;
     dead = false;
     iframe = 1.2;                  // 되살아난 직후 보호. 위 PLAYER_IFRAME 과 별개다
@@ -3096,6 +3163,351 @@ export function createEnemySystem(opts) {
   }
 
   // -------------------------------------------------------------------------
+  // 예비 자세가 끝나는 그 프레임에 Attack 클립을 건다.
+  // ★방장(update 의 wndT 블록)과 참가자(netApply)가 **같은 함수**를 쓴다. 두 벌로
+  //   두면 한쪽만 고쳐져서 "내 화면에서만 다르게 휘두른다"가 조용히 생긴다.
+  function startAttackClip(e) {
+    if (!e.vis || !e.vis.act.Attack) return;
+    const av = e.vis.act.Attack;
+    av.reset();
+    av.time = ATK_FROM;
+    av.setEffectiveTimeScale(ATK_TS);
+    av.play();
+    if (e.vis.cur && e.vis.cur !== av) e.vis.cur.crossFadeTo(av, 0.08, false);
+    e.vis.cur = av;
+  }
+
+  // -------------------------------------------------------------------------
+  // ── 멀티: 방장이 굴리고 참가자는 그린다 (2단계 1차) ──
+  // 위 NET_* 상수 머리 주석이 정본이다. 여기 있는 것은 그 규약의 구현 넷뿐이다:
+  //   netScan  (방장) 살아 있는 놈을 **훑어서** 정수 평면 배열로 접는다
+  //   netApply (참가자) 받은 배열대로 자리를 세운다 + 없는 놈을 지운다
+  //   netEvent (참가자) 타격·처치 한 건을 그림으로 낸다
+  //   netStep  (참가자) 매 프레임 보간·타이머
+  // -------------------------------------------------------------------------
+  let netMode = 0;                 // 0 = 혼자/평시, 1 = 방장, 2 = 참가자(그림만)
+  let netApplied = 0, netUnknown = 0, netSpawned = 0, netCulled = 0, netEvN = 0;
+  let netSeen = null;
+  const _netP = new THREE.Vector3();
+
+  // 각도는 짧은 쪽으로 돈다(안 그러면 뒤돌 때 한 바퀴를 그린다)
+  function angTo(a, b, t) {
+    let d = b - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return a + d * t;
+  }
+
+  // ★**훑어서 만든다.** "바뀔 때 한 번 적어 두기" 는 자리를 빠뜨리면 조용히 틀린다
+  //   (팀원 공격이 안 보였던 22차 사고의 원인이 그것이다). 매 송신마다 살아 있는
+  //   목록을 처음부터 다시 훑으므로 빠뜨릴 자리 자체가 없다.
+  // aoi = [x,z, x,z, ...] 사람들이 서 있는 자리. r2 < 0 이면 관심 영역 없이 전부 담는다.
+  function netScan(out, aoi, r2) {
+    out.length = 0;
+    for (let i = 0; i < live.length; i++) {
+      const e = live[i];
+      const s = e.spot;
+      if (!s) continue;
+      if (r2 >= 0) {
+        let near = false;
+        for (let k = 0; k + 1 < aoi.length; k += 2) {
+          const dx = e.pos.x - aoi[k], dz = e.pos.z - aoi[k + 1];
+          if (dx * dx + dz * dz <= r2) { near = true; break; }
+        }
+        if (!near) continue;
+      }
+      // 예비 자세·공격은 **남은 시간**을 3비트로 접는다. 참가자는 그 사이를 자기
+      // 프레임으로 이어 굴리므로(netStep) 눈금이 굵어도 램프가 안 끊긴다.
+      const wnd = e.wndT > 0 ? 1 + Math.min(6, (e.wndT / ATK_WIND * 7) | 0) : 0;
+      const atk = e.atkT > 0 ? 1 + Math.min(6, (e.atkT / ATK_DUR * 7) | 0) : 0;
+      out.push(
+        s.sid,
+        Math.round((e.pos.x - s.home.x) * NET_POS_Q),
+        Math.round((e.pos.z - s.home.z) * NET_POS_Q),
+        Math.round(e.yaw / (Math.PI * 2) * NET_YAW_Q) & (NET_YAW_Q - 1),
+        wnd | (atk << 3) | ((e.stunT > 0 ? 1 : 0) << 6),
+        Math.max(0, Math.round(e.hp * NET_HP_Q)));
+    }
+    return out;
+  }
+
+  // full = 이 소식이 **살아 있는 전원**을 담고 있나. 전수일 때만 목록에서 빠진 놈을 지운다
+  // (관심 영역만 담긴 소식으로 지우면 멀리 있는 무리가 통째로 사라진다).
+  function netApply(d, full) {
+    if (netMode !== 2) return;
+    netApplied++;
+    if (full) {
+      if (!netSeen || netSeen.length < spotBySid.length) netSeen = new Uint8Array(spotBySid.length + 64);
+      netSeen.fill(0);
+    }
+    for (let o = 0; o + NET_STRIDE <= d.length; o += NET_STRIDE) {
+      const sid = d[o];
+      const s = spotBySid[sid];
+      if (!s) { netUnknown++; continue; }
+      if (full) netSeen[sid] = 1;
+      let e = s.enemy;
+      let fresh = false;
+      if (!e) {
+        // 방장에게는 있는데 나에게는 없던 놈. 배치가 결정적이라 **같은 몸집·같은
+        // 체력·같은 색**으로 선다(스폰 소식을 안 보내는 근거가 이것이다).
+        e = spawnAt(s, s.g);
+        if (!e) continue;
+        netSpawned++; fresh = true;
+      }
+      const nx = s.home.x + d[o + 1] / NET_POS_Q;
+      const nz = s.home.z + d[o + 2] / NET_POS_Q;
+      // 마지막 두 소식으로 속도를 잰다. 너무 오래된 소식과의 차는 속도가 아니다
+      // (관심 영역 밖에 있다 돌아온 놈은 몇 미터를 건너뛴 것처럼 보인다).
+      if (!fresh && e.netOn && e.netAge > 1e-3 && e.netAge < 0.25) {
+        e.netVx = (nx - e.netX) / e.netAge;
+        e.netVz = (nz - e.netZ) / e.netAge;
+        const vl = Math.hypot(e.netVx, e.netVz);
+        if (vl > 4) { e.netVx = e.netVx / vl * 4; e.netVz = e.netVz / vl * 4; }
+      } else { e.netVx = 0; e.netVz = 0; }
+      e.netX = nx; e.netZ = nz;
+      e.netYaw = d[o + 3] / NET_YAW_Q * Math.PI * 2;
+      const sa = d[o + 4];
+      const wnd = sa & 7, atk = (sa >> 3) & 7;
+      e.wndT = wnd ? (wnd - 0.5) / 7 * ATK_WIND : 0;
+      const wasAtk = e.atkT > 0;
+      e.atkT = atk ? (atk - 0.5) / 7 * ATK_DUR : 0;
+      if (e.atkT > 0 && !wasAtk) startAttackClip(e);
+      // 경직은 남은 시간을 안 보낸다(1비트). 반 박자만 세워 두면 다음 소식이 잇는다.
+      if ((sa >> 6) & 1) { if (e.stunT <= 0) e.stunT = HIT_STUN * 0.5; } else e.stunT = 0;
+      e.hp = d[o + 5] / NET_HP_Q;
+      e.netAge = 0;
+      if (fresh || !e.netOn) {
+        // 첫 소식이면 순간이동으로 자리를 잡는다(안 그러면 집에서 걸어 나오는 그림이 된다)
+        e.pos.x = nx; e.pos.z = nz; e.yaw = e.netYaw;
+        e.pos.y = LV.groundY(nx, nz);
+        e.wantEma = 0;
+      }
+      e.netOn = true;
+    }
+    if (full) {
+      // 방장 목록에 없는 놈은 내 화면에서도 없어야 한다. **처치 소식을 놓친 자리의
+      // 자가 치유**다 — 시체 없이 조용히 사라진다(유령이 남는 것보다 낫다).
+      for (let i = live.length - 1; i >= 0; i--) {
+        const e = live[i];
+        if (e.spot && !netSeen[e.spot.sid]) { despawn(i); netCulled++; }
+      }
+    }
+  }
+
+  // 타격·처치 한 건. ev = { sid, kill, dmg, hx,hy,hz, nx,ny,nz, kx,kz }
+  // ★여기서 하는 일은 **그림뿐**이다. 처치 수도 안 세고, 아이템도 안 떨어뜨리고,
+  //   히트스톱·카메라 펀치도 안 건다(그건 때린 사람의 손맛이지 보는 사람 것이 아니다).
+  function netEvent(ev) {
+    if (netMode !== 2) return false;
+    const s = spotBySid[ev.sid];
+    if (!s || !s.enemy) return false;
+    const e = s.enemy;
+    netEvN++;
+    if (ev.dmg > 0) {
+      // 칼이 닿은 그 점 위에 뜬다(방장 화면과 같은 자리·같은 수)
+      spawnDmgPop(ev.hx, ev.hy + DMG_ANCHOR_Y, ev.hz, ev.dmg, !!ev.kill);
+      // 바는 다음 소식을 기다리지 않고 바로 준다. 어차피 다음 소식이 다시 맞춘다.
+      e.hp = Math.max(0, e.hp - ev.dmg / DMG_SHOW);
+    }
+    if (ev.kill) {
+      const idx = live.indexOf(e);
+      const vis = e.vis;
+      e.vis = null;
+      _netP.set(ev.hx, ev.hy, ev.hz);
+      spawnCorpse(vis, e, ev.nx, ev.ny, ev.nz, _netP, ev.kx, ev.kz);
+      if (idx >= 0) despawn(idx);
+    } else {
+      e.flash = 1;
+      e.pipT = PIP_SHOW;
+      e.sqT = SQUASH_T;
+      e.stunT = HIT_STUN;
+      // ★넉백을 좌표에 더하지 않는다. 자리는 방장이 정한다 — 여기서 밀면 다음 소식과
+      //   싸워서 요괴가 떤다. kb 는 경직 반동이 **기우는 방향**으로만 쓴다.
+      e.kb.set(ev.kx, 0, ev.kz);
+    }
+    return true;
+  }
+
+  // 참가자의 매 프레임. 받은 자리로 따라붙고 타이머를 굴린다.
+  function netStep(dt) {
+    const k = 1 - Math.exp(-NET_LERP_K * dt);
+    for (let i = 0; i < live.length; i++) {
+      const e = live[i];
+      if (!e.netOn) continue;
+      e.netAge += dt;
+      const ex = Math.min(e.netAge, NET_EXTRAP);
+      const tx = e.netX + e.netVx * ex, tz = e.netZ + e.netVz * ex;
+      const ox = e.pos.x, oz = e.pos.z;
+      e.pos.x += (tx - e.pos.x) * k;
+      e.pos.z += (tz - e.pos.z) * k;
+      e.yaw = angTo(e.yaw, e.netYaw, k);
+      // 높이는 **안 받는다.** 같은 맵이라 여기서 그대로 나온다(방장 판과 같은 규칙·같은 식).
+      const gy = LV.groundY(e.pos.x, e.pos.z);
+      if (e.pos.y !== gy) {
+        e.pos.y += (gy - e.pos.y) * Math.min(1, dt * 16);
+        if (Math.abs(gy - e.pos.y) < 0.002) e.pos.y = gy;
+      }
+      // ★클립을 고르는 근거(want)도 **안 받는다.** 화면에서 실제로 움직인 거리에서
+      //   뽑으므로, 보이는 속도와 발 속도가 구조적으로 어긋날 수가 없다(발 미끄러짐 0).
+      //   튀는 값을 EMA 로 눕힌다(0.12초).
+      const spd = Math.hypot(e.pos.x - ox, e.pos.z - oz) / Math.max(1e-4, dt);
+      e.wantEma += (spd - e.wantEma) * Math.min(1, dt / 0.12);
+      e.want = (e.stunT > 0 || e.atkT > 0 || e.wndT > 0) ? 0 : e.wantEma;
+      // 타이머는 내 프레임으로 흐르고, 소식이 올 때마다 다시 맞춰진다
+      if (e.wndT > 0) e.wndT -= dt;
+      if (e.atkT > 0) e.atkT -= dt;
+      if (e.stunT > 0) e.stunT -= dt;
+      if (e.pipT > 0) e.pipT -= dt;
+      e.flash -= dt * FLASH_DECAY; if (e.flash < 0) e.flash = 0;
+      if (flashHold >= 0) e.flash = flashHold;
+    }
+  }
+
+  // ── 몸 세우기 · 클립 고르기 (방장·참가자 공통) ──
+  // ★update() 안에 있던 블록을 **그대로** 꺼냈다(들여쓰기까지 글자가 같다).
+  //   참가자(그림만 그리는 판)가 같은 그림을 그려야 하는데, 두 벌로 두면 한쪽만
+  //   고쳐져서 두 화면이 조용히 갈린다.
+  //   n(= live.length)은 여기서 다시 잡는다 - 부르는 자리 둘 다 그 시점의 live 길이다.
+  // ★아래 stepTail 안에는 "매 프레임 도는 자리에서는 바깥 이름을 아예 안 부른다"는
+  //   옛 주석이 있다(stepWarm 사고 기록). 이 두 함수가 그 원칙을 **깨는** 것은 사실이라
+  //   적어 둔다 - 대신 지켜야 할 것을 바꿨다: 이 파일을 손댈 때는 **한 번에 통째로**
+  //   저장한다(반쪽 저장본이 브라우저에 걸리는 것이 그 사고의 진짜 원인이었다).
+  //   두 화면이 다른 그림을 그리는 위험이 그보다 크다고 판단했다.
+  function renderBodies(dt) {
+    const n = live.length;
+    // ── 몸 세우기 · 클립 고르기 ──
+    for (let i = 0; i < n; i++) {
+      const e = live[i];
+      const v = e.vis;
+      if (!v) continue;                                   // 풀이 모자라 몸이 없는 개체(방어)
+      // 튀어나오듯 커진다. 뼈가 있는 지금도 이건 남긴다(리스폰 순간이 눈에 보여야 한다).
+      const pop = Math.min(1, (T - e.spawnT) * 3.5);
+      v.grp.position.set(e.pos.x, e.pos.y, e.pos.z);
+      v.grp.rotation.set(0, e.yaw, 0);
+      // ── 경직 반동 ──
+      // 비치명 명중 60ms 동안 세로로 눌리고 가로로 퍼진다 + 밀리는 쪽으로 살짝 젖혀진다.
+      // "맞았다"를 몸으로 알리는 신호다. 흰 번쩍임만으론 재질 하나만 바뀌어서 약하다.
+      const base = K_H * e.size * pop;
+      // ── ★예비 자세 (공격 예고) ──
+      // 몸을 뒤로 젖히며 세로로 늘어난다. 34m 에서 읽히는 건 색이 아니라 **실루엣**이다.
+      // u 는 0(막 시작) -> 1(터지기 직전).
+      const wu = e.wndT > 0 ? 1 - e.wndT / ATK_WIND : 0;
+      if (e.sqT > 0) {
+        e.sqT -= dt;
+        const q = Math.max(0, e.sqT / SQUASH_T);          // 1 -> 0
+        const k = Math.sin(q * Math.PI * 0.85);           // 붙었다 풀린다
+        // ★반동 깊이 (17차). 0.12/0.15 -> 0.17/0.21. 34m 쿼터뷰에서 고블린 실루엣 세로가
+        //   80px 남짓이라 15% 는 12px 이고, 그게 100ms 안에 들어갔다 나온다 = 거의 안 보인다.
+        //   21% 면 17px 이라 눌린 프레임이 실루엣으로 읽힌다. 몸집(base)에 곱해지므로
+        //   큰 놈일수록 크게 눌린다(무게 차이가 저절로 난다).
+        v.grp.scale.set(base * (1 + 0.17 * k), base * (1 - 0.21 * k), base * (1 + 0.17 * k));
+        // 젖힘: 밀려나는 방향(kb)으로 상체가 넘어간다. ★0.22 -> 0.32rad(약 18도).
+        //   실루엣이 기우는 건 스케일보다 훨씬 멀리서도 읽힌다.
+        const kl = Math.hypot(e.kb.x, e.kb.z);
+        if (kl > 1e-4) {
+          v.grp.rotation.set(0, e.yaw, 0);
+          v.grp.rotateOnWorldAxis(_lean.set(-e.kb.z / kl, 0, e.kb.x / kl), 0.32 * k);
+        }
+      } else if (wu > 0) {
+        // 세로 +11% / 가로 -5% 로 "치켜든다". 그리고 뒤로 0.16rad 젖힌다.
+        v.grp.scale.set(base * (1 - 0.05 * wu), base * (1 + 0.11 * wu), base * (1 - 0.05 * wu));
+        v.grp.rotation.set(0, e.yaw, 0);
+        // 젖히는 축 = 보는 방향의 오른쪽(= 뒤로 눕는다)
+        v.grp.rotateOnWorldAxis(_lean.set(Math.cos(e.yaw), 0, -Math.sin(e.yaw)), -0.16 * wu);
+      } else {
+        v.grp.scale.setScalar(base);
+      }
+      // ── 자체발광 두 갈래 ──
+      // ★흰색 setScalar 를 버렸다. 전신이 흰 덩어리가 되면 형태가 지워진다
+      //   (건틀릿 캐릭터 심사관이 보스에게 같은 지적을 했다: "전신 플랫 주황").
+      //   피격 = 주홍 · 공격 예고 = 호박. 색이 갈려야 둘이 각각 읽힌다.
+      //   가산이라 G·B 의 명암(= 셰이딩)은 그대로 남는다.
+      // ★단, 가산도 **몸 색보다 크면** 명암이 뭉갠다. 세기 상한은 FLASH_R/G/B
+      //   선언부 주석 참조(선형 HDR · ACES 무릎 · 블룸 임계 1.02).
+      const wg = wu > 0 ? Math.pow(Math.max(0, (wu - 0.5) / 0.5), 1.6) : 0;   // 끝 절반에서만 번득인다
+      v.mat.emissive.setRGB(
+        e.flash * FLASH_R + wg * WIND_R,
+        e.flash * FLASH_G + wg * WIND_G,
+        e.flash * FLASH_B + wg * WIND_B);
+      // ── 클립 ──
+      // ★재생속도 = 이동속도 / 그 클립의 접지 발 속도. 이래야 발이 안 미끄러진다.
+      //   발 속도는 키에 비례하므로 개체 몸집(e.h)으로 환산한다.
+      if (e.atkT > 0) {
+        // 공격 중. 위에서 이미 클립을 걸었다.
+      } else if (e.want > 1.05) {
+        playClip(v, 'Run', e.want / (RUN_FOOT * e.h / GOB_H));
+      } else if (e.want > 0.05) {
+        playClip(v, 'Walk', e.want / (WALK_FOOT * e.h / GOB_H));
+      } else {
+        playClip(v, 'Idle', 1);
+      }
+      // ★경직 중에는 클립을 거의 세운다. 맞은 자세로 멎고 몸만 밀려나는 그림이
+      //   "때렸다"를 제일 강하게 만든다(0 으로 완전히 세우면 뻣뻣해서 STUN_TS 만큼만).
+      v.mixer.update(e.stunT > 0 ? dt * STUN_TS : dt);
+      // 가짜 그림자
+      // ★맵 바닥이 0.02 다. 그림자를 0.02 에 두면 바닥과 완전히 같은 높이라
+      //   z-fighting 으로 지글거린다. 2.5cm 띄운다.
+      _v2.set(e.pos.x, e.pos.y + 0.025, e.pos.z);
+      const sh = e.size * pop * 0.42;
+      _sc.set(sh, 1, sh);
+      _mat.compose(_v2, _q2.identity(), _sc);
+      shadowMesh.setMatrixAt(i, _mat);
+      shAttr.setX(i, pop);
+    }
+    shadowMesh.count = n;
+    shadowMesh.instanceMatrix.needsUpdate = true;
+    shAttr.needsUpdate = true;
+  }
+
+  // ── 매 프레임 마무리 (방장·참가자 공통) ──
+  // 시체·먹·데미지 숫자·머리 위 판·예열 거두기·플레이어 상태. 요괴를 누가 굴리든
+  // 이 여섯은 늘 돌아야 한다(참가자도 자기 체력·부활은 자기가 센다).
+  function stepTail(dt) {
+    updateCorpses(dt);
+    updateInk(dt);
+    // ★게임시계로 늙는다. 위 update 는 ctx.paused 면 통째로 일찍 빠져나가고, 히트스톱은
+    //   main.js 가 dt 를 0 쪽으로 눌러서 넣으므로 둘 다 여기서 저절로 붙들린다.
+    updateDmgPops(dt);
+    updatePlates();
+
+    // ── 예열 판 거두기 (6프레임이면 확실히 한 번은 그려졌다) ──
+    // ★예전엔 stepWarm() 이라는 **별도 함수 호출**이었다. 2026-08-10 지형 정찰에서
+    //   `stepWarm is not defined` 가 프레임마다 터져 렌더 루프가 통째로 죽은 배치가
+    //   한 번 나왔다(1207회 연속, 캔버스 사망 / handoff_terrain.md 1장).
+    //   코드는 호이스팅되는 함수 선언이라 정적으로는 성립하고, 리로드 10회 재현에서도
+    //   0건이었다. 원인은 **여러 에이전트가 같은 파일을 동시에 고치는 동안 브라우저가
+    //   중간 상태를 받은 것**이다 - 호출은 들어갔는데 정의는 아직 안 들어간 저장본은
+    //   문법이 멀쩡해서 그대로 로드된다(모듈 URL 캐시 때문에 나중까지 되살아난다).
+    //   그래서 매 프레임 도는 자리에서는 바깥 이름을 아예 안 부른다. 한 덩어리라
+    //   "반쪽만 반영된 상태" 자체가 생길 수 없다.
+    // ★거두기가 실패해도 렌더 루프는 못 멈춘다. 최악이 1e-3 크기(1픽셀 미만)
+    //   메시 한 벌이 남는 것이라, 화면 전체와 바꿀 값이 아니다.
+    if (warmObj && --warmLeft <= 0) {
+      const w = warmObj;
+      warmObj = null;
+      try {
+        if (w.twin.parent) w.twin.parent.remove(w.twin);
+        w.v.mesh.frustumCulled = true;     // 빌려 쓴 값은 원래대로 돌려놓는다
+        giveVis(w.v);                      // 재질도 여기서 원본으로 되돌아간다
+        if (DEV) console.log('[enemy] 두 동강 재질 예열 완료');
+      } catch (e) {
+        console.warn('[enemy] 예열 판 거두기 실패(연출만 손해다)', e);
+      }
+    }
+
+    // ── 플레이어 상태 ──
+    if (iframe > 0) iframe -= dt;
+    if (iframeDash > 0) iframeDash -= dt;
+    // 새는 통. 최근에 받은 피해가 이 속도로 빠져나가고, 남아 있는 만큼이 다음
+    // 타격을 흡수한다(= 겹쳐 맞아도 초당 총량이 DMG_LEAK 을 못 넘는다).
+    if (dmgBucket > 0) { dmgBucket -= DMG_LEAK * dt; if (dmgBucket < 0) dmgBucket = 0; }
+    if (hurtFlash > 0) {
+      hurtFlash -= dt * 3.2;
+      hurtEl.style.opacity = Math.max(0, hurtFlash * 0.75).toFixed(3);
+    }
+    if (dead && T >= deadUntil) respawnPlayer();
+    syncHud();
+  }
   // -------------------------------------------------------------------------
   // 경로 재계산 (개체 하나)
   // ★여기가 길찾기의 전부다. 순서가 곧 우선순위다.
@@ -3116,7 +3528,24 @@ export function createEnemySystem(opts) {
   const LEASH2 = LEASH_DIST * LEASH_DIST;
   const AGGRO2 = AGGRO_RADIUS * AGGRO_RADIUS;
 
+  // ── 참가자의 한 프레임 (그림만 그린다) ──
+  // 스폰·AI·이동·피해 판정이 전부 없다. 있는 것은 ①받은 자리로 따라붙기
+  // ②몸 세우기 ③마무리(시체·먹·숫자·판·내 체력) 셋뿐이고, ②③은 방장 판과 **같은 함수**다.
+  function updateRemote(dt, ctx) {
+    // 정지 중에는 아무것도 안 굴린다. 방장 판과 달리 칼 선분을 따라갈 이유가 없다 —
+    // 판정을 아예 안 하기 때문이다.
+    if (ctx.paused) return;
+    T += dt;
+    stepSnap(dt);          // 공격 방향 스냅은 내 몸 이야기라 그대로 돈다
+    netStep(dt);
+    renderBodies(dt);
+    stepTail(dt);
+  }
+
   function update(dt, ctx) {
+    // ★참가자는 여기서 갈린다. 아래 한 줄 위로는 방장·혼자 하는 판과 **한 글자도**
+    //   다르지 않다(netMode 는 ?room 이 붙은 판에서만 2 가 된다).
+    if (netMode === 2) { updateRemote(dt, ctx); return; }
     const player = getPlayerPos();
     const a = ctx.a, b = ctx.b;
 
@@ -3312,17 +3741,9 @@ export function createEnemySystem(opts) {
         e.wndT -= dt;
         if (e.wndT <= 0) {
           e.wndT = 0;
-          e.atkT = (ATK_TO - ATK_FROM) / ATK_TS;
+          e.atkT = ATK_DUR;
           e.hitT = ATK_HIT_T;
-          if (e.vis && e.vis.act.Attack) {
-            const av = e.vis.act.Attack;
-            av.reset();
-            av.time = ATK_FROM;
-            av.setEffectiveTimeScale(ATK_TS);
-            av.play();
-            if (e.vis.cur && e.vis.cur !== av) e.vis.cur.crossFadeTo(av, 0.08, false);
-            e.vis.cur = av;
-          }
+          startAttackClip(e);
         }
       }
 
@@ -3532,133 +3953,9 @@ export function createEnemySystem(opts) {
       e.pos.x = s.x; e.pos.z = s.z;
     }
 
-    // ── 몸 세우기 · 클립 고르기 ──
-    for (let i = 0; i < n; i++) {
-      const e = live[i];
-      const v = e.vis;
-      if (!v) continue;                                   // 풀이 모자라 몸이 없는 개체(방어)
-      // 튀어나오듯 커진다. 뼈가 있는 지금도 이건 남긴다(리스폰 순간이 눈에 보여야 한다).
-      const pop = Math.min(1, (T - e.spawnT) * 3.5);
-      v.grp.position.set(e.pos.x, e.pos.y, e.pos.z);
-      v.grp.rotation.set(0, e.yaw, 0);
-      // ── 경직 반동 ──
-      // 비치명 명중 60ms 동안 세로로 눌리고 가로로 퍼진다 + 밀리는 쪽으로 살짝 젖혀진다.
-      // "맞았다"를 몸으로 알리는 신호다. 흰 번쩍임만으론 재질 하나만 바뀌어서 약하다.
-      const base = K_H * e.size * pop;
-      // ── ★예비 자세 (공격 예고) ──
-      // 몸을 뒤로 젖히며 세로로 늘어난다. 34m 에서 읽히는 건 색이 아니라 **실루엣**이다.
-      // u 는 0(막 시작) -> 1(터지기 직전).
-      const wu = e.wndT > 0 ? 1 - e.wndT / ATK_WIND : 0;
-      if (e.sqT > 0) {
-        e.sqT -= dt;
-        const q = Math.max(0, e.sqT / SQUASH_T);          // 1 -> 0
-        const k = Math.sin(q * Math.PI * 0.85);           // 붙었다 풀린다
-        // ★반동 깊이 (17차). 0.12/0.15 -> 0.17/0.21. 34m 쿼터뷰에서 고블린 실루엣 세로가
-        //   80px 남짓이라 15% 는 12px 이고, 그게 100ms 안에 들어갔다 나온다 = 거의 안 보인다.
-        //   21% 면 17px 이라 눌린 프레임이 실루엣으로 읽힌다. 몸집(base)에 곱해지므로
-        //   큰 놈일수록 크게 눌린다(무게 차이가 저절로 난다).
-        v.grp.scale.set(base * (1 + 0.17 * k), base * (1 - 0.21 * k), base * (1 + 0.17 * k));
-        // 젖힘: 밀려나는 방향(kb)으로 상체가 넘어간다. ★0.22 -> 0.32rad(약 18도).
-        //   실루엣이 기우는 건 스케일보다 훨씬 멀리서도 읽힌다.
-        const kl = Math.hypot(e.kb.x, e.kb.z);
-        if (kl > 1e-4) {
-          v.grp.rotation.set(0, e.yaw, 0);
-          v.grp.rotateOnWorldAxis(_lean.set(-e.kb.z / kl, 0, e.kb.x / kl), 0.32 * k);
-        }
-      } else if (wu > 0) {
-        // 세로 +11% / 가로 -5% 로 "치켜든다". 그리고 뒤로 0.16rad 젖힌다.
-        v.grp.scale.set(base * (1 - 0.05 * wu), base * (1 + 0.11 * wu), base * (1 - 0.05 * wu));
-        v.grp.rotation.set(0, e.yaw, 0);
-        // 젖히는 축 = 보는 방향의 오른쪽(= 뒤로 눕는다)
-        v.grp.rotateOnWorldAxis(_lean.set(Math.cos(e.yaw), 0, -Math.sin(e.yaw)), -0.16 * wu);
-      } else {
-        v.grp.scale.setScalar(base);
-      }
-      // ── 자체발광 두 갈래 ──
-      // ★흰색 setScalar 를 버렸다. 전신이 흰 덩어리가 되면 형태가 지워진다
-      //   (건틀릿 캐릭터 심사관이 보스에게 같은 지적을 했다: "전신 플랫 주황").
-      //   피격 = 주홍 · 공격 예고 = 호박. 색이 갈려야 둘이 각각 읽힌다.
-      //   가산이라 G·B 의 명암(= 셰이딩)은 그대로 남는다.
-      // ★단, 가산도 **몸 색보다 크면** 명암이 뭉갠다. 세기 상한은 FLASH_R/G/B
-      //   선언부 주석 참조(선형 HDR · ACES 무릎 · 블룸 임계 1.02).
-      const wg = wu > 0 ? Math.pow(Math.max(0, (wu - 0.5) / 0.5), 1.6) : 0;   // 끝 절반에서만 번득인다
-      v.mat.emissive.setRGB(
-        e.flash * FLASH_R + wg * WIND_R,
-        e.flash * FLASH_G + wg * WIND_G,
-        e.flash * FLASH_B + wg * WIND_B);
-      // ── 클립 ──
-      // ★재생속도 = 이동속도 / 그 클립의 접지 발 속도. 이래야 발이 안 미끄러진다.
-      //   발 속도는 키에 비례하므로 개체 몸집(e.h)으로 환산한다.
-      if (e.atkT > 0) {
-        // 공격 중. 위에서 이미 클립을 걸었다.
-      } else if (e.want > 1.05) {
-        playClip(v, 'Run', e.want / (RUN_FOOT * e.h / GOB_H));
-      } else if (e.want > 0.05) {
-        playClip(v, 'Walk', e.want / (WALK_FOOT * e.h / GOB_H));
-      } else {
-        playClip(v, 'Idle', 1);
-      }
-      // ★경직 중에는 클립을 거의 세운다. 맞은 자세로 멎고 몸만 밀려나는 그림이
-      //   "때렸다"를 제일 강하게 만든다(0 으로 완전히 세우면 뻣뻣해서 STUN_TS 만큼만).
-      v.mixer.update(e.stunT > 0 ? dt * STUN_TS : dt);
-      // 가짜 그림자
-      // ★맵 바닥이 0.02 다. 그림자를 0.02 에 두면 바닥과 완전히 같은 높이라
-      //   z-fighting 으로 지글거린다. 2.5cm 띄운다.
-      _v2.set(e.pos.x, e.pos.y + 0.025, e.pos.z);
-      const sh = e.size * pop * 0.42;
-      _sc.set(sh, 1, sh);
-      _mat.compose(_v2, _q2.identity(), _sc);
-      shadowMesh.setMatrixAt(i, _mat);
-      shAttr.setX(i, pop);
-    }
-    shadowMesh.count = n;
-    shadowMesh.instanceMatrix.needsUpdate = true;
-    shAttr.needsUpdate = true;
+    renderBodies(dt);
 
-    updateCorpses(dt);
-    updateInk(dt);
-    // ★게임시계로 늙는다. 위 update 는 ctx.paused 면 통째로 일찍 빠져나가고, 히트스톱은
-    //   main.js 가 dt 를 0 쪽으로 눌러서 넣으므로 둘 다 여기서 저절로 붙들린다.
-    updateDmgPops(dt);
-    updatePlates();
-
-    // ── 예열 판 거두기 (6프레임이면 확실히 한 번은 그려졌다) ──
-    // ★예전엔 stepWarm() 이라는 **별도 함수 호출**이었다. 2026-08-10 지형 정찰에서
-    //   `stepWarm is not defined` 가 프레임마다 터져 렌더 루프가 통째로 죽은 배치가
-    //   한 번 나왔다(1207회 연속, 캔버스 사망 / handoff_terrain.md 1장).
-    //   코드는 호이스팅되는 함수 선언이라 정적으로는 성립하고, 리로드 10회 재현에서도
-    //   0건이었다. 원인은 **여러 에이전트가 같은 파일을 동시에 고치는 동안 브라우저가
-    //   중간 상태를 받은 것**이다 - 호출은 들어갔는데 정의는 아직 안 들어간 저장본은
-    //   문법이 멀쩡해서 그대로 로드된다(모듈 URL 캐시 때문에 나중까지 되살아난다).
-    //   그래서 매 프레임 도는 자리에서는 바깥 이름을 아예 안 부른다. 한 덩어리라
-    //   "반쪽만 반영된 상태" 자체가 생길 수 없다.
-    // ★거두기가 실패해도 렌더 루프는 못 멈춘다. 최악이 1e-3 크기(1픽셀 미만)
-    //   메시 한 벌이 남는 것이라, 화면 전체와 바꿀 값이 아니다.
-    if (warmObj && --warmLeft <= 0) {
-      const w = warmObj;
-      warmObj = null;
-      try {
-        if (w.twin.parent) w.twin.parent.remove(w.twin);
-        w.v.mesh.frustumCulled = true;     // 빌려 쓴 값은 원래대로 돌려놓는다
-        giveVis(w.v);                      // 재질도 여기서 원본으로 되돌아간다
-        if (DEV) console.log('[enemy] 두 동강 재질 예열 완료');
-      } catch (e) {
-        console.warn('[enemy] 예열 판 거두기 실패(연출만 손해다)', e);
-      }
-    }
-
-    // ── 플레이어 상태 ──
-    if (iframe > 0) iframe -= dt;
-    if (iframeDash > 0) iframeDash -= dt;
-    // 새는 통. 최근에 받은 피해가 이 속도로 빠져나가고, 남아 있는 만큼이 다음
-    // 타격을 흡수한다(= 겹쳐 맞아도 초당 총량이 DMG_LEAK 을 못 넘는다).
-    if (dmgBucket > 0) { dmgBucket -= DMG_LEAK * dt; if (dmgBucket < 0) dmgBucket = 0; }
-    if (hurtFlash > 0) {
-      hurtFlash -= dt * 3.2;
-      hurtEl.style.opacity = Math.max(0, hurtFlash * 0.75).toFixed(3);
-    }
-    if (dead && T >= deadUntil) respawnPlayer();
-    syncHud();
+    stepTail(dt);
   }
 
   // 첫 배치
@@ -3668,6 +3965,44 @@ export function createEnemySystem(opts) {
   const api = {
     update,
     reset: respawnPlayer,
+    // ── 멀티: 방장 권위 (2단계 1차) ──
+    // ★스위치(MP_ENEMY_ON)의 정의는 **main.js 한 곳**이다. 이 파일에는 스위치가 없고,
+    //   아래 setNetMode 가 불리지 않으면 netMode 는 0(혼자 하던 그대로)에서 안 움직인다.
+    //   ?room 이 없는 판에서는 mp.js·mpenemy.js 를 아예 안 읽으므로 부를 사람도 없다.
+    setNetMode(m) {
+      const v = m === 'host' ? 1 : (m === 'remote' ? 2 : 0);
+      if (v === netMode) return netMode;
+      netMode = v;
+      // 그리는 쪽으로 갔다가 돌아오면 칼의 '직전 선분'이 낡아 있다. 그대로 두면
+      // 되돌아온 첫 프레임에 몇 미터짜리 선분이 허공을 훑는다(옛 사고와 같은 모양).
+      hasPrevBlade = false;
+      if (v !== 2) for (const e of live) e.netOn = false;
+      return netMode;
+    },
+    get netMode() { return netMode === 1 ? 'host' : (netMode === 2 ? 'remote' : 'local'); },
+    netScan, netApply, netEvent,
+    netStride: NET_STRIDE, netEvStride: NET_EV_STRIDE, netEvQ: NET_EV_Q,
+    // 두 화면을 나란히 놓고 재는 창구. **신원(sid) 없이는 짝을 못 맞춘다** —
+    // positions 는 무리 번호만 주므로 "몇 번 요괴가 몇 m 어긋났나"를 못 낸다.
+    //   [sid, x, z, hp, maxHp]
+    get netList() {
+      const out = [];
+      for (const e of live) if (e.spot) {
+        out.push([e.spot.sid, +e.pos.x.toFixed(3), +e.pos.z.toFixed(3),
+                  +e.hp.toFixed(2), e.maxHp]);
+      }
+      return out;
+    },
+    // 검증 창구. "요괴가 안 맞는다"의 원인은 여럿이고(안 왔다·모르는 번호다·자리가
+    // 없다) 눈으로는 못 가른다.
+    get net() {
+      let on = 0;
+      for (const e of live) if (e.netOn) on++;
+      return { mode: netMode === 1 ? 'host' : (netMode === 2 ? 'remote' : 'local'),
+               live: live.length, tracked: on, spots: spotBySid.length,
+               applied: netApplied, spawned: netSpawned, culled: netCulled,
+               unknown: netUnknown, events: netEvN };
+    },
     get kills() { return kills; },
     // ★처치 수는 "판(R~클리어)" 기준이다. R 재시작에서 main.js 가 부른다.
     //   죽음(리스폰)은 판이 이어지는 것이므로 여기서 지우면 안 된다.
@@ -3923,10 +4258,15 @@ export function createEnemySystem(opts) {
       for (let k = 0; k < room; k++) {
         const ang = (k / room) * Math.PI * 2;
         const rr = 5 + (k % 3) * 1.6;
-        g.spots.push({
+        // ★임시 무리에도 번호를 준다. 참가자에게는 없는 번호라 그쪽에서는 조용히
+        //   무시된다(netApply 의 unknown 카운터로만 남는다). 성능 실측용이라 그게 맞다.
+        const s = {
           home: homeAt(p.x + Math.cos(ang) * rr, p.z + Math.sin(ang) * rr),
           leader: false, seed: 900 + k * 13, enemy: null,
-        });
+          sid: sidN++, g,
+        };
+        g.spots.push(s);
+        spotBySid[s.sid] = s;
       }
       groups.push(g);
       for (const s of g.spots) spawnAt(s, g);

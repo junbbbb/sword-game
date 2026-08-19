@@ -1,11 +1,13 @@
-// ── 멀티플레이 (1단계: 아바타 공유) ────────────────────────────────────────
+// ── 멀티플레이 (게임 계층) ─────────────────────────────────────────────────
 // 남의 캐릭터를 내 세계에 세우고 위치·방향·동작을 맞춘다.
 //
-// ★1단계가 **하지 않는 것**을 먼저 적는다. 요괴는 아직 각자 로컬이다 - 내가 잡은
-//   고블린이 네 화면에서는 살아 있다. 같은 맵에서 각자 다른 던전을 도는 셈이고,
-//   "같이 뛰어다니는 그림"까지가 이 판의 범위다. 몹을 맞추려면 방장 한 명이
-//   enemy.js 를 굴리고 나머지는 그림만 그리는 2단계가 필요하다(작업의 본체는
-//   enemy.js 4,004줄에서 판정과 렌더를 갈라내는 일이다).
+// ★지금까지 온 길과 **아직 못 하는 것**을 먼저 적는다.
+//   1단계(아바타 공유) : 남의 몸·모션·공격 이펙트가 내 화면에 선다.
+//   2단계 1차(요괴 동기화) : 요괴를 **방장 한 명만** 굴린다. 참가자는 받은 상태를
+//     그림으로만 그린다 = 같은 요괴가 같은 자리에 있고 같이 죽는다.
+//     그 규약은 enemy.js 의 NET_* 머리 주석, 전송 정책은 mpenemy.js 가 정본이다.
+//   아직 못 하는 것 : **참가자는 요괴를 못 때린다**(칼도 화살도). 요괴도 참가자를
+//     안 쫓고 안 때린다 - 방장의 AI 는 방장만 안다. 그게 2단계 2차의 몫이다.
 // ★전송은 net.js 뒤에 숨어 있다. 스팀으로 가면 그 파일만 갈아끼운다.
 //
 // ── 좌표를 어떻게 넘기는가 (여기가 이 파일에서 제일 조심스러운 대목) ──
@@ -36,6 +38,16 @@ export function createMultiplayer(ctx) {
   //   화살만 예외로 발사 이벤트(msg.sh)를 태워 보낸다 - 궤적이 결정적이라 시작점과
   //   방향만 같으면 그대로 재현되기 때문이다.
   const fx = ctx.fx || null;
+  // ── 요괴 동기화 (2단계 1차) ──
+  // ★같은 규칙이다. **스위치(MP_ENEMY_ON)의 정의는 main.js 한 곳**이고 여기서는
+  //   이 값이 null 인지만 본다. 전송 정책(주기·관심 영역·사건 되풀이)은 mpenemy.js 가
+  //   들고 있고, 이 파일은 **소식을 실어 나르는 자리**만 내준다.
+  const enemy = ctx.enemy || null;
+  // 관심 영역의 중심 = 사람이 서 있는 자리. [x,z, x,z, ...] 로 매 프레임 다시 채운다
+  // (배열을 새로 만들지 않는다 - 10Hz 라도 GC 에 쓰레기를 쌓을 이유가 없다).
+  const aoi = [];
+  // 마지막으로 보낸 내 자리. 관심 영역의 중심으로만 쓴다(아래 송신부가 적는다).
+  let selfX = 0, selfZ = 0, selfOK = false;
 
   let net = null;
   // ★송신 주기는 **벽시계**로 잰다. 게임 dt(rawDt)로 재면 안 된다 - 그 값은
@@ -192,6 +204,14 @@ export function createMultiplayer(ctx) {
 
   function onMessage(msg, from) {
     if (!from || from === (net && net.id)) return;
+    // ── 요괴 소식 ──
+    // ★방장은 자기 요괴를 자기가 굴리므로 남의 요괴 소식을 절대 안 받는다(별 구조라
+    //   'en' 은 방장에게서만 나가지만, 방어로 한 번 더 막는다 - 여기가 뚫리면
+    //   방장 화면의 요괴가 참가자 소식에 끌려다닌다).
+    if (msg.t === 'en') {
+      if (enemy && net && !net.isHost) enemy.recv(msg);
+      return;
+    }
     if (msg.t === 'st') {
       // ★층이 다르면 서로의 아바타가 남의 맵 좌표에 서게 된다(벽 속·허공). 그림이
       //   깨지기 전에 말해 주는 편이 낫다 - 테스트에서 제일 먼저 밟는 함정이다.
@@ -255,7 +275,22 @@ export function createMultiplayer(ctx) {
       }
     } else if (msg.t === 'bye') {
       despawn(from); roster();
+      // ★방장이 인사하고 나갔다. 그 소식이 안 오는 판(강제 종료)도 있으므로
+      //   mpenemy 쪽에 시간 그물(DEAD_MS)이 하나 더 있다 - 둘 중 먼저 걸리는 쪽이 이긴다.
+      if (enemy && isHostPeer(from)) enemy.hostGone();
     }
+  }
+
+  // 요괴 소식을 내보내는 손잡이. 클로저 하나로 고정한다(net 은 나중에 갈릴 수 있다).
+  function sendEn(o) { if (net) net.send(o); }
+
+  // 이 소식이 **방장**에게서 온 것인가. 참가자의 연결은 방장 하나뿐이라(별 구조)
+  // conns 의 첫 항목이 곧 방장이다. 남의 소식은 방장이 중계하되 원본 from 을 유지하므로
+  // 여기서 갈린다.
+  function isHostPeer(from) {
+    if (!net || net.isHost) return false;
+    const p = net.peers();
+    return p.length > 0 && p[0] === from;
   }
 
   // 각도는 짧은 쪽으로 돈다(안 그러면 뒤돌 때 한 바퀴를 그린다)
@@ -276,8 +311,17 @@ export function createMultiplayer(ctx) {
       say('연결하는 중…');
       net = await createNet({
         onMessage,
-        onLeave: id => { despawn(id); roster(); },
-        onJoin: () => roster(),
+        onLeave: id => {
+          despawn(id); roster();
+          // ★방장이 나가면 참가자의 요괴가 그 자리에 얼어붙는다(소식이 끊긴다).
+          //   내 AI 로 되돌려 그대로 이어 산다 - 얼어붙은 화면보다 낫다.
+          if (enemy && net && !net.isHost && net.count <= 1) enemy.hostGone();
+        },
+        onJoin: () => {
+          roster();
+          // 새로 들어온 사람에게는 목록부터 맞춰 줘야 한다(전수 한 장을 앞당긴다)
+          if (enemy && net && net.isHost) enemy.forceFull();
+        },
         // 진행 상태를 그대로 보여준다. 붙는 데 십여 초가 걸리는 판이라
         // 아무 말이 없으면 "멈췄다" 로 읽힌다(roster() 가 뒤에 덮는다).
         onStatus: (t, k) => say(t, k),
@@ -336,11 +380,29 @@ export function createMultiplayer(ctx) {
       // 내 상태 송신
       if (!net) return;
       const txNow = performance.now();
+      // ── 요괴 상태 송신(방장만) ──
+      // ★아바타 주기(15Hz)와 **따로** 돈다. 요괴는 10Hz 로 충분하고, 여기서 같이
+      //   묶으면 둘 중 하나를 손볼 때마다 다른 하나가 끌려간다.
+      // ★getSelf() 를 여기서 부르면 안 된다. 그 함수는 toFixed 로 문자열을 여남은 개
+      //   만드는데, 이 자리는 **매 프레임** 돈다(15Hz 문턱은 아래에 있다). 아래 송신이
+      //   적어 둔 마지막 자리를 쓴다 - 반경 26m 짜리 관심 영역에 한 프레임 낡은 좌표는
+      //   아무 차이도 안 만든다.
+      if (enemy) {
+        if (net.isHost) {
+          aoi.length = 0;
+          if (selfOK) aoi.push(selfX, selfZ);
+          for (const [, p] of peers) aoi.push(p.tgt.x, p.tgt.z);
+          enemy.tickHost(txNow, aoi, sendEn);
+        } else {
+          enemy.tickGuest(txNow);      // 소식이 끊겼는지만 본다
+        }
+      }
       if (txNow - lastSendMs < 1000 / SEND_HZ) return;
       lastSendMs = txNow;
       const s = getSelf();
       if (!s) return;
       myMap = s.map;
+      selfX = s.x; selfZ = s.z; selfOK = true;
       txCount++;
       // ★sh(화살 발사)는 **막 쏜 뒤 0.6초 동안만** 값이 있고 그 밖에는 null 이다.
       //   칼잡이 판에서는 늘 null 이라 소식 크기가 예전 그대로다.
@@ -375,6 +437,8 @@ export function createMultiplayer(ctx) {
     // 남의 공격 이펙트 상태(자세한 창구는 window.__mpfx). 여기 둔 이유는
     // "아바타는 보이는데 이펙트가 안 보인다"를 한 화면에서 갈라 보기 위해서다.
     get fx() { return fx ? fx.state : null; },
+    // 요괴 동기화 상태(자세한 창구는 window.__mpen). 같은 이유로 여기 한 줄을 둔다.
+    get enemy() { return enemy ? enemy.state : null; },
     resetStats() { rxCount = 0; txCount = 0; rxGapMax = 0; rxStale = 0; rxTimes.length = 0; },
     // 내가 남에게 보내고 있는 값. 원격 목록과 나란히 봐야 "누가 안 움직이는지" 가 갈린다.
     get self() { return getSelf(); },
