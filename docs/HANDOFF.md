@@ -172,6 +172,7 @@ WASD·방향키 이동 / Shift 달리기 / **Space 점프** / **Z** 평타 3연�
 | `COMBO_UI_ON` | `web/main.js:3941` | `false` | `true` = 화면 중앙 상단 「1타/2타/3타 · 명중 N」 복귀. 내부 카운터는 지금도 돈다 |
 | `SKILL_CALLOUT_ON` | `web/main.js:3950` | `false` | `true` = 기술명 카드 복귀. **위와 일부러 분리**(오너 지시가 두 건이라 따로 되돌려야 한다) |
 | `ITEMS_ON` | `web/main.js:4839` | `true` | `false` = 드랍·주머니·아이템창이 통째로 안 돈다 |
+| `MP_FX_ON` | `web/main.js:5112` | `true` | `false` = **남의 공격 이펙트**가 통째로 안 생긴다(궤적 rig 도 유령 화살 시스템도 안 만든다). 아바타·모션은 그대로 돈다. `mp.js` 는 `ctx.fx` 가 null 인지만 보므로 정의는 이 한 줄뿐이다 |
 | `ARROW_ON` | `web/main.js:3889` (isArcher 바로 앞) | `true` | `false` = 궁수 화살이 통째로 죽는다. arrow.js 는 import 만 되고 시스템이 안 만들어지며(메시도 안 생김), `isArcher()` 가 늘 false 라 궁수 Attack 이 **검사 표·검사 재생속도(1.35)** 로 돌아간다. ★선언이 `isArcher()` 앞에 있어야 한다 - 아래(화살 블록)에 두면 로딩 중 Z 를 누른 판에서 TDZ 가 난다 |
 | `DROP_3D` | `web/items.js:108` | `true` | `false` = 옛 2D 빌보드 드랍 경로(시트·UV·알파 그대로 살아난다) |
 | `MARK_ATK_ON` | `web/enemy.js:209` | `false` | `true` = 고블린 머리 위 공격 예고 쐐기 복귀. 예고 시계·밸런스 영향 0 |
@@ -220,6 +221,8 @@ WASD·방향키 이동 / Shift 달리기 / **Space 점프** / **Z** 평타 3연�
 | `?map=field` (또는 `level1`) | `web/main.js:120`, `web/level.js:359` | 초원으로 전환 + 조명·안개 분기 + `boss.js`/`level2.js` 중 어느 쪽을 로드할지. **규칙이 두 곳에 있으니 바꿀 땐 둘 다** |
 | `?q=<0.75~3>` | `web/main.js:96` | 렌더 스케일. **내리는 쪽은 늘 되고 올리는 쪽은 `?dev` 에서만**(`?q=2.5` 가 프로덕션에 섞여 4000×2250 이 나온 회귀 방지) |
 | `?spawn=<n>` | `web/main.js:2459` | 시작 위치 선택 |
+| `?room=<코드>` | `web/main.js` 멀티 기동부 · `web/home.js` | 멀티플레이. 이 값이 없으면 `mp.js`·`net.js`·`peerjs` 를 **한 바이트도 안 읽는다**(혼자 하는 판의 요청 수가 그대로여야 한다). `&host=1` 이면 방장, 없으면 참가자. 홈화면이 이 주소를 세운다 |
+| `?home` | `web/index.html` `window.__isHome` | 홈화면을 강제로 연다. 쿼리가 **비어 있을 때도** 홈이다. `?map=field`·`?dev`·`?fx=b` 같은 기존 링크는 예전처럼 곧장 게임으로 간다. **판정 정본은 그 한 줄** |
 | `?lod=off` | `web/props.js:330` | 저폴리 프롭 한 벌을 안 읽는다 |
 | `?v=<md5>` | `web/main.js:27` | 배포 빌드가 채우는 glb 캐시 버전. 개발판은 빈 표 |
 

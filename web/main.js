@@ -349,6 +349,9 @@ function resetRun() {
   // ★주머니와 바닥에 널린 물건도 판을 넘기지 않는다(이 판의 리셋 문화 그대로).
   if (window.__items) window.__items.reset();
   if (window.__arrows) window.__arrows.reset();      // ★21차. 날아가던 화살도 판과 함께 지운다
+  // ★22차 멀티. 남의 화살·궤적도 같이 지운다. window 로 도는 이유는 위 두 줄과 같다
+  //   (mpFx 는 아래에서 const 로 선언되므로 여기서 이름을 직접 쓰면 TDZ 다).
+  if (window.__mpfx) window.__mpfx.reset();
 }
 addEventListener('keydown', e => {
   keys[e.code] = true;
@@ -850,8 +853,9 @@ const FX = FX_TABLE[FX_STYLE];
 //   안 바뀌고, 리본은 **그 한 장을 붙들고 있는다**(연출 의도 그대로).
 //   셰이더 안의 재시딩도 이미 floor(uT*24.0) 이라 같은 칸에서 같은 씨앗이 나온다.
 const FX_FPS = 24;
-let trailQFrame = -1;              // 마지막으로 다시 그린 1/24 칸 번호
-let trailHold = 0;                 // 그 뒤로 붙들고 지나간 렌더 프레임 수(검증용)
+// ★22차 멀티. 여기 있던 trailQFrame·trailHold 는 rig 필드(R.q·R.hold)로 옮겼다 -
+//   사람마다 제 칸 번호를 가져야 하기 때문이다(전역 한 벌이면 두 번째 사람의
+//   호출이 첫 번째 사람의 칸을 이미 써먹은 것으로 보고 통째로 건너뛴다).
 // ★v94. 64 -> 22. 수명이 여섯 칸(0.25초)으로 짧아졌으므로 60fps 에서 살아 있는
 //   샘플은 15개뿐이다. 64를 그대로 두면 마디 220개 중 앞 4분의 1만 살아 있고
 //   나머지는 알파 0 인 헛 지오메트리가 된다(길이 방향 테이퍼·텍스처 스크롤이
@@ -880,34 +884,58 @@ const RIBS = 140;                  // 실제로 그리는 마디 수. 원본을 
 // ★12-FX-D. 가닥 수도 표에서 온다(A 3 · B 2 · C 5 · D 1). 지오메트리 크기가
 //   여기서 정해지므로 벌 전환은 새로고침(?fx=..)이다 - 그래서 한 벌만 메모리에 산다.
 const STRANDS = FX.cfg.length;
-const trailBuf = [];               // {a:Vec3, b:Vec3, t:number}
-const trailGeo = new THREE.BufferGeometry();
+const trailBuf = [];               // {a:Vec3, b:Vec3, t:number}  ★로컬 플레이어의 샘플 통
 const segs = RIBS - 1;
 const vtxCount = STRANDS * RIBS * 2;
-const posArr = new Float32Array(vtxCount * 3);
-const uvArr = new Float32Array(vtxCount * 2);   // x=길이(0=최신), y=폭(0=칼날쪽,1=바깥)
-const alpArr = new Float32Array(vtxCount);
-const seedArr = new Float32Array(vtxCount);
 // ── 이 마디의 반폭(m). 먹 외곽선이 **화면에서 늘 한 겹 이상** 살아남게 하는 자다 ──
 // ★셰이더는 폭 좌표를 0..1 로만 안다. 그래서 "먹을 바깥 14%"로 적으면 획이 굵을 땐
 //   먹이 20px 판때기가 되고(그게 9차의 '어두운 판때기'), 가늘 땐 0px 가 되어 형태를
 //   정의하는 선이 사라진다(그게 10차 태생·소멸 프레임의 먹선 0%). 반폭을 미터로
-//   넘기고 uPxPerM 과 곱해 **화소로 환산**하면 두 실패가 같이 없어진다.
-const halfArr = new Float32Array(vtxCount);
-const idx = [];
-for (let s = 0; s < STRANDS; s++) {
-  const off = s * RIBS * 2;
-  for (let i = 0; i < segs; i++) {
-    const a = off + i * 2;
-    idx.push(a, a + 2, a + 3, a, a + 3, a + 1);
+//   넘기고 uPxPerM 과 곱해 **화소로 환산**하면 두 실패가 같이 없어진다(halfArr).
+// ══════════════════════════════════════════════════════════════════════════
+// ★★22차 멀티. 궤적 한 벌 = **rig** (2026-08-20)
+// 예전에는 이 배열들이 전부 모듈 전역 **한 벌**이었다. 남의 칼에도 같은 궤적을
+// 그리려면 사람마다 제 버퍼가 있어야 해서 그릇만 factory 로 뺐다.
+// ★계산은 여전히 **한 벌**이다(buildRibbon 하나). 여기서 만드는 건 그릇뿐이고,
+//   그래서 두 벌이 어긋날 자리가 원리적으로 없다 - 이 레포가 반복해서 배운 것
+//   ("스위치도 계산도 한 곳에서만")을 그대로 지킨 모양이다.
+// ★한 벌의 무게(실측 계산): 정점 STRANDS(3) x RIBS(140) x 2 = 840개,
+//   Float32 속성 다섯 = pos 10,080B + uv 6,720B + alpha/seed/half 3,360B x 3 =
+//   **약 26.9KB** + 인덱스 2,502개. 원격 4명이어도 108KB 다.
+function makeTrailRig(buf) {
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(vtxCount * 3);
+  const uv = new Float32Array(vtxCount * 2);    // x=길이(0=최신), y=폭(0=칼날쪽,1=바깥)
+  const alp = new Float32Array(vtxCount);
+  const seed = new Float32Array(vtxCount);
+  const half = new Float32Array(vtxCount);
+  const idx = [];
+  for (let s = 0; s < STRANDS; s++) {
+    const off = s * RIBS * 2;
+    for (let i = 0; i < segs; i++) {
+      const a = off + i * 2;
+      idx.push(a, a + 2, a + 3, a, a + 3, a + 1);
+    }
   }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aUV', new THREE.BufferAttribute(uv, 2));
+  geo.setAttribute('aAlpha', new THREE.BufferAttribute(alp, 1));
+  geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+  geo.setAttribute('aHalf', new THREE.BufferAttribute(half, 1));
+  geo.setIndex(idx);
+  return {
+    buf: buf || [], geo, pos, uv, alp, seed, half,
+    mat: null, mesh: null,
+    q: -1, hold: 0,          // 1/24 칸 번호 · 붙들고 지나간 렌더 프레임 수
+    clock: 0,                // 이 벌의 시계(초). 로컬 = gameT, 원격 = 벽시계(아래 주석)
+    pos3: new THREE.Vector3(), yaw: 0, charH: 2.4,
+    gain: 1, el: null, clip: null,
+    dbg: false,              // window.__trailDbg 를 쓰는 벌(로컬 하나뿐)
+  };
 }
-trailGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-trailGeo.setAttribute('aUV', new THREE.BufferAttribute(uvArr, 2));
-trailGeo.setAttribute('aAlpha', new THREE.BufferAttribute(alpArr, 1));
-trailGeo.setAttribute('aSeed', new THREE.BufferAttribute(seedArr, 1));
-trailGeo.setAttribute('aHalf', new THREE.BufferAttribute(halfArr, 1));
-trailGeo.setIndex(idx);
+const LOCAL_RIG = makeTrailRig(trailBuf);
+LOCAL_RIG.dbg = true;
+const trailGeo = LOCAL_RIG.geo;     // 옛 이름 별칭(아래 trailMesh 가 이 이름으로 쓴다)
 
 const trailMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, side: THREE.DoubleSide,
@@ -1460,11 +1488,14 @@ const trailMesh = new THREE.Mesh(trailGeo, trailMat);
 trailMesh.frustumCulled = false;
 trailMesh.renderOrder = 3;
 scene.add(trailMesh);
+LOCAL_RIG.mat = trailMat;           // ★rig 는 위에서 만들었고 재질은 여기서 붙인다
+LOCAL_RIG.mesh = trailMesh;
 // ★검증 창구(?dev 없이도 연다. 읽기 전용). 궤적 정점에 NaN 이 한 톨 들어가면
 //   블룸이 그 점을 **사각형으로** 번지게 한다(v88 '검은 번쩍'의 기전). 안정성 표본이
 //   이 값을 센다 - 있으면 그 인덱스, 없으면 -1.
 window.__trailNaN = () => {
-  for (let i = 0; i < posArr.length; i++) if (!Number.isFinite(posArr[i])) return i;
+  const pa = LOCAL_RIG.pos;        // ★22차. 옛 전역 posArr = 로컬 rig 의 position 배열
+  for (let i = 0; i < pa.length; i++) if (!Number.isFinite(pa[i])) return i;
   return -1;
 };
 
@@ -2115,19 +2146,22 @@ const STRAND_CFG = FX.cfg;
 //   いちあっぷ 물 작화 교재). 갈퀴가 먼저 죽고 겹 획, 본 획 순으로 남는다.
 // force = 1/24 홀드를 건너뛰고 무조건 다시 그린다(DEV 굽기 창구 전용.
 //         클립을 손으로 밀며 부르는 경로는 gameT 가 안 흘러서 홀드에 갇힌다).
-function updateTrail(force) {
+// ★★22차 멀티. 인자 R = 궤적 한 벌(rig). 예전 전역들이 전부 여기로 들어왔다.
+//   로컬은 updateTrail() 이 LOCAL_RIG 에 지금 값을 담아 부르고, 원격은 mpFx 가
+//   그 사람의 rig 를 담아 부른다. **계산은 이 함수 한 벌뿐이다.**
+function buildRibbon(R, force) {
   // ★리본의 시계. 게임시간을 1/24 로 끊어 칸 번호를 만든다.
-  const fq = Math.floor(gameT * FX_FPS);
-  if (!force && fq === trailQFrame) {
+  const fq = Math.floor(R.clock * FX_FPS);
+  if (!force && fq === R.q) {
     // 붙들고 지나간 렌더 프레임 수. 60fps 면 2~3 이 정상(3-2-3-2 홀드),
     // 히트스톱 중에는 멈춘 만큼 계속 올라간다.
-    trailHold++;
-    if (window.__trailDbg) window.__trailDbg.hold = trailHold;
+    R.hold++;
+    if (R.dbg && window.__trailDbg) window.__trailDbg.hold = R.hold;
     return;
   }
-  trailQFrame = fq;
-  trailHold = 0;
-  const n = trailBuf.length;
+  R.q = fq;
+  R.hold = 0;
+  const n = R.buf.length;
   let w = 0;
   // ── 카메라 평면 기저 (v94 화면공간 전환의 핵심) ──
   // 리본의 **폭 방향을 카메라 평면 안에서** 잡는다. 이 두 벡터가 그 평면이다.
@@ -2138,9 +2172,9 @@ function updateTrail(force) {
   // 플레이어 깊이 하나로 계산한다 - 획은 플레이어 반경 3.2m 안에만 살아서
   // 마디마다 깊이가 크게 안 다르고, 원근까지 정확히 맞출 이유는 없다(먹 두께다).
   {
-    const dCam = camera.position.distanceTo(root.position) || 12;
+    const dCam = camera.position.distanceTo(R.pos3) || 12;
     const h = renderer.domElement.height || 720;   // ★gl.canvas 말고 domElement(LOG 함정)
-    trailMat.uniforms.uPxPerM.value =
+    R.mat.uniforms.uPxPerM.value =
       (h * 0.5) / (Math.tan(camera.fov * Math.PI / 360) * dCam);
   }
   // ★★18차 기술 변주 (mode 4 전용). **손잡이 세 줄이 여기 다 있다.**
@@ -2151,18 +2185,18 @@ function updateTrail(force) {
   //   다른 벌(A~D)에서는 이 블록이 통째로 안 돈다(uBolt/uSharp 는 셰이더에서도 안 읽힌다).
   let techW = 1.0;
   if (FX.mode === 4) {
-    const bolt = (atkClip === 'Heavy') ? 1 : 0;
-    const wide = (atkClip === 'Wide') ? 1 : 0;
+    const bolt = (R.clip === 'Heavy') ? 1 : 0;
+    const wide = (R.clip === 'Wide') ? 1 : 0;
     techW = bolt ? 1.34 : (wide ? 0.86 : 1.0);
-    trailMat.uniforms.uBolt.value = bolt;
-    trailMat.uniforms.uSharp.value = wide ? 1.22 : 1.0;
+    R.mat.uniforms.uBolt.value = bolt;
+    R.mat.uniforms.uSharp.value = wide ? 1.22 : 1.0;
   }
   // 판정 계약(handoff_combat.md): 정면 리치 3.2m · 정면 부채꼴 ±75°.
-  const px = root.position.x, pz = root.position.z;
-  const fwx = Math.sin(root.rotation.y), fwz = Math.cos(root.rotation.y);
+  const px = R.pos3.x, pz = R.pos3.z;
+  const fwx = Math.sin(R.yaw), fwz = Math.cos(R.yaw);
   // 폭이 바깥으로 자라는 기준점 = 플레이어 가슴께
-  _pc.set(px, root.position.y + charH * 0.55, pz);
-  const g = trailGain * (curEl.tGain || 1);
+  _pc.set(px, R.pos3.y + R.charH * 0.55, pz);
+  const g = R.gain * (R.el.tGain || 1);
   let clipped = 0;
   let maxAge = -1;                 // 이번 프레임에 그려진 가장 오래된 마디의 나이(1/24 칸)
   // ★12-FX-D 진단 창구. "왜 획이 이만큼밖에 안 나오나"를 추측하지 말고 숫자로 본다
@@ -2184,7 +2218,7 @@ function updateTrail(force) {
   //   그래서 멈추지 않고 **끝까지 훑어 제일 오래된 살아 있는 샘플**을 찾는다.
   let aliveN = 1;
   for (let j = n - 1; j >= 0; j--) {
-    const ee = trailBuf[j];
+    const ee = R.buf[j];
     const aa = (ee.f === undefined ? 0 : fq - ee.f);
     if (aa >= TRAIL_LADDER.length) break;      // 계단표 밖 = 확실히 죽었다(더 옛것도 마찬가지)
     if (ee.t * TRAIL_LADDER[aa > 0 ? aa : 0] > 0.13) aliveN = n - j;
@@ -2202,15 +2236,15 @@ function updateTrail(force) {
     let broke = false, sawAlive = false, outRun = 0;
     for (let i = 0; i < RIBS; i++) {
       const base = (s * RIBS + i) * 2;
-      if (n < 2) { alpArr[base] = 0; alpArr[base + 1] = 0; continue; }
+      if (n < 2) { R.alp[base] = 0; R.alp[base + 1] = 0; continue; }
       // 최신(n-1)에서 과거로, 실수 인덱스로 훑으며 Catmull-Rom 보간
       const fi = (i / (RIBS - 1)) * (n - 1);
       const k = n - 1 - fi;
       const i1 = Math.floor(k), fr = k - i1;
-      const e = trailBuf[clampi(i1, 0, n - 1)];
-      const e0 = trailBuf[clampi(i1 - 1, 0, n - 1)];
-      const e2 = trailBuf[clampi(i1 + 1, 0, n - 1)];
-      const e3 = trailBuf[clampi(i1 + 2, 0, n - 1)];
+      const e = R.buf[clampi(i1, 0, n - 1)];
+      const e0 = R.buf[clampi(i1 - 1, 0, n - 1)];
+      const e2 = R.buf[clampi(i1 + 1, 0, n - 1)];
+      const e3 = R.buf[clampi(i1 + 2, 0, n - 1)];
       cr(e0.a, e.a, e2.a, e3.a, fr, _a);
       cr(e0.b, e.b, e2.b, e3.b, fr, _b);
       _d.copy(_b).sub(_a);
@@ -2386,15 +2420,15 @@ function updateTrail(force) {
       //   리치 밖으로 삐져나가지 않게 XZ 반지름만 한 번 조인다(높이는 자유 —
       //   공중은 아무 거짓말도 안 하고, 오히려 '세로 스윕'이 화면 존재감의 주된 출처다).
       clampReach(_pa, px, pz); clampReach(_pb, px, pz);
-      posArr[base * 3] = _pa.x; posArr[base * 3 + 1] = _pa.y; posArr[base * 3 + 2] = _pa.z;
-      posArr[(base + 1) * 3] = _pb.x; posArr[(base + 1) * 3 + 1] = _pb.y; posArr[(base + 1) * 3 + 2] = _pb.z;
+      R.pos[base * 3] = _pa.x; R.pos[base * 3 + 1] = _pa.y; R.pos[base * 3 + 2] = _pa.z;
+      R.pos[(base + 1) * 3] = _pb.x; R.pos[(base + 1) * 3 + 1] = _pb.y; R.pos[(base + 1) * 3 + 2] = _pb.z;
       // ★u 도 un 이다. 손그림 텍스처(갈라지는 붓결·찢긴 끝)가 **보이는 획 전체**에
       //   걸쳐 펴져야 한다. age 를 넘기면 텍스처 앞 10% 만 늘어나 등간격 띠가 된다.
-      uvArr[base * 2] = un; uvArr[base * 2 + 1] = 1.0;         // 바깥 = 포말 쪽
-      uvArr[(base + 1) * 2] = un; uvArr[(base + 1) * 2 + 1] = 0.0;
-      seedArr[base] = KIND; seedArr[base + 1] = KIND;
+      R.uv[base * 2] = un; R.uv[base * 2 + 1] = 1.0;         // 바깥 = 포말 쪽
+      R.uv[(base + 1) * 2] = un; R.uv[(base + 1) * 2 + 1] = 0.0;
+      R.seed[base] = KIND; R.seed[base + 1] = KIND;
       // 이 마디의 반폭(m). 셰이더가 먹 외곽선을 화소로 잡는 데 쓴다
-      halfArr[base] = half; halfArr[base + 1] = half;
+      R.half[base] = half; R.half[base + 1] = half;
       // 알파는 계단으로. 매끈하게 흐리면 칠 그림이 아니라 다시 빛처럼 보인다.
       // ★알파는 **형태의 유/무**만 가른다(오너 지시). 반투명 구간이 곧 '유리 부채'였다.
       // ★v98. 계단 1.0/0.92/0.78 -> **1.0 아니면 0**. 오너 지시 그대로 "알파는 형태의
@@ -2426,8 +2460,8 @@ function updateTrail(force) {
       else if (sawAlive && ++outRun >= 3) broke = true;
       if (broke) q = 0;
       // 칼별 알파 배수. 계단은 그대로 두고 전체만 낮춘다(계단을 재계산하면 띠가 진다).
-      q *= (curEl.tAlpha === undefined ? 1 : curEl.tAlpha);
-      alpArr[base] = q; alpArr[base + 1] = q;
+      q *= (R.el.tAlpha === undefined ? 1 : R.el.tAlpha);
+      R.alp[base] = q; R.alp[base + 1] = q;
       if (q > 0) { w++; if (af > maxAge) maxAge = af; }
     }
   }
@@ -2438,16 +2472,33 @@ function updateTrail(force) {
   //   "본 획은 2~4프레임만 산다"는 계약이 실제로 물렸는지는 이 값으로만 잰다
   //   (화면에서 '이펙트가 보이는 시간'을 재면 스윙 시간까지 더해져 계약과 다른 것을 재게 된다).
   //   TRAIL_LADDER.length - 1 이 상한이므로 이 값이 3 을 넘으면 계약이 깨진 것이다.
-  window.__trailDbg = { n, wrote: w, q: trailQFrame, hold: 0, clipped, aliveN,
+  // ★22차. 이번 칸에 실제로 알파가 살아 있는 마디가 몇 개였나. 로컬은 아래 진단
+  //   창구가 같은 값을 쓰고, 원격은 이 수로 "이펙트가 떴다"를 세고 메시를 껐다 켠다.
+  R.wrote = w;
+  if (R.dbg) window.__trailDbg = { n, wrote: w, q: R.q, hold: 0, clipped, aliveN,
                         room: +dgRoom.toFixed(2), half: +dgHalf.toFixed(2),
                         cap: +dgCap.toFixed(2), tl: +dgTl.toFixed(2), tip: +dgTip.toFixed(2),
                         oldest: maxAge, ladder: TRAIL_LADDER.length,
-                        lastT: trailBuf.length ? trailBuf[trailBuf.length-1].t : -1 };
-  trailGeo.attributes.position.needsUpdate = true;
-  trailGeo.attributes.aUV.needsUpdate = true;
-  trailGeo.attributes.aAlpha.needsUpdate = true;
-  trailGeo.attributes.aSeed.needsUpdate = true;
-  trailGeo.attributes.aHalf.needsUpdate = true;
+                        lastT: R.buf.length ? R.buf[R.buf.length-1].t : -1 };
+  R.geo.attributes.position.needsUpdate = true;
+  R.geo.attributes.aUV.needsUpdate = true;
+  R.geo.attributes.aAlpha.needsUpdate = true;
+  R.geo.attributes.aSeed.needsUpdate = true;
+  R.geo.attributes.aHalf.needsUpdate = true;
+}
+
+// ── 로컬 플레이어 통로 ──
+// ★전역(root·charH·trailGain·curEl·atkClip·gameT)을 rig 필드에 옮겨 담고 부른다.
+//   이 자리가 곧 "옛 updateTrail() 이 읽던 값들"의 목록이다.
+function updateTrail(force) {
+  LOCAL_RIG.clock = gameT;
+  LOCAL_RIG.pos3 = root.position;          // Group 의 Vector3 는 갈리지 않으므로 참조로 둔다
+  LOCAL_RIG.yaw = root.rotation.y;
+  LOCAL_RIG.charH = charH;
+  LOCAL_RIG.gain = trailGain;
+  LOCAL_RIG.el = curEl;
+  LOCAL_RIG.clip = atkClip;
+  buildRibbon(LOCAL_RIG, force);
 }
 
 // ---------- 캐릭터 ----------
@@ -3021,11 +3072,16 @@ const bladePath = [];      // 휜 칼날 중심선(손 본 로컬). 리본이 �
 let bladeOK = false;
 // ★glTF 는 머티리얼마다 메시를 쪼갠다(SW_baekah_1,_2,...). 한 자루가 여러 메시라
 // 배열로 받아 전부 훑어야 칼끝을 놓치지 않는다.
-function measureBlade(meshes) {
-  bladeOK = false;
+// ★★22차 멀티. 알맹이를 **순수 함수**로 뺐다 - 남의 아바타(원격)도 같은 자로 재야
+//   하는데, 옛 판은 전역 bladeA/bladeB/bladePath 에 바로 써 넣어서 로컬 하나만
+//   잴 수 있었다. 여기서 재는 값은 **손 본 로컬 좌표**라 같은 glb 면 사람마다 같다
+//   (월드로 옮기는 건 그 사람 손 본의 matrixWorld 다 = 스케일·위치가 저절로 물린다).
+//   실패하면 null 을 돌려준다.
+function measureBladeOf(meshes) {
   const v = new THREE.Vector3();
   const pts = [];
   for (const mesh of meshes) {
+    if (!mesh.skeleton) continue;
     const hi = mesh.skeleton.bones.findIndex(b => /r[_ ]hand/i.test(b.name));
     if (hi < 0) continue;
     const ibm = mesh.skeleton.boneInverses[hi];
@@ -3037,14 +3093,14 @@ function measureBlade(meshes) {
       if (w > 0.99) pts.push(v.fromBufferAttribute(pos, i).applyMatrix4(ibm).clone());
     }
   }
-  if (pts.length < 20) { if (DEV) console.warn('칼 정점 못 찾음'); return; }
+  if (pts.length < 20) { if (DEV) console.warn('칼 정점 못 찾음'); return null; }
   let far = pts[0];
   for (const p of pts) if (p.lengthSq() > far.lengthSq()) far = p;
   const dir = far.clone().normalize();
   let pmax = 0;
   for (const p of pts) pmax = Math.max(pmax, p.dot(dir));
-  bladeA.copy(dir).multiplyScalar(pmax * 0.18);   // 코등이 조금 앞
-  bladeB.copy(dir).multiplyScalar(pmax * 0.98);   // 칼끝
+  const outA = dir.clone().multiplyScalar(pmax * 0.18);   // 코등이 조금 앞
+  const outB = dir.clone().multiplyScalar(pmax * 0.98);   // 칼끝
   // ★칼이 초승달로 휘어서 직선 축만으로는 리본이 날에서 떠버린다.
   // 정점을 날 방향으로 구간별로 묶어 평균을 내면 **휜 중심선**이 나온다.
   const NSEG = 16;
@@ -3057,11 +3113,22 @@ function measureBlade(meshes) {
     const i = Math.min(NSEG - 1, Math.max(0, Math.floor(t * NSEG)));
     bins[i].s.add(p); bins[i].n++;
   }
-  bladePath.length = 0;
-  for (const b of bins) if (b.n > 2) bladePath.push(b.s.divideScalar(b.n));
-  bladeOK = true;
+  const path = [];
+  for (const b of bins) if (b.n > 2) path.push(b.s.divideScalar(b.n));
   // ★평시 콘솔은 비어 있어야 한다(건틀릿 연출UI S10 "개발 흔적"). ?dev 에서만 남긴다.
   if (DEV) console.log('[blade]', meshes[0].name, dir.toArray().map(n => n.toFixed(3)).join(','), 'len', pmax.toFixed(2));
+  return { a: outA, b: outB, path, len: pmax };
+}
+
+// 로컬 플레이어 통로(옛 이름 그대로). 전역 셋을 여기서만 쓴다.
+function measureBlade(meshes) {
+  bladeOK = false;
+  const m = measureBladeOf(meshes);
+  if (!m) return;
+  bladeA.copy(m.a); bladeB.copy(m.b);
+  bladePath.length = 0;
+  for (const q of m.path) bladePath.push(q);
+  bladeOK = true;
 }
 
 // ---------- 칼 교체 ----------
@@ -4996,12 +5063,315 @@ const arrows = ARROW_ON ? createArrowSystem({
   hitBoss: (a, b, o) => (window.__boss && window.__boss.hitSegment)
                           ? window.__boss.hitSegment(a, b, o) : false,
   // 시위를 떠나는 그 순간.
-  onFire: () => sfx.bow(),
+  // ★22차 멀티. 시위를 떠나는 그 자리에서 **한 번만** 적는다.
+  //   여기가 유일한 길목인 이유: arrow.js 의 push() 가 모든 발사를 지나므로
+  //   나중에 발사 호출을 하나 더 만들어도 여기를 빠뜨릴 수가 없다
+  //   (「바뀔 때 한 번 적어 두는」 방식이 조용히 틀리는 함정을 이 구조로 피한다).
+  onFire: (a) => { sfx.bow(); mpNoteShot(a); },
   // ★명중 연출의 방향을 화살 진행 방향으로 세운다. 안 세우면 onHit 이 **직전 칼질의**
   //   방향(swingDir)으로 참격·먹물을 눕힌다 - 활을 쏘는데 칼자국이 옆으로 눕는다.
   beforeHit: (a, dir) => { swingDir.copy(dir); },
 }) : null;
 window.__arrows = arrows;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 남의 공격 이펙트 (22차 멀티. 2026-08-20)
+//
+// 오너 신고: **"팀원의 공격 이런 건 안 보이네."** 남의 모션은 맞는데 칼에서 아무
+// 빛도 안 나서 허공을 젓는 것처럼 보였다.
+//
+// ── 무엇을 골랐나: (나) 원격 아바타의 **뼈에서 로컬 계산** ────────────────────
+// 이벤트로 "지금 베었다"를 보내고 받는 쪽이 통조림 이펙트를 트는 길((가))도 있었지만
+// 안 골랐다. 이 게임의 궤적은 그림 한 장이 아니라 **칼끝이 지나간 자리의 연속**이라,
+// 이벤트로는 원리적으로 재현이 안 된다(어느 자리를 어떤 속도로 지났는지가 없다).
+// 반면 원격 아바타에는 같은 glb 의 **뼈와 칼 메시가 그대로** 있고, 클립도 이미 같은
+// 시각·같은 배속으로 돌고 있다(mp.js 가 msg.c/msg.p/msg.ts 로 맞춘다).
+// 그러니 로컬 플레이어에게 하던 것과 **글자 하나 다르지 않은 계산**을 그 사람 손 본에
+// 대고 한 번 더 돌리면 된다. 실제 이득이 셋이다 —
+//   ① 네트워크에 **한 바이트도 안 늘었다**(칼 이펙트에 한해서. 화살은 아래 참조)
+//   ② 지연이 곧 아바타 지연이다. 이펙트만 따로 늦거나 어긋날 수가 없다
+//   ③ 그림 문법이 내 것과 자동으로 같다. 크기·색·수명 상수를 두 번 적을 자리가 없다
+//
+// ── 그래서 무엇을 바꿨나 ──
+// 옛 판은 궤적 버퍼·지오메트리·칸 번호가 전부 **모듈 전역 한 벌**이었다. 그릇만
+// makeTrailRig() 로 빼고(위쪽), 계산은 buildRibbon(R) **한 함수**로 남겼다.
+// 로컬은 updateTrail() 이 전역을 담아 부르고, 원격은 여기가 그 사람 rig 를 담아 부른다.
+//
+// ── 안 한 것(일부러) ──
+// · 화면 겹 붓자국(feel.swing): SCREEN_STROKE = 0 이라 **지금 아무것도 안 그린다.**
+//   부르면 그리는 대신 lastStroke(전멸 링·임팩트 컷이 되짚는 자리)만 더럽힌다.
+// · 칼 감김(updateWrap)·물보라: 시작 칼 nokseun 의 원소가 plain 이고 그 표에
+//   wrap:0 · spray:0.0 이다 = **로컬 플레이어도 이 칼로는 안 나온다.** 남에게만
+//   더 얹으면 "내 이펙트와 같은 문법" 계약이 깨진다.
+// · 명중 연출(feel.hit/kill/burst/pop): 요괴가 아직 각자 로컬이라(mp.js 머리말)
+//   남의 칼에 맞는 내 요괴가 없다. 2단계(호스트 권위) 몫이다.
+//
+// ★★롤백 스위치는 아래 MP_FX_ON **한 줄이고 정의는 여기 한 곳뿐이다.**
+//   mp.js 는 ctx.fx 가 null 인지만 본다(스위치를 두 벌 두면 반드시 어긋난다).
+// ═══════════════════════════════════════════════════════════════════════════
+const MP_FX_ON = true;     // false = 남의 이펙트가 통째로 안 생긴다(rig·화살 시스템도 안 만든다)
+
+// 원격 궤적 벌 수 상한. 지금 상정 인원이 2~4명이고, 한 벌이 약 27KB + 1 드로우콜이다.
+// 넘치면 **먼저 붙은 사람** 것을 지킨다(나중 사람은 아바타만 뜨고 이펙트가 없다).
+const MP_FX_MAX = 4;
+
+// 최근 발사 한 건. arrow.js 의 push() 한 자리에서만 적힌다(위 onFire 주석).
+// ★TDZ 주의: 아래 let 이 초기화되기 전에 mpNoteShot 이 불릴 일은 없다 -
+//   화살이 날려면 게임 루프가 돌아야 하고, 그건 모듈 평가가 끝난 뒤다.
+let mpShotSeq = 0, mpShotAt = -9e9;
+const mpShot = { n: 0, x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 1 };
+function mpNoteShot(a) {
+  const sp = Math.hypot(a.vx, a.vy, a.vz) || 1;
+  mpShot.n = ++mpShotSeq;
+  mpShot.x = a.x; mpShot.y = a.y; mpShot.z = a.z;
+  mpShot.dx = a.vx / sp; mpShot.dy = a.vy / sp; mpShot.dz = a.vz / sp;   // 단위 방향만 보낸다
+  mpShotAt = performance.now();
+}
+// 상태 소식에 실어 보낼 값. **막 쏜 뒤 0.6초 동안만** 싣는다.
+// ★왜 창을 두나: 채널이 unreliable 이라 한 장이 유실될 수 있다. 15Hz 로 0.6초면
+//   같은 발사가 최대 9번 실려 나가고, 받는 쪽은 번호(n)로 중복을 버린다.
+//   ★평시(칼잡이)에는 null 이라 소식 크기가 예전 그대로다.
+const MP_SHOT_WINDOW = 600;
+function mpShotWire() {
+  if (!mpShot.n || performance.now() - mpShotAt > MP_SHOT_WINDOW) return null;
+  return [mpShot.n, +mpShot.x.toFixed(2), +mpShot.y.toFixed(2), +mpShot.z.toFixed(2),
+          +mpShot.dx.toFixed(3), +mpShot.dy.toFixed(3), +mpShot.dz.toFixed(3)];
+}
+
+function createMpFx() {
+  const rigs = new Map();           // id -> rig(+ 손 본·칼 축)
+  const _a2 = new THREE.Vector3(), _b2 = new THREE.Vector3(), _sp2 = new THREE.Vector3();
+  const _ax = new THREE.Vector3(0, 1, 0);
+  let fxFrames = 0, attachN = 0, failN = 0;
+
+  // ── 남의 화살 (여기만 (가) 이벤트다) ────────────────────────────────────
+  // ★칼과 달리 화살은 **결정적**이다 - 시작점과 단위 방향만 같으면 속도·중력이 코드
+  //   상수라 궤적이 그대로 재현된다(arrow.js SPEED 30 · G 4.0). 그래서 뼈를 훑을
+  //   이유가 없고, 오히려 뼈로 하면 "언제 시위를 놓았나"를 다시 추측해야 한다.
+  // ★판정은 안 준다(hitEnemies/hitBoss 가 0·false). 1단계 멀티에서 요괴는 각자
+  //   로컬이라 남의 화살이 내 요괴를 죽이면 "유령 킬"이 된다(mp.js 머리말과 같은 규칙).
+  //   그래서 **그림만 나는 화살**이다. 벽·땅·수명에는 그대로 걸린다.
+  let ghost = null;
+  function ghostSys() {
+    if (ghost || !ARROW_ON) return ghost;
+    ghost = createArrowSystem({
+      scene, camera, level,
+      hitEnemies: () => 0, hitBoss: () => false,
+      onFire: () => sfx.bow(),        // 남이 쏘는 소리는 들려야 한다
+      beforeHit: () => {},
+    });
+    return ghost;
+  }
+
+  // ── 원격 한 사람 붙이기 ────────────────────────────────────────────────
+  // model = mp.js 가 올린 그 사람 glb 의 루트. 이미 스케일·재질이 끝난 상태로 온다.
+  // charH = 그 캐릭터의 목표 키(CHAR_CFG[name].h). ★로컬의 charH 와 **정확히 같은 수**다
+  //   (로컬도 box 높이를 cfg.h 로 정규화하므로 charH === cfg.h 로 떨어진다).
+  //   여기서 박스를 다시 재면 그때 도는 클립 자세가 섞여 몇 cm 씩 어긋난다.
+  function attach(id, model, charH) {
+    if (!model || rigs.has(id)) return;
+    if (rigs.size >= MP_FX_MAX) { failN++; return; }
+    // 손 본
+    let hand = null;
+    // ★어느 칼인지는 **묻지 않고 본다.** mp.js 가 시작 칼 하나만 visible 로 두므로
+    //   보이는 SW_ 메시를 모으면 그게 곧 그 사람이 든 칼이다. 이름을 여기 또 적으면
+    //   mp.js 의 START_SWORD 와 두 벌이 되어 언젠가 어긋난다.
+    const byKey = {};
+    model.traverse(o => {
+      if (o.isBone && /r[_ ]hand/i.test(o.name)) hand = o;
+      if (o.isSkinnedMesh && o.visible && o.name.startsWith('SW_')) {
+        const k = o.name.slice(3).replace(/_\d+$/, '');
+        (byKey[k] = byKey[k] || []).push(o);
+      }
+    });
+    const keys = Object.keys(byKey);
+    if (!hand || keys.length !== 1) { failN++; return; }   // 칼이 없는 캐릭터(궁수 등)
+    const key = keys[0];
+    const m = measureBladeOf(byKey[key]);
+    if (!m) { failN++; return; }
+
+    // 이 칼의 원소 = 그림(팔레트·굵기·알파)의 출처. 로컬 setElement() 와 같은 표를 본다.
+    const sw = SWORDS.find(x => x.key === key);
+    const elName = (sw && sw.el) || 'plain';
+    const el = ELEMENTS[elName] || ELEMENTS.plain;
+    const pal = PAL[elName] || PAL.plain;
+
+    const r = makeTrailRig([]);
+    r.mat = trailMat.clone();          // ★셰이더 소스가 같아 프로그램은 공유된다(컴파일 0회)
+    r.mat.uniforms.uPal.value = pal;
+    r.mat.uniforms.uStyle.value = el.style;
+    const wt = WAVETEX[elName];
+    r.mat.uniforms.uTex.value = wt || WAVETEX.water;
+    r.mat.uniforms.uUseTex.value = wt ? 1 : 0;
+    r.mesh = new THREE.Mesh(r.geo, r.mat);
+    r.mesh.frustumCulled = false;
+    r.mesh.renderOrder = 3;            // 로컬 궤적과 같은 층
+    r.mesh.visible = false;
+    scene.add(r.mesh);
+    r.el = el;
+    r.hand = hand;
+    r.bA = m.a; r.bB = m.b;
+    r.lastTip = null;
+    r.charH = charH || 2.4;
+    r.model = model;
+    r.wrote = 0;
+    r.swings = 0; r.wasHot = false;
+    rigs.set(id, r);
+    attachN++;
+  }
+
+  function detach(id) {
+    const r = rigs.get(id);
+    if (!r) return;
+    scene.remove(r.mesh);
+    r.geo.dispose(); r.mat.dispose();
+    rigs.delete(id);
+  }
+
+  // ── 프레임 한 장 ───────────────────────────────────────────────────────
+  // mp.js 가 그 사람 mixer 를 굴린 **직후에** 부른다(뼈가 이번 프레임 값이어야 한다).
+  // clip = 지금 도는 클립 이름, act = 그 AnimationAction(진행도용).
+  // ★dtRaw 로 받는다. 남의 아바타는 mp.js 에서 이미 rawDt 로 도는데 여기만 게임시계를
+  //   쓰면 내 히트스톱 동안 궤적만 얼어붙어 칼에서 떨어져 나간다.
+  function frame(id, dtRaw, clip, act) {
+    const r = rigs.get(id);
+    if (!r || !r.hand) return;
+    // 이 벌의 시계는 **벽시계**다(rawDt 를 누적하지 않는다 - 그 값은 main.js 에서
+    // Math.min(0.05, delta) 로 잘려 있어 프레임이 낮을수록 실제보다 느리게 쌓인다.
+    // 이 레포가 송신 주기와 경로 조회에서 두 번 밟은 함정이다).
+    r.clock = performance.now() * 0.001;
+    // ★셰이더의 재시딩 시계. 로컬은 tick 이 trailMat.uniforms.uT 에 gameT 를 넣는데,
+    //   원격 재질은 그 자리를 안 지나므로 여기서 직접 넣는다. 안 넣으면 uT 가 0 에
+    //   묶여 붓결 노이즈가 한 장에 굳는다(계단으로 다시 그리는 맛이 통째로 죽는다).
+    r.mat.uniforms.uT.value = r.clock;
+
+    r.hand.updateWorldMatrix(true, false);
+    _a2.copy(r.bA).applyMatrix4(r.hand.matrixWorld);
+    _b2.copy(r.bB).applyMatrix4(r.hand.matrixWorld);
+
+    // ★순간이동 방어. 첫 소식이 오면 mp.js 가 아바타를 **한 프레임에** 제자리로
+    //   옮긴다(수십 m). 그 한 칸을 그대로 궤적으로 그리면 맵을 가로지르는 띠가 한 장
+    //   생긴다. 로컬에도 같은 규칙이 있다 - 되살아나기·칼 교체에서 trailBuf 를 비운다.
+    //   문턱 2m/프레임 = 60fps 에서 120m/s 다(달리기 최대의 열 배가 넘는다).
+    if (r.lastTip && _b2.distanceToSquared(r.lastTip) > 4) {
+      r.buf.length = 0; r.lastTip.copy(_b2);
+    }
+
+    // 칼끝 속도 -> 궤적 세기. 로컬과 **같은 자**다(FAST_REF 45, 게이트 0.12/0.55).
+    let fast = 0;
+    if (r.lastTip) {
+      const sp = _sp2.copy(_b2).sub(r.lastTip).length() / Math.max(dtRaw, 1e-3);
+      fast = Math.min(1, Math.max(0, (sp / FAST_REF - 0.12) / 0.55));
+    } else {
+      _sp2.set(0, 0, 0);
+      r.lastTip = new THREE.Vector3();
+    }
+    r.lastTip.copy(_b2);
+
+    // 공격 중인가 = 공격 클립이 아직 끝까지 안 갔는가.
+    // ★클립 이름만 보면 안 된다 - LoopOnce + clampWhenFinished 라 다 끝난 뒤에도
+    //   이름은 'Attack' 인 채로 남는다. 그러면 서 있기만 해도 궤적이 계속 그어진다.
+    let atk = false, prog = 0;
+    if (clip === 'Attack' || clip === 'Heavy' || clip === 'Wide') {
+      const dur = act && act.getClip() ? act.getClip().duration : 0;
+      if (dur > 0) { prog = act.time / dur; atk = act.time < dur - 0.02; }
+    }
+    // 궤적 크기. 로컬 tick() 의 gainTarget 표를 그대로 옮겼다
+    // (Z 3연타는 1타 1.35 -> 2타 1.55 -> 3타 1.80 으로 커지고, 일격기는 1.85).
+    let gt = 1.15;
+    if (clip === 'Heavy' || clip === 'Wide') gt = atk ? 1.85 : 1.15;
+    else if (clip === 'Attack' && atk) gt = prog > 0.76 ? 1.80 : (prog > 0.39 ? 1.55 : 1.35);
+    r.gain += (gt - r.gain) * Math.min(1, dtRaw * 9);
+    r.clip = atk ? clip : null;
+
+    // 몸 기준점(리치 부채꼴·몸 비우기의 원점). 그 사람 그룹의 월드 자리다.
+    // ★로컬은 root(그룹)의 자리를 쓰고 원격은 **model 의 월드 자리**를 쓴다.
+    //   x·z 는 완전히 같고, y 만 접지 보정(model.position.y)만큼 다르다 - 그 값은
+    //   발뼈 최저점을 바닥에 붙이는 몇 cm 짜리 보정이라 가슴 높이(charH x 0.55 = 1.32m)
+    //   기준점에 주는 오차가 무시할 수준이다. 좌표를 더 보내는 대신 이쪽을 골랐다
+    //   (mp.js 머리 주석의 좌표 규약: 원격에는 model 월드 좌표만 온다).
+    r.model.getWorldPosition(r.pos3);
+    r.yaw = r.model.parent ? r.model.parent.rotation.y : 0;
+
+    // 샘플 하나 밀어 넣기. 로컬(tick 의 trailBuf.push)과 같은 식이다.
+    const wake = Math.max(0, (fast - 0.28) / 0.72);
+    for (const e of r.buf) {                // 물결이 칼을 떠나 날아가는 몫
+      if (e.vb) {
+        e.a.addScaledVector(e.va, dtRaw);
+        e.b.addScaledVector(e.vb, dtRaw);
+        e.vb.applyAxisAngle(_ax, 1.3 * dtRaw);
+        e.va.multiplyScalar(Math.pow(0.40, dtRaw));
+        e.vb.multiplyScalar(Math.pow(0.40, dtRaw));
+      }
+    }
+    const invDt = 1 / Math.max(dtRaw, 1e-3);
+    r.buf.push({ a: _a2.clone(), b: _b2.clone(), t: atk ? wake : 0,
+                 f: Math.floor(r.clock * FX_FPS),
+                 va: _sp2.clone().multiplyScalar((atk ? 0.06 : 0) * invDt),
+                 vb: _sp2.clone().multiplyScalar((atk ? 0.16 : 0) * invDt) });
+    while (r.buf.length > TRAIL_MAX) r.buf.shift();
+
+    buildRibbon(r);
+    // 살아 있는 마디가 하나도 없으면 아예 안 그린다(드로우콜 회수).
+    r.mesh.visible = r.wrote > 0;
+    if (r.wrote > 0) fxFrames++;
+    // 스윙 세기(검증용). 칼끝이 문턱을 넘는 순간을 한 번으로 친다.
+    const hot = atk && fast > 0.52;
+    if (hot && !r.wasHot) { r.swings++; r.hotAt = performance.now(); }
+    r.wasHot = hot;
+  }
+
+  // 남이 쏜 화살 한 발. wire = [n, x, y, z, dx, dy, dz]
+  function arrow(wire) {
+    const g = ghostSys();
+    if (!g || !wire || wire.length < 7) return;
+    g.fireDir(wire[1], wire[2], wire[3], wire[4], wire[5], wire[6]);
+  }
+
+  // 화살은 **게임시계**로 난다(로컬 화살과 같은 규칙. arrow.js 머리말).
+  function updateArrows(dt, paused) { if (ghost) ghost.update(dt, paused); }
+
+  function dispose() {
+    for (const id of [...rigs.keys()]) detach(id);
+    if (ghost) ghost.reset();
+  }
+
+  // 판을 다시 시작할 때(R). 남의 화살과 남의 궤적을 같이 지운다 - 이 게임의
+  // 리셋 문화 그대로다(로컬도 trailBuf/spray/arrows 를 여기서 비운다).
+  // ★rig 자체는 안 없앤다. 사람이 나간 게 아니라 내 판이 다시 시작한 것뿐이다.
+  function reset() {
+    if (ghost) ghost.reset();
+    for (const [, r] of rigs) { r.buf.length = 0; r.lastTip = null; r.mesh.visible = false; r.wrote = 0; }
+  }
+
+  const api = {
+    attach, detach, frame, arrow, updateArrows, dispose, reset,
+    get rigs() { return rigs.size; },
+    // ★검증 창구(상수가 아니라 window 노출. HANDOFF 의 관례). 남의 궤적만 껐다 켠다.
+    //   같은 프레임에 켠 그림과 끈 그림을 나란히 렌더해야 "이펙트가 정확히 몇 화소인가"를
+    //   추측 없이 잴 수 있다(눈으로는 옅은 시안 한 줄을 셀 수가 없다).
+    show(v) { for (const [, r] of rigs) r.mesh.visible = !!v && r.wrote > 0; return rigs.size; },
+    // 검증 창구. "보이는 것 같다"가 아니라 수로 본다.
+    //   fxFrames = 궤적이 실제로 화소를 쓴 프레임 수(전체 합)
+    //   swings   = 원격이 칼을 휘두른 횟수(칼끝이 문턱을 넘은 수)
+    get state() {
+      return {
+        on: MP_FX_ON, rigs: rigs.size, attached: attachN, failed: failN,
+        fxFrames, arrows: ghost ? ghost.state.live : 0,
+        fired: ghost ? ghost.state.fired : 0,
+        list: [...rigs.entries()].map(([id, r]) => ({
+          id: id.slice(-6), clip: r.clip, wrote: r.wrote, swings: r.swings,
+          vis: r.mesh.visible, gain: +r.gain.toFixed(2),
+          tip: r.lastTip ? r.lastTip.toArray().map(v => +v.toFixed(2)) : null,
+          hotAgoMs: r.hotAt ? Math.round(performance.now() - r.hotAt) : -1,
+        })),
+      };
+    },
+  };
+  return api;
+}
+const mpFx = MP_FX_ON ? createMpFx() : null;
+window.__mpfx = mpFx;
 
 // ── ★화살을 놓는다 (21차) ──────────────────────────────────────────────────
 // 부르는 자리는 아래 루프 한 곳뿐이다(클립 발사 프레임).
@@ -5313,6 +5683,9 @@ ui.initUI();
     const mpMod = await import('./mp.js' + location.search);
     multi = mpMod.createMultiplayer({
       THREE, scene, loader, glbUrl, CHAR_CFG, DEF_CFG,
+      // ★남의 공격 이펙트. **스위치(MP_FX_ON)의 정의는 main.js 한 곳**이고 mp.js 는
+      //   이 값이 null 인지만 본다(스위치를 두 벌 두면 반드시 어긋난다).
+      fx: mpFx,
       getSelf() {
         if (!model) return null;
         model.getWorldPosition(_wp);
@@ -5330,6 +5703,9 @@ ui.initUI();
           //   안 거치므로, 이 수가 없으면 남의 화면에서 1타만 보이고 만다.
           atk: atkStarts,
           char: curChar || 'basic2',
+          // ★남이 쏜 화살. 막 쏜 뒤 0.6초 동안만 실린다(그 밖에는 null 이라 평시
+          //   소식 크기가 예전 그대로다). 받는 쪽은 번호로 중복을 버린다.
+          sh: mpShotWire(),
           // 어느 층에 있는지. 서로 다른 층에 들어가면 아무도 안 보이는데, 그게
           // "연결이 안 됐다"와 화면상 구분이 안 된다. 받는 쪽이 경고를 띄우게 알린다.
           map: IS_DUNGEON ? 'level2' : 'level1',
@@ -5794,6 +6170,9 @@ function tick() {
       }
       arrows.update(dt, preview.on || cleared);
     }
+    // ★남의 화살도 **게임시계**로 난다(로컬과 같은 규칙). arrows 가 꺼져 있어도
+    //   이 줄은 돌아야 한다 - 남의 화살 시스템은 따로 서 있기 때문이다.
+    if (mpFx) mpFx.updateArrows(dt, preview.on || cleared);
     if (items) items.update(dt, preview.on || cleared);
 
     // ── 휘두름 소리 ──

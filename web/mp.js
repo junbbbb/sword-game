@@ -27,6 +27,15 @@ export { makeRoomCode };
 
 export function createMultiplayer(ctx) {
   const { THREE, scene, loader, glbUrl, CHAR_CFG, DEF_CFG, getSelf } = ctx;
+  // ── 남의 공격 이펙트 (22차) ──
+  // ★null 이면 통째로 안 돈다. **스위치(MP_FX_ON)의 정의는 main.js 한 곳**이고
+  //   여기서는 그 결과만 받는다 - 스위치를 두 벌 두면 반드시 어긋난다(이 레포의 교훈).
+  // ★칼 이펙트는 소식을 **한 바이트도 더 안 쓴다.** 남의 아바타에는 같은 glb 의 뼈와
+  //   칼 메시가 그대로 있고 클립도 이미 같은 시각·같은 배속으로 도니까, 궤적을 그
+  //   손 본에서 직접 계산한다(main.js mpFx 머리 주석이 정본).
+  //   화살만 예외로 발사 이벤트(msg.sh)를 태워 보낸다 - 궤적이 결정적이라 시작점과
+  //   방향만 같으면 그대로 재현되기 때문이다.
+  const fx = ctx.fx || null;
 
   let net = null;
   // ★송신 주기는 **벽시계**로 잰다. 게임 dt(rawDt)로 재면 안 된다 - 그 값은
@@ -149,6 +158,9 @@ export function createMultiplayer(ctx) {
       });
       p.model = m; p.mixer = mx; p.actions = acts; p.ready = true;
       playOn(p, p.clip, 0);
+      // 칼 궤적 한 벌을 이 사람에게 붙인다(칼이 없는 캐릭터면 안에서 조용히 넘어간다).
+      // ★키(cfg.h)를 그대로 넘긴다 - main.js 의 charH 와 **같은 수**다.
+      if (fx) fx.attach(id, m, cfg.h);
     }, null, err => {
       console.warn('[mp] 남의 캐릭터를 못 읽었다:', name, err);
     });
@@ -157,6 +169,7 @@ export function createMultiplayer(ctx) {
   function despawn(id) {
     const p = peers.get(id);
     if (!p) return;
+    if (fx) fx.detach(id);
     if (p.mixer) p.mixer.stopAllAction();
     scene.remove(p.group);
     p.group.traverse(o => {
@@ -217,6 +230,13 @@ export function createMultiplayer(ctx) {
       if (!p.seen) {                       // 첫 소식이면 순간이동으로 자리를 잡는다
         p.cur.x = msg.x; p.cur.y = msg.y; p.cur.z = msg.z; p.cur.yaw = msg.r;
         p.seen = true;
+      }
+      // ── 남이 쏜 화살 ──
+      // ★번호(sh[0])로 중복을 버린다. 같은 발사가 최대 9번 실려 오는데(0.6초 창),
+      //   그건 유실 대비지 아홉 발이 아니다. 번호가 없으면 한 발이 아홉 번 날아간다.
+      if (fx && msg.sh && msg.sh.length >= 7 && msg.sh[0] !== p.lastShot) {
+        p.lastShot = msg.sh[0];
+        fx.arrow(msg.sh);
       }
       if (msg.c !== p.clip || msg.s !== p.seq) {
         p.clip = msg.c; p.seq = msg.s;
@@ -288,7 +308,7 @@ export function createMultiplayer(ctx) {
       }
       // 남의 아바타: 목표로 따라붙고 클립을 돌린다
       const k = 1 - Math.exp(-LERP_K * rawDt);
-      for (const [, p] of peers) {
+      for (const [id, p] of peers) {
         p.cur.x += (p.tgt.x - p.cur.x) * k;
         p.cur.y += (p.tgt.y - p.cur.y) * k;
         p.cur.z += (p.tgt.z - p.cur.z) * k;
@@ -296,6 +316,9 @@ export function createMultiplayer(ctx) {
         p.group.position.set(p.cur.x, p.cur.y, p.cur.z);
         p.group.rotation.y = p.cur.yaw;
         if (p.mixer) p.mixer.update(rawDt);
+        // ★★칼 궤적은 **뼈를 굴린 바로 뒤**에 그린다. 순서가 뒤집히면 궤적이 한 프레임
+        //   낡은 자리에 그어져 칼에서 떨어져 보인다(빠른 스윙에서 0.5m 가 넘는다).
+        if (fx && p.ready) fx.frame(id, rawDt, p.clip, p.current);
       }
       // 붙은 길은 자주 안 바뀐다. 4초에 한 번만 묻는다(getStats 는 비동기·비싸다)
       if (net && net.count > 1) {
@@ -319,13 +342,17 @@ export function createMultiplayer(ctx) {
       if (!s) return;
       myMap = s.map;
       txCount++;
+      // ★sh(화살 발사)는 **막 쏜 뒤 0.6초 동안만** 값이 있고 그 밖에는 null 이다.
+      //   칼잡이 판에서는 늘 null 이라 소식 크기가 예전 그대로다.
       net.send({ t: 'st', n: ++txSeq, x: s.x, y: s.y, z: s.z, r: s.yaw,
-                 c: s.clip, p: s.pt, ts: s.ts, s: s.atk, k: s.char, m: s.map });
+                 c: s.clip, p: s.pt, ts: s.ts, s: s.atk, k: s.char, m: s.map,
+                 sh: s.sh || undefined });
     },
 
     dispose() {
       dead = true;
       for (const id of [...peers.keys()]) despawn(id);
+      if (fx) fx.dispose();
       if (net) { try { net.send({ t: 'bye' }); } catch (_) {} net.close(); net = null; }
       say('');
     },
@@ -345,6 +372,9 @@ export function createMultiplayer(ctx) {
         peers: net ? net.count : 1, host: net ? net.isHost : null,
       };
     },
+    // 남의 공격 이펙트 상태(자세한 창구는 window.__mpfx). 여기 둔 이유는
+    // "아바타는 보이는데 이펙트가 안 보인다"를 한 화면에서 갈라 보기 위해서다.
+    get fx() { return fx ? fx.state : null; },
     resetStats() { rxCount = 0; txCount = 0; rxGapMax = 0; rxStale = 0; rxTimes.length = 0; },
     // 내가 남에게 보내고 있는 값. 원격 목록과 나란히 봐야 "누가 안 움직이는지" 가 갈린다.
     get self() { return getSelf(); },
