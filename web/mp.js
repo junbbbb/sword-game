@@ -36,7 +36,6 @@ export function createMultiplayer(ctx) {
   //   한 번씩만 문턱을 넘었다). 느린 기계일수록 더 안 보내게 되는 셈이라
   //   상대 화면에서 그 사람만 유독 끊겨 보인다 - 방향이 정확히 반대였다.
   let lastSendMs = 0;
-  let mySeq = 0;                 // 동작이 바뀔 때마다 오른다(같은 클립 재발동을 알린다)
   let dead = false;
   let myMap = '';
   let warnedMap = false;
@@ -222,6 +221,11 @@ export function createMultiplayer(ctx) {
       if (msg.c !== p.clip || msg.s !== p.seq) {
         p.clip = msg.c; p.seq = msg.s;
         playOn(p, msg.c);
+        // ★재생속도를 맞춘다. 공격은 캐릭터별로 갈려서(검사 1.35 / 궁수 2.00)
+        //   1.0 으로 틀면 남의 화면에서만 느린 공격이 된다.
+        if (p.current && typeof msg.ts === 'number' && msg.ts > 0) {
+          p.current.setEffectiveTimeScale(msg.ts);
+        }
         if (p.current && typeof msg.p === 'number') p.current.time = msg.p;
       } else if (p.current && typeof msg.p === 'number') {
         // ★3연타는 play() 를 다시 부르지 않고 **클립 시간을 점프**해서 낸다. 이름만
@@ -272,9 +276,6 @@ export function createMultiplayer(ctx) {
       return net.room;
     },
 
-    // 내 동작이 바뀌었다고 알린다(main.js 의 play() 가 부른다)
-    bumpSeq() { mySeq++; },
-
     // 프레임마다. rawDt 를 받는다 - 남의 아바타는 내 히트스톱에 멈추면 안 된다.
     update(rawDt) {
       if (dead) return;
@@ -319,7 +320,7 @@ export function createMultiplayer(ctx) {
       myMap = s.map;
       txCount++;
       net.send({ t: 'st', n: ++txSeq, x: s.x, y: s.y, z: s.z, r: s.yaw,
-                 c: s.clip, p: s.pt, s: mySeq, k: s.char, m: s.map });
+                 c: s.clip, p: s.pt, ts: s.ts, s: s.atk, k: s.char, m: s.map });
     },
 
     dispose() {

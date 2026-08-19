@@ -3785,9 +3785,16 @@ function bootGate(rawDt) {
 // ★선언이 play() 보다 **앞**에 있어야 한다. 로딩 중 activateChar 가 play('Idle') 를
 //   부르는데, let 은 선언 전에 읽으면 ReferenceError 다(TDZ). 값은 파일 끝에서 채운다.
 let multi = null;
-// 지금 도는 클립 이름. current(AnimationAction)에서 역으로 찾을 수도 있지만
-// 매 프레임 뒤지는 것보다 바뀔 때 한 번 적는 쪽이 싸다.
-let curClip = 'Idle';
+// ★지금 도는 클립 이름. **play() 에 적어 두는 방식은 틀렸다** - 공격 셋(tryAttack·
+//   tryHeavy·tryWide)은 play() 를 거치지 않고 액션을 직접 조작한다(3연타를 내려면
+//   클립 시간을 단수 진입점으로 점프시켜야 해서다). 그래서 그 방식으로는 공격이
+//   통째로 누락돼 남의 화면에 'Idle' 로 전해졌다(2026-08-19 「팀원 공격이 안 보인다」).
+//   actions 는 일곱 개뿐이라 역산이 훨씬 싸고, 무엇보다 **어떤 경로로 바뀌든 맞는다.**
+function clipNameOf(act) {
+  if (!act) return 'Idle';
+  for (const k in actions) if (actions[k] === act) return k;
+  return 'Idle';
+}
 
 function play(name, fade = 0.18) {
   const a = actions[name];
@@ -3797,8 +3804,6 @@ function play(name, fade = 0.18) {
   if (current) current.crossFadeTo(a, fade, false);
   else a.fadeIn(fade);
   current = a;
-  curClip = name;
-  if (multi) multi.bumpSeq();        // 같은 클립을 다시 틀었을 때를 남이 알아채는 표식
 }
 
 // 3연타 클립의 단수별 진입점(초)과 그 단수의 커밋 길이(초).
@@ -5314,10 +5319,16 @@ ui.initUI();
         return {
           x: +_wp.x.toFixed(3), y: +_wp.y.toFixed(3), z: +_wp.z.toFixed(3),
           yaw: +root.rotation.y.toFixed(3),
-          clip: curClip,
+          clip: clipNameOf(current),
           // 클립 안 재생 시각. 3연타는 play() 를 다시 부르지 않고 **클립 시간을
           // 점프**해서 낸다(ATK_ENTRY). 이 값이 없으면 남의 화면에서 1타만 나온다.
           pt: current ? +current.time.toFixed(3) : 0,
+          // ★재생속도도 보낸다. 공격은 캐릭터별로 갈리고(검사 1.35 / 궁수 2.00)
+          //   받는 쪽이 1.0 으로 틀면 같은 모션이 다른 속도로 돌아 어긋난다.
+          ts: current ? +current.timeScale.toFixed(3) : 1,
+          // ★공격이 **다시 시작**된 횟수. 3연타는 클립 이름도 안 바뀌고 play() 도
+          //   안 거치므로, 이 수가 없으면 남의 화면에서 1타만 보이고 만다.
+          atk: atkStarts,
           char: curChar || 'basic2',
           // 어느 층에 있는지. 서로 다른 층에 들어가면 아무도 안 보이는데, 그게
           // "연결이 안 됐다"와 화면상 구분이 안 된다. 받는 쪽이 경고를 띄우게 알린다.
