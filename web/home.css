@@ -117,6 +117,9 @@
   letter-spacing: .02em; color: var(--bs-blue, #6ba8ba);
 }
 #home .hmCard .hmMoves.hmThin { color: var(--bs-muted, #877c6d); }
+/* 싸울 수 없는 캐릭터. 회색으로 두면 "덜 좋다" 로 읽히는데 사실은 못 쓴다는 뜻이라
+   경고색을 준다. 고르는 것 자체는 막지 않는다 - 멀티에서 남에게 보여 주는 몸으로는 쓴다 */
+#home .hmCard .hmMoves.hmWarn { color: var(--bs-red-hi, #ff9b82); }
 
 /* ── 입장 ── */
 #home .hmGo {

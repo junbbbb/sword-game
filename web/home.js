@@ -35,15 +35,24 @@ const MAPS = [
 //   archer               Attack Idle Jump JumpB Run Walk        (Heavy·Wide 없음)
 //   tank                 Attack Idle Run Walk                   (Heavy·Wide·Jump 없음)
 //   soldier              Attack CombatIdle Idle Run Walk        (Heavy·Wide·Jump 없음)
-// ★없는 클립은 눌러도 아무 일이 안 일어난다(play() 가 조용히 빠진다). 그래서
-//   "무엇이 되는 캐릭터인지"를 고르기 전에 여기서 말해 준다.
+//
+// ★★그런데 클립보다 먼저 걸리는 것이 있다 — **무기 메시**다. 같은 날 실측:
+//     basic2·kensa·slayer  SW_ 칼 7자루      → 벤다
+//     archer·tank·soldier  SW_ 0개           → **아무것도 못 죽인다**
+//   사슬은 이렇다: SW_ 가 없으면 main.js 가 equipSword 를 안 부르고 → measureBlade 가
+//   안 돌아 bladeOK 가 영영 false → enemies.update 에 칼 선분이 null 로 나가고 →
+//   enemy.js 의 doHits 가 **호출조차 안 된다**(에러는 안 난다).
+//   게다가 캔슬 판정이 "한 번이라도 맞았나(atkStruck)" 에 걸려 있어서, 못 맞히면
+//   **공격 경직 0.86초가 안 풀린다** - 그동안 걷지도 점프하지도 못한다.
+//   그래서 셋은 지금 고를 수는 있어도 싸울 수는 없다. 고르기 전에 **사실대로** 적는다.
+//   (궁수는 활쏘기 모션이 이미 있고 화살·활을 붙이는 중이다)
 const CHARS = [
-  { key: 'basic2',  name: '검사', desc: '흑요석 대검',  moves: '베기 3종 · 점프' },
-  { key: 'kensa',   name: '검사', desc: '삿갓 쓴 한국 검사',        moves: '베기 3종 · 점프' },
-  { key: 'slayer',  name: '검사', desc: '무브셋 원본',              moves: '베기 3종 · 점프' },
-  { key: 'archer',  name: '궁수', desc: '점프 클립 두 벌',        moves: 'Z 베기 · 점프', thin: true },
-  { key: 'tank',    name: '탱커', desc: '로마식 망토',              moves: 'Z 베기만',      thin: true },
-  { key: 'soldier', name: '병사', desc: '2차대전 철모',             moves: 'Z 베기만',      thin: true },
+  { key: 'basic2',  name: '검사', desc: '흑요석 대검',        moves: '베기 3종 · 점프' },
+  { key: 'kensa',   name: '검사', desc: '삿갓 쓴 한국 검사',  moves: '베기 3종 · 점프' },
+  { key: 'slayer',  name: '검사', desc: '무브셋 원본',        moves: '베기 3종 · 점프' },
+  { key: 'archer',  name: '궁수', desc: '활쏘기 모션만 있다', moves: '아직 공격 못 한다', warn: true },
+  { key: 'tank',    name: '탱커', desc: '칼이 없다',          moves: '아직 공격 못 한다', warn: true },
+  { key: 'soldier', name: '병사', desc: '칼이 없다',          moves: '아직 공격 못 한다', warn: true },
 ];
 
 const STORE = 'swordHome';           // 마지막 선택을 기억한다(테스트 왕복이 잦다)
@@ -62,7 +71,7 @@ function card(kind, it) {
   const on = sel[kind] === it.key;
   const key = kind === 'char' ? '<span class="hmKey">' + esc(it.key) + '</span>' : '';
   const line = kind === 'char'
-    ? '<span class="hmMoves' + (it.thin ? ' hmThin' : '') + '">' + esc(it.moves) + '</span>'
+    ? '<span class="hmMoves' + (it.warn ? ' hmWarn' : '') + '">' + esc(it.moves) + '</span>'
     : '<span class="hmMoves' + (it.tag === '보스 있음' ? '' : ' hmThin') + '">' + esc(it.tag) + '</span>';
   return '<button class="hmCard" type="button" data-kind="' + kind + '" data-key="' + esc(it.key) + '"' +
          ' aria-pressed="' + (on ? 'true' : 'false') + '">' +
