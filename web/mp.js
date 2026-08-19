@@ -85,6 +85,14 @@ export function createMultiplayer(ctx) {
   //   평시 화면에 상시 표시물을 얹지 않는다는 이 게임의 관례를 지키기 위해서다.
   //   이게 있어야 "네트워크가 느린 것" 과 "그 사람 화면이 느린 것" 이 갈린다.
   let fpsN = 0, fpsT0 = 0, fpsVal = 0;
+  // ── 핑(왕복 시간) ──
+  // ★게임이 화면에 띄우는 "핑"은 **네트워크 왕복만** 잰 값이다. 손맛 지연(때린 순간부터
+  //   반응까지)은 거기에 내 프레임 대기 + 송신 주기 대기 + 상대 프레임 + 상대 송신
+  //   주기가 더 붙는다. 둘은 다른 값이고, 섞어 보면 "핑이 왜 이렇게 크냐" 가 된다.
+  // ★내 시계와 상대 시계는 안 맞는다(performance.now 는 각자 페이지 기준). 그래서
+  //   **내가 보낸 표식을 상대가 그대로 되돌려주는** 방식으로 잰다 - 시계를 맞출 필요가 없다.
+  let pingSeq = 0, pingMs = 0, pingLastSent = 0;
+  const pingSent = new Map();      // 표식 -> 보낸 시각
   let route = '';                // 'host/host' · 'srflx/srflx' · 'relay/...' 등
   // ★주기는 **벽시계**로 잰다. rawDt 는 Math.min(0.05, delta) 로 잘려 있어서
   //   프레임이 낮으면 실제보다 느리게 쌓인다(송신 주기에서 이미 한 번 밟은 함정이다).
@@ -112,6 +120,7 @@ export function createMultiplayer(ctx) {
     let line = '방 ' + net.room + (net.isHost ? ' (방장)' : '') + '\n' + n + '명 접속';
     if (fpsVal) line += '  ·  ' + fpsVal + 'fps';
     if (route) line += '\n경로 ' + route;
+    if (pingMs) line += (route ? '  ·  ' : '\n') + '핑 ' + Math.round(pingMs) + 'ms';
     if (n > 1) {
       const hz = (rxTimes.length / 2).toFixed(0);      // 최근 2초 평균
       line += '\n수신 ' + hz + '/s';
@@ -300,6 +309,17 @@ export function createMultiplayer(ctx) {
         //   임계값(0.12초)을 두는 이유는 매 소식마다 되감으면 재생이 뚝뚝 끊기기 때문이다.
         if (Math.abs(p.current.time - msg.p) > 0.12) p.current.time = msg.p;
       }
+    } else if (msg.t === 'pi') {
+      // 받은 표식을 그대로 되돌린다. 여기서 뭘 계산하지 않는다(시계가 다르다).
+      if (net) net.send({ t: 'po', k: msg.k });
+    } else if (msg.t === 'po') {
+      const t0 = pingSent.get(msg.k);
+      if (t0 !== undefined) {
+        pingSent.delete(msg.k);
+        const rtt = performance.now() - t0;
+        // 지수 평활. 한 번 튄 값에 표시가 출렁이면 읽을 수가 없다
+        pingMs = pingMs ? pingMs * 0.7 + rtt * 0.3 : rtt;
+      }
     } else if (msg.t === 'bye') {
       despawn(from); roster();
       // ★방장이 인사하고 나갔다. 그 소식이 안 오는 판(강제 종료)도 있으므로
@@ -394,6 +414,17 @@ export function createMultiplayer(ctx) {
         //   낡은 자리에 그어져 칼에서 떨어져 보인다(빠른 스윙에서 0.5m 가 넘는다).
         if (fx && p.ready) fx.frame(id, rawDt, p.clip, p.current);
       }
+      // 핑은 2초에 한 번. 답이 안 오면 조용히 버린다(표식이 쌓이지 않게 상한을 둔다)
+      if (net && net.count > 1) {
+        const pNow = performance.now();
+        if (pNow - pingLastSent > 2000) {
+          pingLastSent = pNow;
+          const k = ++pingSeq;
+          pingSent.set(k, pNow);
+          if (pingSent.size > 8) pingSent.delete(pingSent.keys().next().value);
+          net.send({ t: 'pi', k });
+        }
+      }
       // 붙은 길은 자주 안 바뀐다. 4초에 한 번만 묻는다(getStats 는 비동기·비싸다)
       if (net && net.count > 1) {
         const rNow = performance.now();
@@ -460,7 +491,7 @@ export function createMultiplayer(ctx) {
     //   stale 이 늘어난다 -> 순서가 뒤바뀐 소식이 실제로 오고 있다(unreliable 채널의 정상 동작)
     get net() {
       return {
-        fps: fpsVal, route, rxHz: +(rxTimes.length / 2).toFixed(1), rx: rxCount, tx: txCount,
+        fps: fpsVal, route, pingMs: +pingMs.toFixed(1), rxHz: +(rxTimes.length / 2).toFixed(1), rx: rxCount, tx: txCount,
         gapMaxMs: Math.round(rxGapMax), stale: rxStale,
         peers: net ? net.count : 1, host: net ? net.isHost : null,
       };
