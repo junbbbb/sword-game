@@ -27,6 +27,30 @@ const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 //   기다리는 쪽이 낫다 - 안 되는 경우는 어차피 코드가 틀렸거나 방장이 안 켠 것이다.
 const JOIN_TIMEOUT = 25000;
 
+// ── ICE 서버 ─────────────────────────────────────────────────────────────
+// ★2026-08-19. **같은 공유기 안의 두 기기가 서로 못 붙는 사고**로 넣었다.
+//   크롬은 사생활 보호로 로컬 IP 를 mDNS(`xxxx.local`)로 감춘다. 상대가 그걸
+//   해석하지 못하면 같은 LAN 인데도 로컬 경로(host 후보)를 못 쓰고, 공인 IP 로
+//   나갔다 돌아오는 길(헤어핀 NAT)을 시도하는데 공유기 상당수가 그걸 지원하지
+//   않는다. 그래서 **밖에 있는 친구와는 붙는데 같은 집 안에서는 안 붙는다.**
+// ★STUN 은 "내 공인 주소가 뭔지" 만 알려 준다. 길이 아예 없을 때 대신 짐을
+//   날라 주는 것은 **TURN** 이고, 지금까지 하나도 설정돼 있지 않았다
+//   (PeerJS 기본은 구글 STUN 뿐이다).
+// ★TURN 은 남의 무료 서버다. 죽어 있을 수 있고 그래도 게임은 돈다 - 직접 연결이
+//   되는 판에서는 애초에 쓰이지 않는다(ICE 가 더 싼 길을 먼저 고른다).
+//   스팀으로 가면 이 자리는 밸브의 SDR 릴레이가 대신한다(무료·무제한).
+const ICE = {
+  iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    // Open Relay (metered.ca) 공개 자격증명. 계정이 필요 없는 공용 TURN 이다.
+    { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443',
+             'turn:openrelay.metered.ca:443?transport=tcp'],
+      username: 'openrelayproject', credential: 'openrelayproject' },
+  ],
+  // 후보를 다 모으고 고르지 말고, 오는 대로 시도한다(붙는 시간이 짧아진다).
+  iceCandidatePoolSize: 4,
+};
+
 export function makeRoomCode(n = 4) {
   const a = new Uint8Array(n);
   crypto.getRandomValues(a);
@@ -96,7 +120,7 @@ export async function createNet(hooks = {}) {
   // peer 객체 하나를 세운다. id 를 주면 그 id 를 점유한다(방장).
   function openPeer(wantId) {
     return new Promise((ok, no) => {
-      const p = wantId ? new Peer(wantId) : new Peer();
+      const p = wantId ? new Peer(wantId, { config: ICE }) : new Peer({ config: ICE });
       let settled = false;
       p.on('open', id => { if (!settled) { settled = true; ok({ p, id }); } });
       p.on('error', e => {
@@ -193,6 +217,29 @@ export async function createNet(hooks = {}) {
         if (!c.open) continue;
         try { c.send(obj); } catch (e) { /* 끊기는 중 */ }
       }
+    },
+
+    // ── 어떤 길로 붙었나 ──
+    // host  = 같은 망에서 직접 (제일 빠르다)
+    // srflx = NAT 을 뚫고 직접 (보통)
+    // relay = TURN 서버가 짐을 날라 준다 (지연이 늘지만 안 붙던 판이 붙는다)
+    // ★같은 공유기 안의 두 기기가 relay 로 붙는 것은 정상이다 - 크롬이 로컬 IP 를
+    //   mDNS 로 감춰서 host 후보를 못 쓰는 경우가 있다(이 파일 머리 ICE 주석).
+    async route() {
+      const c = [...conns.values()].find(x => x && x.peerConnection);
+      if (!c) return '연결없음';
+      try {
+        const stats = await c.peerConnection.getStats();
+        let sel = null; const cand = {};
+        stats.forEach(r => {
+          if (r.type === 'candidate-pair' && r.state === 'succeeded' &&
+              (r.nominated || r.selected) && (!sel || r.priority > sel.priority)) sel = r;
+          if (r.type === 'local-candidate' || r.type === 'remote-candidate') cand[r.id] = r;
+        });
+        if (!sel) return c.peerConnection.iceConnectionState || '탐색중';
+        const t = x => (x && x.candidateType) || '?';
+        return t(cand[sel.localCandidateId]) + '/' + t(cand[sel.remoteCandidateId]);
+      } catch (e) { return '알수없음'; }
     },
 
     close() {

@@ -54,6 +54,10 @@ export function createMultiplayer(ctx) {
   //   평시 화면에 상시 표시물을 얹지 않는다는 이 게임의 관례를 지키기 위해서다.
   //   이게 있어야 "네트워크가 느린 것" 과 "그 사람 화면이 느린 것" 이 갈린다.
   let fpsN = 0, fpsT0 = 0, fpsVal = 0;
+  let route = '';                // 'host/host' · 'srflx/srflx' · 'relay/...' 등
+  // ★주기는 **벽시계**로 잰다. rawDt 는 Math.min(0.05, delta) 로 잘려 있어서
+  //   프레임이 낮으면 실제보다 느리게 쌓인다(송신 주기에서 이미 한 번 밟은 함정이다).
+  let routeMs = 0;
   const peers = new Map();       // id -> { group, model, mixer, actions, cur, tgt, clip, seq, char }
 
   // ── 상태 표시 ──
@@ -76,6 +80,7 @@ export function createMultiplayer(ctx) {
     const n = net.count;
     let line = '방 ' + net.room + (net.isHost ? ' (방장)' : '') + '\n' + n + '명 접속';
     if (fpsVal) line += '  ·  ' + fpsVal + 'fps';
+    if (route) line += '\n경로 ' + route;
     if (n > 1) {
       const hz = (rxTimes.length / 2).toFixed(0);      // 최근 2초 평균
       line += '\n수신 ' + hz + '/s';
@@ -291,6 +296,14 @@ export function createMultiplayer(ctx) {
         p.group.rotation.y = p.cur.yaw;
         if (p.mixer) p.mixer.update(rawDt);
       }
+      // 붙은 길은 자주 안 바뀐다. 4초에 한 번만 묻는다(getStats 는 비동기·비싸다)
+      if (net && net.count > 1) {
+        const rNow = performance.now();
+        if (rNow - routeMs > 4000) {
+          routeMs = rNow;
+          net.route().then(r => { route = r; }).catch(() => {});
+        }
+      }
       // 진단 표시는 0.5초마다만 다시 쓴다(매 프레임 DOM 을 쓸 이유가 없다)
       if (net) {
         hudAcc += rawDt;
@@ -326,7 +339,7 @@ export function createMultiplayer(ctx) {
     //   stale 이 늘어난다 -> 순서가 뒤바뀐 소식이 실제로 오고 있다(unreliable 채널의 정상 동작)
     get net() {
       return {
-        fps: fpsVal, rxHz: +(rxTimes.length / 2).toFixed(1), rx: rxCount, tx: txCount,
+        fps: fpsVal, route, rxHz: +(rxTimes.length / 2).toFixed(1), rx: rxCount, tx: txCount,
         gapMaxMs: Math.round(rxGapMax), stale: rxStale,
         peers: net ? net.count : 1, host: net ? net.isHost : null,
       };
