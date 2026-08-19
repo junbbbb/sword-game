@@ -24,8 +24,29 @@
     이었다(웅크림 -> 도약, 지면 0.94 까지 뜸 -> 착지 -> 40프레임 정지).
     손이 골반보다 8cm 이상 올라간 적이 없어 활 자세일 수가 없다.
     그래서 Attack 은 여기서 직접 만든다(활 당기고 놓기).
-    ★활은 몸 메시에 등짐으로 구워져 있다(재질 1개, 아일랜드 1437개라 분리 불가).
-    손에 활을 들려주려면 s10_shield.py 처럼 **별도 활 메시**를 만들어 붙여야 한다.
+    ★활은 몸 메시에 등짐으로 구워져 있었다(재질 1개, 아일랜드 1437개).
+    2026-08-19(21차)에 **손에 드는 활을 붙이고 등짐 활은 지웠다.** 아래 두 절 참고.
+
+★손에 드는 활 BW_bow (2026-08-19 추가. s10_shield.py 의 방패와 같은 자리)
+  blender/bow_mesh.py 가 절차로 만들고 **왼손 뼈(Bip001 L Hand)** 에 웨이트 1.0 으로 묶는다.
+  배치는 REST 눈대중이 아니라 L = M_pose⁻¹ @ target 을 푼다(s10 헤더가 정본).
+  ★기준 포즈는 Idle 이 아니라 **Attack 만작(f11 = 클립 0.4167초)** 이다. 활은 쏠 때
+    손에 있는 물건이고 그 프레임이 이 캐릭터의 캡처컷이다.
+  ★왼손이 맞다는 실측: 만작에서 왼손이 앞으로 0.543m 나가고 오른손은 0.094m 다.
+  ★이름은 BW_ 다. SW_ 는 main.js 가 칼 목록으로 모으고(3352) 칼날 셰이더까지 걸린다.
+  ★키 정규화: main.js 는 SW_/SH_ 로 시작하지 않는 메시를 전부 모아 키를 잰다.
+    BW_ 는 거기 안 걸리므로 활이 키 상자에 들어간다. 그래서 캔트를 -15도로 잡아
+    **REST 자세 활 z 를 0.841~1.635 로** 몸통(0~1.700) 안에 넣었다. 아래 출력이 그걸 검산한다.
+    (캔트 0도면 1.730 이라 몸통을 넘어 캐릭터가 1.7% 쪼그라든다)
+
+★등짐 활 제거 (2026-08-19 추가)
+  안 지우면 활이 두 개로 보인다(손에 하나, 등에 하나).
+  재질로도(1개) 느슨한 조각으로도(3개) 못 가르고 **인덱스 연결성**으로만 갈린다.
+  어느 아일랜드가 활인지는 blender/probe_bow_final.py 가 특정했다 -
+  몸 둘레 여러 시점에서 광선을 쏴 맞은 면의 텍셀색을 읽어 "나무색 + 작은 조각 + 등 뒤"
+  를 고른다. 결과는 blender/archer_backbow_verts.txt 에 **정점 인덱스**로 굳혀 뒀다.
+  ★"등 뒤에서 가장 큰 아일랜드(158정점/0.817m)" 는 활이 아니라 **머리카락**이다.
+    기하만 보면 긴 머리 가닥과 활대가 안 갈린다. 색을 봐야 갈린다(머리카락 #FDFCFC).
   Idle = ★019fd1b2 파일의 끝부분(정지해 선 자세)을 바탕으로 만든다.
     s9(탱커)는 걷기 첫 프레임을 썼는데 그건 다리를 벌린 중간자세다.
     이 파일 뒤쪽 40프레임은 팔을 내리고 가만히 선 자세라 Idle 바탕으로 낫다.
@@ -55,6 +76,7 @@ from mathutils import Vector, Matrix
 ROOT = "/Users/lbj/Documents/gameproject"
 sys.path.insert(0, os.path.join(ROOT, "blender"))
 import combo_poses as CP
+import bow_mesh as BM                                   # 손에 드는 활(21차)
 
 SRC = os.path.join(ROOT, "incoming/meshy2/Meshy_AI_Moonshadow_Ranger_biped")
 WEB = os.path.join(ROOT, "web")
@@ -100,6 +122,34 @@ for o in list(objs):
 mesh = next(o for o in objs if o.type == "MESH")
 print("기준 리그:", arm.name, "본", len(arm.data.bones), "/ 메시", mesh.name,
       len(mesh.data.polygons), "면")
+
+# ---- 1.5) ★등에 구워진 활을 지운다 ----
+# 손에 활을 들려주므로 안 지우면 활이 두 개다. 목록은 probe_bow_final.py 가 특정했고
+# archer_backbow_verts.txt 에 정점 인덱스로 굳혀 뒀다(root 번호는 union-find 순서를
+# 타서 못 믿는다. 정점 인덱스는 원본 파일이 같으면 항상 같다).
+# bpy.ops 를 안 쓰고 bmesh 로 지운다 - 배경 실행에서 ops 는 컨텍스트를 탄다.
+BOWF = os.path.join(ROOT, "blender/archer_backbow_verts.txt")
+if os.path.exists(BOWF):
+    import bmesh
+    txt = [ln for ln in open(BOWF, encoding="utf-8") if not ln.startswith("#")]
+    kill_ids = [int(x) for x in "".join(txt).strip().split(",") if x.strip()]
+    nv0, np0 = len(mesh.data.vertices), len(mesh.data.polygons)
+    # ★안전장치: 목록이 이 메시용인지 확인한다(다른 원본에 잘못 먹이면 몸에 구멍이 난다)
+    if max(kill_ids) >= nv0:
+        raise SystemExit("등짐 활 정점 목록이 이 메시와 안 맞는다(최대 %d >= 정점 %d)"
+                         % (max(kill_ids), nv0))
+    bm = bmesh.new()
+    bm.from_mesh(mesh.data)
+    bm.verts.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.verts[i] for i in kill_ids], context="VERTS")
+    bm.to_mesh(mesh.data)
+    bm.free()
+    mesh.data.update()
+    print("등짐 활 제거: 정점 %d -> %d (-%d), 면 %d -> %d (-%d)"
+          % (nv0, len(mesh.data.vertices), nv0 - len(mesh.data.vertices),
+             np0, len(mesh.data.polygons), np0 - len(mesh.data.polygons)))
+else:
+    print("★등짐 활 목록 파일이 없다(%s). 등에 활이 남는다." % BOWF)
 
 acts = {}
 if arm.animation_data and arm.animation_data.action:
@@ -475,6 +525,71 @@ for f, tw, lua, lfa, rua, rfa in SHOT:
           (f, low_z(), tuple(round(x, 3) for x in ps.wpos("r hand"))))
 acts["Attack"] = atk
 print("Attack 생성 (28프레임 활쏘기)")
+
+# ---- 7.5) ★손에 드는 활 BW_bow ----
+# s10_shield.py 와 같은 방법. 다만 기준 포즈가 Idle 이 아니라 **Attack 만작**이다.
+#   L = M_pose⁻¹ @ target 을 풀고 REST 에 M_rest @ L 로 굽는다. 스키닝이
+#   M_pose @ M_rest⁻¹ 를 곱해 주므로 만작에서 정확히 target 이 된다.
+BOW_ON = os.environ.get("BOW_ON", "1") != "0"     # ★롤백 스위치. 0 이면 빈손이다
+DRAW_F = int(os.environ.get("BOW_DRAW_F", "11"))  # 만작 프레임(SHOT 표의 f11)
+BOW_ROLL = math.radians(float(os.environ.get("BOW_ROLL", "-15")))
+bow = None
+if BOW_ON:
+    A2W = arm.matrix_world
+    # 몸통 바인드 포즈 상자(= main.js 가 키를 재는 상자). 활이 여기 안에 있어야 한다.
+    bz = [(mesh.matrix_world @ v.co).z for v in mesh.data.vertices]
+    BODY_Z = (min(bz), max(bz))
+    HH = BODY_Z[1] - BODY_Z[0]
+
+    arm.data.pose_position = "REST"
+    bpy.context.view_layer.update()
+    M_rest = A2W @ arm.pose.bones["Bip001 L Hand"].matrix
+
+    arm.data.pose_position = "POSE"
+    use(atk)
+    sc.frame_set(DRAW_F)
+    bpy.context.view_layer.update()
+    M_pose = A2W @ arm.pose.bones["Bip001 L Hand"].matrix
+
+    def _wp(n):
+        return (A2W @ arm.pose.bones[n].matrix).translation.copy()
+
+    Lh, Rh, Lf = _wp("Bip001 L Hand"), _wp("Bip001 R Hand"), _wp("Bip001 L Forearm")
+    draw_len = (Lh - Rh).length
+    # ★활 쥔 손이 왼손인지 실측으로 확인한다(정면 = -Y 이므로 -y 가 큰 쪽이 앞).
+    if -Lh.y <= -Rh.y:
+        raise SystemExit("만작에서 왼손이 앞이 아니다(왼 %.3f / 오른 %.3f). "
+                         "활 쥔 손을 다시 정해야 한다" % (-Lh.y, -Rh.y))
+    print("[활] 만작 f%d 왼손앞 %.3f / 오른손앞 %.3f / 당긴거리 %.3f"
+          % (DRAW_F, -Lh.y, -Rh.y, draw_len))
+
+    # 기준 좌표계: ey = 시위를 당기는 방향(왼손 -> 오른손). 이렇게 잡아야
+    #   시위 V 자의 꼭짓점이 만작에서 정확히 시위 손 자리에 온다.
+    ey = (Rh - Lh).normalized()
+    ez = (Vector((0, 0, 1)) - ey * Vector((0, 0, 1)).dot(ey)).normalized()
+    ex = ey.cross(ez)
+    # 손아귀는 손목 뼈보다 손끝 쪽으로 4.5cm(주먹이 활대를 감싼다)
+    origin = Lh + (Lh - Lf).normalized() * 0.045
+    # 캔트(-15도). ey 둘레 회전이라 화살·시위 관계는 안 깨진다.
+    #   ★이 각이 REST 자세 활 위치를 정한다 = main.js 키 상자에 걸리느냐 마느냐.
+    #     0도면 REST 활 z 가 1.730 으로 몸통(1.700)을 넘는다. -15도면 1.635 로 들어온다.
+    binfo = BM.build(arm, "Bip001 L Hand", M_rest, M_pose, HH, draw_len,
+                     basis=(ex, ey, ez), origin=origin,
+                     extra_rot=Matrix.Rotation(BOW_ROLL, 4, "Y"))
+    bow = binfo["obj"]
+    bb = binfo["rest_bb"]
+    print("[활] 길이 %.3f  끝물러남 %.3f  오늬 %.3f  정점 %d 삼각 %d"
+          % (binfo["BL"], binfo["TIPY"], binfo["NOCK"], binfo["verts"], binfo["tris"]))
+    print("[활] REST 바운딩 x %.3f~%.3f y %.3f~%.3f z %.3f~%.3f / 몸통 z %.3f~%.3f"
+          % (bb + BODY_Z))
+    if bb[4] < BODY_Z[0] - 1e-4 or bb[5] > BODY_Z[1] + 1e-4:
+        print("★★활이 몸통 키 상자를 넘는다. main.js:3341 이 활까지 재서 캐릭터가"
+              " %.1f%% 쪼그라든다. BOW_ROLL 로 눕히거나 main.js 에 BW_ 제외를 넣어야 한다."
+              % ((1 - HH / (max(bb[5], BODY_Z[1]) - min(bb[4], BODY_Z[0]))) * 100))
+    else:
+        print("[활] 키 상자 안전 - main.js 수정 없이 그대로 렌더된다")
+else:
+    print("[활] BOW_ON=0 - 손에 활을 안 붙인다(빈손)")
 
 # ---- 8) 안 쓰는 클립은 지운다. 남기면 파일만 커진다 ----
 for a in bpy.data.actions:
