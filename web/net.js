@@ -156,7 +156,15 @@ export async function createNet(hooks = {}) {
       peer = r.p; myId = r.id;
       const target = PREFIX + room;
       return new Promise((ok, no) => {
-        const conn = peer.connect(target, { reliable: true });
+        // ★★`reliable: true` 를 쓰면 안 된다(2026-08-19 렉 신고의 첫 용의자).
+        //   reliable 채널은 TCP 처럼 **순서 보장 + 재전송**이라, 패킷 하나가 유실되면
+        //   그 뒤 메시지가 전부 줄을 서서 기다린다(head-of-line blocking).
+        //   위치 스트림은 "최신 값만 중요한" 데이터라 정확히 반대 성질이 필요하다 -
+        //   한 장 잃으면 그냥 버리고 다음 장을 즉시 받는 쪽이 훨씬 부드럽다.
+        //   대신 순서가 뒤바뀔 수 있으므로 **받는 쪽이 옛 소식을 버려야 한다**
+        //   (mp.js 의 msg.n 검사. 없으면 캐릭터가 뒤로 튄다).
+        //   퇴장(bye)이 유실돼도 conn.on('close') 가 잡으므로 안전하다.
+        const conn = peer.connect(target, { reliable: false });
         // ★8초. PeerJS 는 상대가 없어도 connect() 가 곧바로 실패하지 않는다.
         //   기다려 주지 않으면 "방이 없다"와 "느리다"를 구분 못 한다.
         const timer = setTimeout(() => {

@@ -29,11 +29,26 @@ export function createMultiplayer(ctx) {
   const { THREE, scene, loader, glbUrl, CHAR_CFG, DEF_CFG, getSelf } = ctx;
 
   let net = null;
-  let sendAcc = 0;
+  // ★송신 주기는 **벽시계**로 잰다. 게임 dt(rawDt)로 재면 안 된다 - 그 값은
+  //   main.js 에서 `Math.min(0.05, delta)` 로 잘려 있어서, 프레임이 낮을수록
+  //   실제 흐른 시간보다 적게 쌓인다. 실측(2026-08-19 렉 신고): **13.5fps 인 기계가
+  //   15Hz 를 시켰는데 6.75Hz 만 보냈다**(delta 0.074 가 0.05 로 잘려 두 프레임에
+  //   한 번씩만 문턱을 넘었다). 느린 기계일수록 더 안 보내게 되는 셈이라
+  //   상대 화면에서 그 사람만 유독 끊겨 보인다 - 방향이 정확히 반대였다.
+  let lastSendMs = 0;
   let mySeq = 0;                 // 동작이 바뀔 때마다 오른다(같은 클립 재발동을 알린다)
   let dead = false;
   let myMap = '';
   let warnedMap = false;
+  let txSeq = 0;                 // 내가 보낸 소식의 번호. 채널이 unreliable 이라 순서가 뒤바뀔 수 있다
+  let txCount = 0;
+  // ── 수신 계측 ──
+  // ★렉 신고(2026-08-19)를 숫자로 가르려고 넣었다. 눈으로는 "네트워크가 느린 것"과
+  //   "상대 컴퓨터가 느린 것"과 "상대 창이 백그라운드라 송신이 멈춘 것"이 구분되지 않는다.
+  //   상대가 15Hz 로 보내므로 정상은 rx≈15/s · 최대 간격 ~70ms 다.
+  //   rx 가 뚝 떨어지면 보내는 쪽 문제, rx 는 멀쩡한데 화면이 버벅이면 받는 쪽 성능이다.
+  let rxCount = 0, rxLastT = 0, rxGapMax = 0, rxStale = 0;
+  const rxTimes = [];
   const peers = new Map();       // id -> { group, model, mixer, actions, cur, tgt, clip, seq, char }
 
   // ── 상태 표시 ──
@@ -54,8 +69,15 @@ export function createMultiplayer(ctx) {
   function roster() {
     if (!net) return;
     const n = net.count;
-    say('방 ' + net.room + (net.isHost ? ' (방장)' : '') + '\n' + n + '명 접속', n > 1 ? 'ok' : null);
+    let line = '방 ' + net.room + (net.isHost ? ' (방장)' : '') + '\n' + n + '명 접속';
+    if (n > 1) {
+      const hz = (rxTimes.length / 2).toFixed(0);      // 최근 2초 평균
+      line += '  ·  수신 ' + hz + '/s';
+      if (rxGapMax > 400) line += '\n최대 끊김 ' + Math.round(rxGapMax) + 'ms';
+    }
+    say(line, n > 1 ? 'ok' : null);
   }
+  let hudAcc = 0;
 
   // ── 남의 아바타 하나 세우기 ──
   // loadChar(main.js)와 같은 처리를 하되, 게임 로직에 쓰이는 것들(발뼈·칼 교체·
@@ -157,9 +179,28 @@ export function createMultiplayer(ctx) {
         }
         return;
       }
+      // 계측(어떤 소식이든 도착한 시각을 센다)
+      const nowMs = performance.now();
+      if (rxLastT) {
+        const gap = nowMs - rxLastT;
+        if (gap > rxGapMax) rxGapMax = gap;
+      }
+      rxLastT = nowMs;
+      rxCount++;
+      rxTimes.push(nowMs);
+      while (rxTimes.length && rxTimes[0] < nowMs - 2000) rxTimes.shift();
+
       let p = peers.get(from);
       if (!p) { spawn(from, msg.k); p = peers.get(from); roster(); }
       if (!p) return;
+      // ★채널이 unreliable 이라 **순서가 뒤바뀐다.** 옛 소식을 그대로 반영하면
+      //   캐릭터가 뒤로 튄다. 번호가 뒷걸음질하면 버린다.
+      //   단 상대가 새로고침하면 번호가 1 부터 다시 시작하므로, 크게 작아진 경우는
+      //   되감기가 아니라 **재접속**으로 보고 받아들인다(그때 되감기 오탐은 한 번뿐이다).
+      if (typeof msg.n === 'number') {
+        if (p.lastN !== undefined && msg.n <= p.lastN && p.lastN - msg.n < 120) { rxStale++; return; }
+        p.lastN = msg.n;
+      }
       // 캐릭터를 바꿔서 다시 들어온 경우(홈으로 나갔다 온다)
       if (msg.k && msg.k !== p.char) { despawn(from); spawn(from, msg.k); return; }
       p.tgt.x = msg.x; p.tgt.y = msg.y; p.tgt.z = msg.z; p.tgt.yaw = msg.r;
@@ -237,15 +278,22 @@ export function createMultiplayer(ctx) {
         p.group.rotation.y = p.cur.yaw;
         if (p.mixer) p.mixer.update(rawDt);
       }
+      // 진단 표시는 0.5초마다만 다시 쓴다(매 프레임 DOM 을 쓸 이유가 없다)
+      if (net && net.count > 1) {
+        hudAcc += rawDt;
+        if (hudAcc > 0.5) { hudAcc = 0; roster(); }
+      }
       // 내 상태 송신
       if (!net) return;
-      sendAcc += rawDt;
-      if (sendAcc < 1 / SEND_HZ) return;
-      sendAcc = 0;
+      const txNow = performance.now();
+      if (txNow - lastSendMs < 1000 / SEND_HZ) return;
+      lastSendMs = txNow;
       const s = getSelf();
       if (!s) return;
       myMap = s.map;
-      net.send({ t: 'st', x: s.x, y: s.y, z: s.z, r: s.yaw, c: s.clip, p: s.pt, s: mySeq, k: s.char, m: s.map });
+      txCount++;
+      net.send({ t: 'st', n: ++txSeq, x: s.x, y: s.y, z: s.z, r: s.yaw,
+                 c: s.clip, p: s.pt, s: mySeq, k: s.char, m: s.map });
     },
 
     dispose() {
@@ -258,6 +306,19 @@ export function createMultiplayer(ctx) {
     // 검증 창구. 남의 아바타가 안 보이는 원인은 여럿이다(연결·좌표·클립·로드 실패)
     // 이고 눈으로는 못 가른다. window.__mp.list 로 숫자를 본다.
     // ★HANDOFF 의 런타임 창구 관례를 따른다(window 노출, 상수가 아니다).
+    // 네트워크 계측. 렉의 원인을 가르는 첫 숫자다.
+    //   rxHz 가 15 근처   -> 네트워크는 멀쩡하다(느리면 받는 쪽 성능 또는 렌더 문제)
+    //   rxHz 가 뚝 낮다   -> 보내는 쪽이 멈춘 것(창이 백그라운드면 rAF 가 초당 1회로 떨어진다)
+    //   gapMax 가 크다    -> 순간 끊김. 값이 곧 멈춘 시간(ms)이다
+    //   stale 이 늘어난다 -> 순서가 뒤바뀐 소식이 실제로 오고 있다(unreliable 채널의 정상 동작)
+    get net() {
+      return {
+        rxHz: +(rxTimes.length / 2).toFixed(1), rx: rxCount, tx: txCount,
+        gapMaxMs: Math.round(rxGapMax), stale: rxStale,
+        peers: net ? net.count : 1, host: net ? net.isHost : null,
+      };
+    },
+    resetStats() { rxCount = 0; txCount = 0; rxGapMax = 0; rxStale = 0; rxTimes.length = 0; },
     // 내가 남에게 보내고 있는 값. 원격 목록과 나란히 봐야 "누가 안 움직이는지" 가 갈린다.
     get self() { return getSelf(); },
     // 남의 아바타가 실제로 어디에 어떤 크기로 서 있는지(그룹 월드 좌표·모델 스케일).
