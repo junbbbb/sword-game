@@ -1,0 +1,195 @@
+/* ── 홈화면 ────────────────────────────────────────────────────────────────
+   층과 캐릭터를 고르고 들어가는 첫 화면이다. 쿼리가 비어 있을 때만 뜨고,
+   `?map=field` 같은 기존 링크는 예전처럼 곧장 게임으로 간다(index.html 분기).
+
+   ★색은 ui-theme-bronze.css 의 --bs-* 토큰만 쓴다. 값을 여기에 다시 적으면
+     테마를 고칠 때 홈만 옛 색으로 남는다. 토큰은 body[data-ui-theme] 스코프에
+     정의돼 있어서 #home 이 body 자식이면 그대로 상속된다(폴백만 병기한다).
+   ★#load 창과 같은 문법이다 - 청동 테(border-image) + 결 깔린 먹판.
+     로딩 화면과 홈이 갈리면 첫 3초에 창이 두 종류로 보인다.
+   ────────────────────────────────────────────────────────────────────────── */
+
+#home {
+  position: fixed; inset: 0; z-index: 12;
+  display: flex; align-items: center; justify-content: center;
+  padding: 22px 16px; overflow: auto;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(131, 81, 38, .22), transparent 38%),
+    linear-gradient(180deg, #17120d 0%, #0c0b09 66%, #070706 100%);
+  font-family: var(--bs-font-ui, "Paperlogy", "Apple SD Gothic Neo", sans-serif);
+  color: var(--bs-cream, #fffaf0);
+  user-select: none;
+}
+
+/* ── 창 ── */
+#home .hmWin {
+  position: relative;
+  width: min(880px, 100%);
+  padding: 36px 32px 26px;
+  background:
+    var(--bs-grain, none),
+    linear-gradient(180deg, rgba(47, 45, 41, .98), rgba(27, 26, 24, .99));
+  /* 청동 장식 테. #load .win 과 같은 값이다(bronze.css 152행 규칙) */
+  border: 2px solid var(--bs-bronze-hi, #d29a5d);
+  border-image-source: var(--bs-frame-image, url("./ui-assets/bronze-ornament-frame.webp"));
+  border-image-slice: 160;
+  border-image-width: 32px;
+  border-image-outset: 5px;
+  border-image-repeat: stretch;
+  box-shadow:
+    inset 0 0 0 1px rgba(90, 53, 28, .95),
+    inset 0 0 36px rgba(0, 0, 0, .28);
+  filter: drop-shadow(0 13px 24px rgba(0, 0, 0, .72));
+}
+
+/* 위 가운데 청동 막대 + 구슬. #load .fr 과 같은 그림이다 */
+#home .hmFr {
+  position: absolute; left: 0; right: 0; top: 0; height: 30px; pointer-events: none;
+  background:
+    radial-gradient(circle, var(--bs-gold-hi, #ffe28a) 0 2px,
+      var(--bs-bronze, #aa6e3d) 3px 4px, transparent 5px) no-repeat 50% 3px / 11px 11px,
+    linear-gradient(90deg, transparent, var(--bs-bronze-hi, #d29a5d) 18% 82%, transparent)
+      no-repeat 50% 0 / 150px 2px;
+}
+
+#home .hmTitle {
+  text-align: center; font-size: clamp(19px, 2.5vw, 28px); font-weight: 800;
+  letter-spacing: .05em; line-height: 1.2; color: var(--bs-cream, #fffaf0);
+  text-shadow: 0 2px 0 #0a0807;
+}
+#home .hmSub {
+  text-align: center; margin-top: 7px; font-size: 10px; font-weight: 700;
+  letter-spacing: .2em; color: var(--bs-parchment, #c8b9a2);
+}
+
+/* ── 섹션 ── */
+#home .hmSec { margin-top: 20px; }
+#home .hmSecHd {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 9px;
+  font-size: 11px; font-weight: 800; letter-spacing: .17em;
+  color: var(--bs-bronze-hi, #d29a5d);
+}
+/* 라벨 뒤로 흐르는 청동 레일. 구획선은 얇고 조용하게(오너 취향) */
+#home .hmSecHd::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(90deg, rgba(211, 155, 94, .42), rgba(211, 155, 94, 0));
+}
+#home .hmSecHd .hmHint {
+  flex: 0 0 auto; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  color: var(--bs-muted, #877c6d);
+}
+
+/* ── 고르는 카드 ── */
+#home .hmGrid { display: grid; gap: 8px; }
+#home .hmMaps  { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+#home .hmChars { grid-template-columns: repeat(auto-fit, minmax(116px, 1fr)); }
+
+#home .hmCard {
+  display: block; width: 100%; text-align: left; padding: 11px 12px 10px;
+  font-family: inherit; color: var(--bs-cream-soft, #e8dfd0);
+  cursor: pointer; border: 0; border-radius: 0;
+  background: linear-gradient(180deg, rgba(52, 49, 44, .92), rgba(30, 28, 25, .95));
+  box-shadow: inset 0 0 0 1px rgba(120, 78, 44, .70);
+  transition: box-shadow .12s ease, background .12s ease;
+}
+#home .hmCard:hover { box-shadow: inset 0 0 0 1px rgba(211, 155, 94, .88); }
+#home .hmCard:focus-visible { outline: 2px solid var(--bs-gold, #efbd4f); outline-offset: 2px; }
+#home .hmCard[aria-pressed="true"] {
+  background: linear-gradient(180deg, rgba(78, 59, 34, .95), rgba(44, 33, 21, .97));
+  box-shadow: inset 0 0 0 2px var(--bs-gold, #efbd4f), 0 0 14px rgba(239, 189, 79, .16);
+}
+#home .hmCard b {
+  display: block; font-size: 14px; font-weight: 800; letter-spacing: .01em;
+  color: var(--bs-cream, #fffaf0);
+}
+/* 식별자(basic2·archer…). 테스트 화면이라 어느 glb 인지가 보여야 한다 */
+#home .hmCard .hmKey {
+  display: block; margin-top: 2px; font-size: 9.5px; font-weight: 700;
+  letter-spacing: .08em; color: var(--bs-muted, #877c6d);
+}
+#home .hmCard .hmDesc {
+  display: block; margin-top: 5px; font-size: 11px; line-height: 1.45;
+  color: var(--bs-parchment, #c8b9a2);
+}
+/* 기술 구성. 클립이 모자란 캐릭터는 여기서 미리 말해 준다 */
+#home .hmCard .hmMoves {
+  display: block; margin-top: 4px; font-size: 10px; font-weight: 700;
+  letter-spacing: .02em; color: var(--bs-blue, #6ba8ba);
+}
+#home .hmCard .hmMoves.hmThin { color: var(--bs-muted, #877c6d); }
+
+/* ── 입장 ── */
+#home .hmGo {
+  display: block; width: min(300px, 100%); margin: 22px auto 0; padding: 13px 0;
+  font-family: inherit; font-size: 15px; font-weight: 800; letter-spacing: .16em;
+  color: #2a1a0c; cursor: pointer; border: 0; border-radius: 0;
+  background: linear-gradient(180deg, #ffe28b 0%, #d89839 48%, #86501f 100%);
+  box-shadow: inset 0 1px rgba(255, 250, 215, .5), 0 3px 0 rgba(0, 0, 0, .45);
+}
+#home .hmGo:hover { filter: brightness(1.06); }
+#home .hmGo:active { transform: translateY(1px); box-shadow: inset 0 1px rgba(255, 250, 215, .5), 0 2px 0 rgba(0, 0, 0, .45); }
+#home .hmGo:focus-visible { outline: 2px solid var(--bs-gold-hi, #ffe28a); outline-offset: 3px; }
+
+/* ── 멀티플레이 칸 ── */
+/* 아직 안 붙었다. 자리를 미리 잡아 두는 것은 다음 라운드에서 여기만 채우려는 것이다 */
+#home .hmMultiRow { display: flex; gap: 8px; flex-wrap: wrap; }
+#home .hmMultiBtn {
+  flex: 1 1 150px; padding: 10px 12px; font-family: inherit; font-size: 12.5px;
+  font-weight: 700; letter-spacing: .04em; text-align: center;
+  color: var(--bs-cream-soft, #e8dfd0); border: 0; border-radius: 0; cursor: pointer;
+  background: linear-gradient(180deg, rgba(44, 41, 37, .92), rgba(27, 26, 23, .95));
+  box-shadow: inset 0 0 0 1px rgba(120, 78, 44, .70);
+  transition: box-shadow .12s ease;
+}
+#home .hmMultiBtn:hover { box-shadow: inset 0 0 0 1px rgba(211, 155, 94, .88); }
+#home .hmMultiBtn:focus-visible { outline: 2px solid var(--bs-gold, #efbd4f); outline-offset: 2px; }
+
+/* 방코드 입력. 「방 참가」를 누른 뒤에만 펴진다 */
+#home .hmJoinRow { display: flex; gap: 8px; margin-top: 8px; }
+#home .hmJoinRow[hidden] { display: none; }
+#home .hmCode {
+  flex: 1 1 auto; min-width: 0; padding: 10px 12px; border: 0; border-radius: 0;
+  font-family: inherit; font-size: 15px; font-weight: 800; letter-spacing: .34em;
+  text-align: center; text-transform: uppercase;
+  color: var(--bs-cream, #fffaf0); background: rgba(14, 13, 11, .95);
+  box-shadow: inset 0 0 0 1px rgba(120, 78, 44, .70);
+}
+#home .hmCode::placeholder { letter-spacing: .06em; font-size: 12px; font-weight: 700; color: var(--bs-muted, #877c6d); }
+#home .hmCode:focus { outline: none; box-shadow: inset 0 0 0 2px var(--bs-gold, #efbd4f); }
+#home .hmCode.hmBad { box-shadow: inset 0 0 0 2px var(--bs-red, #c9473c); }
+#home .hmCodeGo {
+  flex: 0 0 auto; padding: 10px 20px; border: 0; border-radius: 0; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; font-weight: 800; letter-spacing: .08em;
+  color: #2a1a0c; background: linear-gradient(180deg, #ffe28b 0%, #d89839 48%, #86501f 100%);
+  box-shadow: inset 0 1px rgba(255, 250, 215, .5), 0 2px 0 rgba(0, 0, 0, .45);
+}
+#home .hmCodeGo:hover { filter: brightness(1.06); }
+#home .hmMultiNote {
+  margin-top: 7px; font-size: 10.5px; line-height: 1.5;
+  color: var(--bs-muted, #877c6d);
+}
+
+/* ── 아래 안내 ── */
+#home .hmFoot {
+  margin-top: 18px; padding-top: 12px; font-size: 10.5px; line-height: 1.6;
+  text-align: center; color: var(--bs-muted, #877c6d);
+  border-top: 1px solid rgba(211, 155, 94, .16);
+}
+#home .hmFoot b { color: var(--bs-parchment, #c8b9a2); font-weight: 700; }
+
+/* 낮은 창에서는 여백부터 줄인다(창이 잘리면 고를 수가 없다) */
+@media (max-height: 700px) {
+  #home .hmWin { padding: 30px 26px 20px; }
+  #home .hmSec { margin-top: 14px; }
+  #home .hmGo { margin-top: 16px; padding: 11px 0; }
+  #home .hmFoot { margin-top: 12px; }
+}
+
+/* 개발 모드 체크박스. 안내 줄 오른쪽에 조용히 붙는다(?dev 를 손으로 치지 않으려는 것) */
+#home .hmDev {
+  /* 안내 문장 끝에 인라인으로 붙으면 문장에 딸린 말처럼 읽힌다. 한 줄을 차지하게 둔다 */
+  display: flex; justify-content: center; align-items: center; gap: 5px; margin-top: 10px;
+  font-size: 10px; letter-spacing: .04em; color: var(--bs-muted, #877c6d);
+  cursor: pointer;
+}
+#home .hmDev input { width: 11px; height: 11px; accent-color: var(--bs-bronze, #aa6e3d); cursor: pointer; }

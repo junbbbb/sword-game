@@ -3283,8 +3283,13 @@ const CHARS = {};
 // ★2026-08-11 오너 지시로 **시작 캐릭터를 basic2 로 바꿨다**(알몸 베이스. 옷은 나중).
 //   basic2 는 이제 kensa 와 같은 구성이다 - 칼 7자루(SW_*) + 클립 7종.
 //   kensa 는 지우지 않고 ?dev 로스터에 남긴다(모션 원본이자 비교 기준이다).
+// ★2026-08-19 홈화면(home.js)이 생겼다. 평시에도 **?char= 로 고른 하나**는 목록에 넣는다.
+//   목록 길이는 여전히 1 이라 "평시 로딩 glb 한 개" 라는 성질은 안 깨진다.
+//   아는 이름만 받는다(오타·경로 주입이면 조용히 시작 캐릭터로 돌아간다).
+//   ?dev 는 예전대로 로스터 전체이고 F 순환도 그때만 돈다.
 const CHAR_ALL = ['basic2', 'kensa', 'slayer', 'tank', 'archer', 'soldier'];
-const CHAR_LIST = DEV ? CHAR_ALL : ['basic2'];
+const CHAR_WANT = (new URLSearchParams(location.search).get('char') || '').toLowerCase();
+const CHAR_LIST = DEV ? CHAR_ALL : [CHAR_ALL.includes(CHAR_WANT) ? CHAR_WANT : CHAR_ALL[0]];
 // ★라벨에 '(구)' 같은 개발 표기를 넣지 않는다(S5). 평시 화면에 새면 그대로 개발 흔적이 된다.
 //   개발용 구분은 라벨이 아니라 **키 이름**으로 한다(?dev 에서만 ' (slayer)' 처럼 붙는다).
 const CHAR_LABEL = { basic2: '검사', kensa: '검사', slayer: '검사', tank: '탱커', archer: '궁수', soldier: '병사', basic: '기본' };
@@ -3703,7 +3708,7 @@ function updateCpLive() {
 {
   // 기본 시작 캐릭터는 CHAR_LIST 맨 앞이다(예전엔 'slayer' 가 박혀 있어 목록 순서를
   // 바꿔도 시작 캐릭터가 안 바뀌었다). ?char= 로 덮어쓸 수 있다.
-  // ★단 평시 CHAR_LIST 는 ['kensa'] 뿐이라(S4) ?char= 는 **?dev 와 같이** 써야 먹는다.
+  // ★2026-08-19 부터 ?char= 는 평시에도 먹는다(위 CHAR_LIST 정의. 홈화면이 이 값을 넘긴다).
   //   못 찾으면 아래 폴백이 조용히 검사로 돌아간다(에러 없음).
   const want = (new URLSearchParams(location.search).get('char') || CHAR_LIST[0]);
   let left = CHAR_LIST.length;
@@ -3750,6 +3755,14 @@ function bootGate(rawDt) {
   if (el) el.style.display = 'none';
 }
 
+// ── 멀티플레이 창구 ──
+// ★선언이 play() 보다 **앞**에 있어야 한다. 로딩 중 activateChar 가 play('Idle') 를
+//   부르는데, let 은 선언 전에 읽으면 ReferenceError 다(TDZ). 값은 파일 끝에서 채운다.
+let multi = null;
+// 지금 도는 클립 이름. current(AnimationAction)에서 역으로 찾을 수도 있지만
+// 매 프레임 뒤지는 것보다 바뀔 때 한 번 적는 쪽이 싸다.
+let curClip = 'Idle';
+
 function play(name, fade = 0.18) {
   const a = actions[name];
   if (!a || current === a) return;
@@ -3758,6 +3771,8 @@ function play(name, fade = 0.18) {
   if (current) current.crossFadeTo(a, fade, false);
   else a.fadeIn(fade);
   current = a;
+  curClip = name;
+  if (multi) multi.bumpSeq();        // 같은 클립을 다시 틀었을 때를 남이 알아채는 표식
 }
 
 // 3연타 클립의 단수별 진입점(초)과 그 단수의 커밋 길이(초).
@@ -5110,6 +5125,42 @@ window.__boss = boss;
 const ui = await import('./ui.js' + location.search);
 ui.initUI();
 
+// ---------- 멀티플레이 (1단계: 아바타 공유) ----------
+// `?room=A7K2` 면 참가, `?host=1` 이 붙으면 방장이다(홈화면이 이 주소를 세운다).
+// ★쿼리가 없으면 mp.js·net.js·peerjs 를 **한 바이트도 안 읽는다.** 혼자 하는 판의
+//   로딩과 요청 수가 예전 그대로여야 한다.
+// ★남에게 보내는 좌표는 root 가 아니라 **model 의 월드 위치**다. root 는 x·z 만 갖고
+//   높이는 model 이 매 프레임 접지 보정으로 따로 정하기 때문이다(mp.js 머리 주석).
+{
+  const _q = new URLSearchParams(location.search);
+  const _room = (_q.get('room') || '').trim();
+  if (_room) {
+    const _wp = new THREE.Vector3();
+    const mpMod = await import('./mp.js' + location.search);
+    multi = mpMod.createMultiplayer({
+      THREE, scene, loader, glbUrl, CHAR_CFG, DEF_CFG,
+      getSelf() {
+        if (!model) return null;
+        model.getWorldPosition(_wp);
+        return {
+          x: +_wp.x.toFixed(3), y: +_wp.y.toFixed(3), z: +_wp.z.toFixed(3),
+          yaw: +root.rotation.y.toFixed(3),
+          clip: curClip,
+          // 클립 안 재생 시각. 3연타는 play() 를 다시 부르지 않고 **클립 시간을
+          // 점프**해서 낸다(ATK_ENTRY). 이 값이 없으면 남의 화면에서 1타만 나온다.
+          pt: current ? +current.time.toFixed(3) : 0,
+          char: curChar || 'basic2',
+          // 어느 층에 있는지. 서로 다른 층에 들어가면 아무도 안 보이는데, 그게
+          // "연결이 안 됐다"와 화면상 구분이 안 된다. 받는 쪽이 경고를 띄우게 알린다.
+          map: IS_DUNGEON ? 'level2' : 'level1',
+        };
+      },
+    });
+    multi.start(_q.get('host') === '1' ? 'host' : 'join', _room)
+      .catch(e => console.warn('[mp] 연결 실패:', e && e.message));
+  }
+}
+
 function tick() {
   nextFrame(tick);
   __frames++;
@@ -5624,6 +5675,9 @@ function tick() {
                 +(now - comboWindow).toFixed(3)]);
     if (__rec.length > 1800) __rec.shift();
   }
+
+  // 남의 아바타 보간·재생 + 내 상태 송신(15Hz). rawDt 인 이유는 위 주석과 같다.
+  if (multi) multi.update(rawDt);
 
   composer.render();
 }
