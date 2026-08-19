@@ -202,7 +202,9 @@ export function createMultiplayer(ctx) {
         onMessage,
         onLeave: id => { despawn(id); roster(); },
         onJoin: () => roster(),
-        onStatus: (t, k) => { if (k === 'err') say(t, 'err'); },
+        // 진행 상태를 그대로 보여준다. 붙는 데 십여 초가 걸리는 판이라
+        // 아무 말이 없으면 "멈췄다" 로 읽힌다(roster() 가 뒤에 덮는다).
+        onStatus: (t, k) => say(t, k),
       });
       try {
         if (mode === 'host') await net.host(code);

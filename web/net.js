@@ -22,6 +22,10 @@ const LIB = './lib/peerjs.min.js';
 const PREFIX = 'sworddemo-';
 // 방코드 글자. 0/O·1/I 처럼 헷갈리는 짝은 뺐다(친구에게 불러 줘야 하는 값이다).
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+// ★참가 대기 시간. 처음엔 8초였는데 **배포본 실측에서 방 여는 데만 10~14초**가
+//   걸렸다(무료 공용 시그널링 서버라 붐빈다). 8초면 멀쩡한 방도 "없다"고 튕긴다.
+//   기다리는 쪽이 낫다 - 안 되는 경우는 어차피 코드가 틀렸거나 방장이 안 켠 것이다.
+const JOIN_TIMEOUT = 25000;
 
 export function makeRoomCode(n = 4) {
   const a = new Uint8Array(n);
@@ -49,6 +53,7 @@ export async function createNet(hooks = {}) {
   const { onMessage, onJoin, onLeave, onStatus } = hooks;
   const say = (text, kind) => { try { onStatus && onStatus(text, kind); } catch (e) { /* 안내가 게임을 멈출 이유는 없다 */ } };
 
+  say('시그널링 서버에 붙는 중…');
   const Peer = await loadPeerLib();
 
   let peer = null;
@@ -117,6 +122,7 @@ export async function createNet(hooks = {}) {
     // 방코드를 안 주면 만들어서 돌려준다. 이미 쓰이는 코드면 다른 코드로 몇 번 더 시도한다.
     async host(code) {
       isHost = true;
+      say('방을 여는 중… 공용 서버라 십여 초 걸릴 수 있다.');
       for (let attempt = 0; attempt < 5; attempt++) {
         room = (code && attempt === 0) ? String(code).toUpperCase() : makeRoomCode();
         try {
@@ -145,6 +151,7 @@ export async function createNet(hooks = {}) {
       isHost = false;
       room = String(code || '').toUpperCase().trim();
       if (!room) throw new Error('방코드가 비었다');
+      say('방 ' + room + ' 을 찾는 중… 공용 서버라 십여 초 걸릴 수 있다.');
       const r = await openPeer(null);
       peer = r.p; myId = r.id;
       const target = PREFIX + room;
@@ -157,7 +164,7 @@ export async function createNet(hooks = {}) {
             try { conn.close(); } catch (_) {}
             no(new Error('방 ' + room + ' 에 못 붙었다. 코드가 맞는지, 방장이 켜 뒀는지 확인해줘.'));
           }
-        }, 8000);
+        }, JOIN_TIMEOUT);
         conn.on('open', () => {
           clearTimeout(timer);
           wire(conn, target);
