@@ -49,6 +49,11 @@ export function createMultiplayer(ctx) {
   //   rx 가 뚝 떨어지면 보내는 쪽 문제, rx 는 멀쩡한데 화면이 버벅이면 받는 쪽 성능이다.
   let rxCount = 0, rxLastT = 0, rxGapMax = 0, rxStale = 0;
   const rxTimes = [];
+  // ── fps ──
+  // ★벽시계로 잰다(게임 dt 는 히트스톱·슬로모에 멈춘다). 멀티 중에만 화면에 뜬다 -
+  //   평시 화면에 상시 표시물을 얹지 않는다는 이 게임의 관례를 지키기 위해서다.
+  //   이게 있어야 "네트워크가 느린 것" 과 "그 사람 화면이 느린 것" 이 갈린다.
+  let fpsN = 0, fpsT0 = 0, fpsVal = 0;
   const peers = new Map();       // id -> { group, model, mixer, actions, cur, tgt, clip, seq, char }
 
   // ── 상태 표시 ──
@@ -70,10 +75,11 @@ export function createMultiplayer(ctx) {
     if (!net) return;
     const n = net.count;
     let line = '방 ' + net.room + (net.isHost ? ' (방장)' : '') + '\n' + n + '명 접속';
+    if (fpsVal) line += '  ·  ' + fpsVal + 'fps';
     if (n > 1) {
       const hz = (rxTimes.length / 2).toFixed(0);      // 최근 2초 평균
-      line += '  ·  수신 ' + hz + '/s';
-      if (rxGapMax > 400) line += '\n최대 끊김 ' + Math.round(rxGapMax) + 'ms';
+      line += '\n수신 ' + hz + '/s';
+      if (rxGapMax > 400) line += '  ·  최대 끊김 ' + Math.round(rxGapMax) + 'ms';
     }
     say(line, n > 1 ? 'ok' : null);
   }
@@ -267,6 +273,13 @@ export function createMultiplayer(ctx) {
     // 프레임마다. rawDt 를 받는다 - 남의 아바타는 내 히트스톱에 멈추면 안 된다.
     update(rawDt) {
       if (dead) return;
+      // fps 세기(멀티 중이 아니어도 세 둔다 - 방에 들어간 순간 바로 보여야 한다)
+      {
+        const t = performance.now();
+        if (!fpsT0) fpsT0 = t;
+        fpsN++;
+        if (t - fpsT0 >= 1000) { fpsVal = Math.round(fpsN * 1000 / (t - fpsT0)); fpsN = 0; fpsT0 = t; }
+      }
       // 남의 아바타: 목표로 따라붙고 클립을 돌린다
       const k = 1 - Math.exp(-LERP_K * rawDt);
       for (const [, p] of peers) {
@@ -279,7 +292,7 @@ export function createMultiplayer(ctx) {
         if (p.mixer) p.mixer.update(rawDt);
       }
       // 진단 표시는 0.5초마다만 다시 쓴다(매 프레임 DOM 을 쓸 이유가 없다)
-      if (net && net.count > 1) {
+      if (net) {
         hudAcc += rawDt;
         if (hudAcc > 0.5) { hudAcc = 0; roster(); }
       }
@@ -313,7 +326,7 @@ export function createMultiplayer(ctx) {
     //   stale 이 늘어난다 -> 순서가 뒤바뀐 소식이 실제로 오고 있다(unreliable 채널의 정상 동작)
     get net() {
       return {
-        rxHz: +(rxTimes.length / 2).toFixed(1), rx: rxCount, tx: txCount,
+        fps: fpsVal, rxHz: +(rxTimes.length / 2).toFixed(1), rx: rxCount, tx: txCount,
         gapMaxMs: Math.round(rxGapMax), stale: rxStale,
         peers: net ? net.count : 1, host: net ? net.isHost : null,
       };
