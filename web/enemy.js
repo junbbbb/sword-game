@@ -375,7 +375,13 @@ const LVL_PER_KILL = 5;         // 몇 마리에 한 단인가(★ui.js 뱃지�
 // (기술 배율 1 · 흔들림 0 · 레벨 배율 1). 바의 모양과 고정색은 이 스위치와 무관하다.
 const RPG_DMG = 1;              // ★★롤백 손잡이. 0 = 18차 균일 50 판
 // 기술 배율표. 키는 main.js 의 클립 이름 그대로다(모르는 이름이 오면 1.0 = Z 취급).
-const SKILL_MUL = { Attack: 1.00, Heavy: 1.60, Wide: 1.20 };
+// ★21차 Arrow 1.60 = X 와 같은 값이다. 근거는 취향이 아니라 위 ②의 산수다:
+//   화살은 X 와 같이 **한 캐스트에 한 방**이라 Z 한 대와 맞대 놓고 값이 정해져야 하고,
+//   레벨 1 최대 타격이 0.5 x 1.60 x 1.20 = **0.96** 으로 1핍(1.0) 바로 아래에 앉는다
+//   = 18차 계약("모든 잡몹 최소 두 대")이 X 와 **똑같은 4% 여유**로 살아 있다.
+//   1.20(=C)이면 3핍 두목이 5발이 되어 사거리의 값어치가 사라지고,
+//   2.00 이면 최대 타격 1.20 이 1핍을 한 방에 지워 그 계약이 깨진다.
+const SKILL_MUL = { Attack: 1.00, Heavy: 1.60, Wide: 1.20, Arrow: 1.60 };
 // 체력이 0 에 닿았는가를 재는 여유. 한 대가 소수가 되면서 0.5 처럼 IEEE754 로
 // 정확히 떨어지던 뺄셈이 더 이상 보장되지 않는다(1e-16 이 남아 「한 대 더」가 된다).
 const HP_EPS = 1e-6;
@@ -1021,6 +1027,9 @@ const _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3(), _v6 = new THREE.Vect
 const _segA = new THREE.Vector3(), _segB = new THREE.Vector3();
 const _capA = new THREE.Vector3(), _capB = new THREE.Vector3();
 const _prevA = new THREE.Vector3(), _prevB = new THREE.Vector3();
+// ★21차. hitSegment 가 _prevA/_prevB 를 잠깐 화살 것으로 갈아 끼울 때 칼 값을 넣어 두는 자리.
+//   따로 두는 이유: doHits 안에서 다른 임시 벡터를 쓰면 그게 화살 판정에 섞인다.
+const _sPrevA = new THREE.Vector3(), _sPrevB = new THREE.Vector3();
 // ★_cutW(월드 절단 법선)와 _cut(로컬로 옮긴 것)을 반드시 나눠 쓸 것.
 // 하나로 돌려썼더니 한 스윙에 두 마리째부터 절단 평면이 엉뚱한 방향으로 잡혔다.
 const _cutW = new THREE.Vector3(), _cut = new THREE.Vector3();
@@ -2262,6 +2271,10 @@ export function createEnemySystem(opts) {
   let lastSwingT = -10;
   let hotState = false;
   let hasPrevBlade = false;
+  // ★21차(화살). doHits 가 한 번에 벨 수 있는 마릿수 상한. 칼은 Infinity 라 여태와
+  //   똑같이 돌고, hitSegment 가 관통 없는 발사체를 넘길 때만 잠깐 1 로 내려간다.
+  //   (상한을 doHits 안에 안 두고 여기 둔 이유: 판정 알고리즘을 두 벌로 만들지 않으려고)
+  let hitCap = Infinity;
   // ── 한 방짜리 기술의 캐스트 (2026-08-12 13차) ──
   // 수면참·횡일섬은 "크게 한 번"이다. 그런데 스윙 번호는 hot 이 켜질 때마다 발급되므로,
   // 한 캐스트 안에서 hot 이 두 번 켜지면 같은 요괴가 두 번 맞는다. SWING_GAP 은
@@ -2731,11 +2744,13 @@ export function createEnemySystem(opts) {
 
     let hits = 0;
     for (let s = 0; s < steps; s++) {
+      if (hits >= hitCap) break;                   // ★21차. 화살(관통 없음)용 상한. 칼은 Infinity 라 안 걸린다
       const t = s / (steps - 1);
       _segA.copy(_prevA).lerp(a, t);
       _segB.copy(_prevB).lerp(b, t);
       // ★첫 명중에서 멈추면 안 된다. 한 번에 여러 마리가 갈라져야 한다.
       for (let i = live.length - 1; i >= 0; i--) {
+        if (hits >= hitCap) break;                 // ★같은 이유(위 주석). 기본값에서는 죽은 비교다
         const e = live[i];
         if (e.lastSwing === swingId) continue;      // 한 스윙에 한 번만
         // ★칼날 선분 대 몸통 캡슐. 렌더가 세우는 자리(e.pos = 발밑)와 **같은 값**으로
@@ -2846,6 +2861,52 @@ export function createEnemySystem(opts) {
       }
     }
     return hits;
+  }
+
+  // -------------------------------------------------------------------------
+  // ── 칼이 아닌 것이 선분으로 때린다 (21차. 궁수 화살) ──
+  // -------------------------------------------------------------------------
+  // 창구를 새로 판 이유는 하나다: **판정 알고리즘을 두 벌로 만들지 않으려고.**
+  // 위 doHits 는 이미 「직전 선분 → 이번 선분」 사이를 쪼개 훑는 **선분 대 캡슐 스윕**이라
+  // (segSegDist2), 화살의 (직전 위치 → 현재 위치)를 그대로 넘기면 그게 곧 화살의 판정이다.
+  // 화살은 길이가 있는 물건이라 a=오늬(뒤) b=촉(앞)으로 넘기면 촉이 스치는 자리까지 잡힌다.
+  //
+  // 이 함수가 하는 일은 **잠깐 상태를 갈아 끼우고 doHits 를 부르고 되돌리는 것**뿐이다.
+  // 갈아 끼우는 것 셋과 그 이유:
+  //   ① _prevA/_prevB  — doHits 가 "직전 프레임 선분"으로 읽는 모듈 변수다. 칼의 것이
+  //      들어 있으므로 화살 것으로 바꿨다가 **반드시 되돌린다**(안 되돌리면 다음 프레임
+  //      칼 판정이 화살 자리에서 출발해 허공을 훑는다).
+  //   ② swingId       — 중복 타격 방지 번호다(e.lastSwing 과 비교). 화살은 **자기 id**를
+  //      번호로 쓴다. 칼의 번호와 절대 안 겹치게 **음수**를 쓰기로 했다(칼은 0 부터 증가).
+  //   ③ atkKind       — 데미지 배율 키. 'Arrow' 를 **명시로** 받는다. 안 넘기면 이 파일이
+  //      속도·single 로 추측하게 되는데 17차에 같은 추측을 걷어낸 이유가 그것이다.
+  //
+  // opts: { prevA, prevB, swing, kind, cap }
+  //   prevA/prevB — 직전 프레임의 선분(없으면 이번 선분 = 제자리 판정)
+  //   swing       — 이 발사체의 신원(음수 권장). 같은 번호면 같은 요괴를 두 번 안 때린다
+  //   kind        — 데미지 배율 키. 기본 'Arrow'
+  //   cap         — 이번 호출이 때릴 수 있는 최대 마릿수(관통 없음 = 1)
+  // 돌려주는 값 = 이번에 실제로 맞은 마릿수.
+  function hitSegment(a, b, opts) {
+    if (!a || !b) return 0;
+    const o = opts || {};
+    const sSwing = swingId, sKind = atkKind, sCap = hitCap;
+    _sPrevA.copy(_prevA); _sPrevB.copy(_prevB);
+    //   ★기본값이 -2 다. **-1 은 쓰면 안 된다** — 요괴가 `lastSwing: -1` 로 태어나므로
+    //     그 번호로 때리면 아래 `e.lastSwing === swingId` 에 전원이 걸려 아무도 안 맞는다.
+    swingId = (o.swing === undefined) ? -2 : o.swing;
+    atkKind = o.kind || 'Arrow';
+    hitCap = (o.cap === undefined) ? Infinity : o.cap;
+    _prevA.copy(o.prevA || a); _prevB.copy(o.prevB || b);
+    let n = 0;
+    try { n = doHits(a, b); }
+    finally {
+      // ★finally 다. doHits 안의 onHit 콜백은 main.js 로 나가는데 거기서 예외가 나면
+      //   칼 상태가 화살 것으로 남는다(그 뒤 모든 칼질이 조용히 틀린다).
+      swingId = sSwing; atkKind = sKind; hitCap = sCap;
+      _prevA.copy(_sPrevA); _prevB.copy(_sPrevB);
+    }
+    return n;
   }
 
   // -------------------------------------------------------------------------
@@ -3631,6 +3692,9 @@ export function createEnemySystem(opts) {
     // main.js 의 tryAttack/tryHeavy/tryWide 가 입력 순간 이 둘만 쓴다.
     nearestTo,
     snapFacing,
+    // ── 칼이 아닌 것의 선분 타격 (21차. arrow.js 가 매 프레임 부른다) ──
+    // 위 hitSegment 정의부 주석이 정본. 칼 경로(update -> doHits)는 한 줄도 안 바뀐다.
+    hitSegment,
     get snap() {
       return { on: snapOn, r: SNAP_R, dur: SNAP_DUR,
                running: !!snap, left: snap ? +(snap.dur - snap.t).toFixed(3) : 0 };

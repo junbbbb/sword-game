@@ -348,6 +348,7 @@ function resetRun() {
   sfx.stopTell();                  // 보스 예고음이 판을 넘어 이어지면 안 된다
   // ★주머니와 바닥에 널린 물건도 판을 넘기지 않는다(이 판의 리셋 문화 그대로).
   if (window.__items) window.__items.reset();
+  if (window.__arrows) window.__arrows.reset();      // ★21차. 날아가던 화살도 판과 함께 지운다
 }
 addEventListener('keydown', e => {
   keys[e.code] = true;
@@ -2541,6 +2542,11 @@ let curCfg = DEF_CFG;
 let mixer = null, current = null, model = null;
 const actions = {};
 let handBone = null, charH = 2.4;
+// ★21차. **왼손** 본. 오른손잡이 궁수는 왼손이 활을 쥔다(blender/s11_archer.py 의 SHOT 표).
+//   화살이 떠나는 자리를 여기서 읽는다 - 몸통에서 어림잡으면 만작 자세에서 팔이
+//   앞으로 뻗어 있는 만큼(약 0.4m) 화살이 가슴에서 튀어나오는 그림이 된다.
+//   없는 캐릭터면 null 이고, 그때는 arrow 발사 자리가 몸 기준 어림값으로 흐른다.
+let lhandBone = null;
 const footBones = [];
 const _fp = new THREE.Vector3();
 // 바인드 포즈 박스로 높이를 맞추면 포즈에 따라 발이 뜨거나 파묻힌다.
@@ -2772,7 +2778,8 @@ const ATK_COMMIT_OLD = { Attack: 0.28, Heavy: 0.97, Wide: 0.70 };
 // 지금 스윙의 커밋 길이. 3연타는 **단수마다 다르다**(2·3타는 진입점이 스윙 코앞이라 짧다).
 function commitNow() {
   if (cancelMode === 'old') return ATK_COMMIT_OLD[atkClip] || 0.28;
-  if (atkClip === 'Attack') return ATK_STEP_COMMIT[comboStep] || ATK_STEP_COMMIT[0];
+  // ★21차. 표가 캐릭터별로 갈린다(궁수 = 쏘기 한 번짜리 표). 검사는 옛 표 그대로다.
+  if (atkClip === 'Attack') { const T = atkStepCommit(); return T[comboStep] || T[0]; }
   return ATK_COMMIT[atkClip] || 0.28;
 }
 // ── 한 방짜리 기술의 캐스트 앞구간 (2026-08-12 13차. 오너 "X 쓸 때 2타가 나가네") ──
@@ -2893,6 +2900,22 @@ function snapTarget() {
   while (d < -Math.PI) d += Math.PI * 2;
   if (Math.abs(d) > SNAP_BACK_DEG * Math.PI / 180) return null;
   return enemies.snapFacing(root, SNAP_R);
+}
+// ── ★활 조준 스냅 (21차) ──
+// snapTarget 과 **같은 규칙**이고 반경만 다르다(SNAP_R 3.2 -> BOW_AIM_R 13).
+// ★함수를 따로 판 이유: snapTarget 의 반경을 인자로 열면 칼 세 자리(Z·X·C)가 전부
+//   그 인자를 지나가게 되고, 언젠가 한 곳만 다른 값을 넣는다. 갈래를 붙이는 게 아니라
+//   **부르는 쪽을 가르는** 편이 안전하다.
+// ★등 뒤 게이트(SNAP_BACK_DEG)는 그대로 쓴다. 활이라고 뒤를 돌아 쏘면 그건 조준이
+//   아니라 자동 조준이 몸을 조종하는 것이다.
+function snapTargetBow() {
+  const t = enemies.nearestTo(root.position.x, root.position.z, BOW_AIM_R);
+  if (!t) return null;
+  let d = t.yaw - root.rotation.y;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  if (Math.abs(d) > SNAP_BACK_DEG * Math.PI / 180) return null;
+  return enemies.snapFacing(root, BOW_AIM_R);
 }
 // t 는 enemies.snapFacing 이 돌려준 표적(없으면 null). 클립이 실제로 시작되는 자리에서만 부른다.
 function startStep(t) {
@@ -3330,6 +3353,7 @@ function loadChar(name, onDone) {
     const feet = [];
     const swords = {};
     let hand = null;
+    let lhand = null;
     m.traverse(o => {
       if (o.isMesh) {
         o.frustumCulled = false;
@@ -3343,6 +3367,7 @@ function loadChar(name, onDone) {
         });
       }
       if (o.isBone && /r[_ ]hand/i.test(o.name)) hand = o;
+      if (o.isBone && /l[_ ]hand/i.test(o.name)) lhand = o;   // ★21차. 활 쥔 손
       if (o.isBone && /(foot|toe)/i.test(o.name)) feet.push(o);
       if (o.isSkinnedMesh && o.name.startsWith('SW_')) {
         const k = o.name.slice(3).replace(/_\d+$/, '');
@@ -3362,7 +3387,7 @@ function loadChar(name, onDone) {
       }
     });
 
-    CHARS[name] = { model: m, mixer: mx, actions: acts, handBone: hand,
+    CHARS[name] = { model: m, mixer: mx, actions: acts, handBone: hand, lhandBone: lhand,
                     feet, swords, charH: h, clips: gltf.animations.map(c => c.name) };
     m.visible = false;
     if (onDone) onDone(name);
@@ -3392,6 +3417,7 @@ function activateChar(name) {
   model = c.model;
   mixer = c.mixer;
   handBone = c.handBone;
+  lhandBone = c.lhandBone || null;
   charH = c.charH;
   current = null;
   bladeOK = false;
@@ -3807,6 +3833,76 @@ function play(name, fade = 0.18) {
 const ATK_STEP_T = [0, 0.58, 1.08];
 const ATK_STEP_COMMIT = [0.30, 0.19, 0.16];
 
+// ── ★★궁수 (21차. 오너 지시 「궁수 활 쏘는거 없으면 만들어줘」) ─────────────
+// **위 두 표는 검사 클립 기준인데 여태 캐릭터 구분 없이 쓰였다.** 궁수에 판정이
+// 붙기 전까지는 캔슬이 아예 안 걸려서 안 드러났을 뿐이다. Z 를 연타하면 궁수 클립의
+// 만작(0.58)·복귀 꼬리(1.08) 자리로 재진입해서 **활을 반쯤 당긴 자세부터 다시 쏘는**
+// 그림이 나온다. 그래서 표를 캐릭터별로 가른다.
+//
+// 궁수 Attack 클립의 실측(archer.glb, blender/s11_archer.py 의 SHOT 표가 정본):
+//   길이 1.1667초 = 28프레임 @24fps.  f1 차렷 · f5 메김 · f11 만작 · f16 조준정지 ·
+//   f19 「손이 귀 뒤로」 · f28 복귀.  프레임 f 의 클립 시각은 **f/24** 다.
+//
+// ★★**발사 프레임은 f19 가 아니라 f16 이다.** 표만 읽고 f19(0.792)로 잡았다가
+//   실측으로 뒤집었다. 시위 손(오른손)의 속도를 클립초에 대해 찍으면(__slow 0.08 로
+//   12.5배 늦춰 165표본) 이렇게 나온다:
+//       클립 0.46~0.66  속도 0.01~0.13   ← **조준 정지**(손이 얼어 있다)
+//       클립 0.679      3.36             ← 여기서 손이 튄다 = 시위를 놓은 순간
+//       클립 0.716~0.733 11.0~11.6       ← 봉우리(손이 귀 뒤로 날아가는 중)
+//       클립 0.795      2.02             ← 이미 다 날아가서 잦아드는 중
+//   즉 f19(0.792)는 **손이 다 날아간 뒤의 자세**고, 시위가 풀리는 순간은 조준 정지가
+//   끝나는 f16(0.667)이다. f19 에 맞춰 쏘면 손이 follow-through 를 마친 뒤에야
+//   화살이 나타난다(게임시간 0.06초 늦다 = 4프레임).
+const ARCHER_TS = 2.00;              // 궁수 Attack 재생속도(검사는 1.35 그대로)
+const ARCHER_ENTER = 0.10;           // 클립 진입점(초). 차렷 자세를 건너뛴다
+const ARCHER_SHOT_CLIP = 16 / 24;    // 시위를 놓는 클립 시각(초) = 0.667. 위 실측이 근거다
+//
+// ★재생속도를 1.35 -> 2.00 으로 올렸다. 근거:
+//   1.35 로 두면 키 입력에서 발사까지 0.667/1.35 = **0.494초**다. 같은 게임에서
+//   검사 Z 1타는 입력 후 **0.167초**에 판정이 열린다(위 ATK_STEP_T 주석의 실측).
+//   3배 굼뜬 평타는 "조준이 느린 활"이 아니라 **입력이 씹힌 것**으로 읽힌다.
+//   그렇다고 검사와 같은 0.167 로 맞추면 만작~조준 구간이 뭉개져서 활을 당기는
+//   그림 자체가 사라진다(활의 드라마가 만작인데 그걸 버리는 셈이다).
+//   2.00 + 진입 0.10 이면 발사가 **0.283초**, 클립 전체가 0.533초다. 만작(클립 0.458)이
+//   입력 후 0.18초에 서고, 검사의 1.7배라 "활이라 한 박자 느리다"로 읽힌다.
+// ★진입점 0.10 은 f1(차렷, 클립 0.042)과 f5(메김, 클립 0.208) 사이다. 차렷 자세는
+//   Idle 에서 크로스페이드(0.06)로 건너오므로 굳이 다시 밟을 이유가 없다.
+// 키 입력에서 화살이 떠나기까지(초). **이 값이 이번 작업의 핵심 수치다.**
+const ARCHER_RELEASE_T = (ARCHER_SHOT_CLIP - ARCHER_ENTER) / ARCHER_TS;   // = 0.283
+// 커밋(= 이 시간 전에는 다른 입력으로 못 끊는다). 발사 직후에 열린다.
+// ★0.02초(약 한 프레임) 여유를 준 이유: 발사와 커밋 해제가 같은 프레임에 겹치면
+//   화살이 떠나는 프레임에 이미 클립이 끊길 수 있어서 "쏘는 손"이 화면에서 사라진다.
+const ARCHER_COMMIT = ARCHER_RELEASE_T + 0.02;                            // = 0.303
+// 궁수용 3연타 표. **세 칸이 같은 값이다** - 궁수 Attack 은 클립 하나에 쏘기 한 번이라
+// 단수라는 게 없다(Z 를 연타하면 늘 처음부터 다시 당긴다).
+const ATK_STEP_T_BOW = [ARCHER_ENTER, ARCHER_ENTER, ARCHER_ENTER];
+const ATK_STEP_COMMIT_BOW = [ARCHER_COMMIT, ARCHER_COMMIT, ARCHER_COMMIT];
+// ★활을 쏘는 캐릭터. **이름으로 가른다.** 칼 유무(bladeOK)로 가르면 칼을 안 든
+//   캐릭터가 늘어날 때마다 같이 활을 쏘게 된다. 지금 활 클립을 가진 건 archer 하나다.
+const BOW_CHARS = { archer: true };
+// ★★롤백은 **이 한 줄이다.** false 로 두면:
+//     · arrow.js 는 import 만 되고 시스템이 아예 안 만들어진다(메시도 안 생긴다)
+//     · isArcher() 가 늘 false 라 궁수 Attack 이 검사 표·검사 재생속도(1.35)로 돌아간다
+//     · 조준 반경도, 시위음도, 발사도 통째로 죽는다
+//   **정의는 여기 한 곳뿐이다.** arrow.js 안에는 이 이름이 없다 - 두 벌이면 반드시
+//   어긋난다는 게 이 레포가 반복해서 배운 것이다(HANDOFF §3 롤백).
+const ARROW_ON = true;
+// ★ARROW_ON 이 꺼져 있으면 **여기서부터 전부 거짓**이 된다 = 아래 표·타이밍·조준이
+//   한꺼번에 옛 길로 돌아간다(검사 표를 쓰고, 화살을 안 쏘고, 클립은 1.35 로 돈다).
+function isArcher() { return ARROW_ON && !!BOW_CHARS[curChar]; }
+function atkStepT() { return isArcher() ? ATK_STEP_T_BOW : ATK_STEP_T; }
+function atkStepCommit() { return isArcher() ? ATK_STEP_COMMIT_BOW : ATK_STEP_COMMIT; }
+function atkTimeScale() { return isArcher() ? ARCHER_TS : 1.35; }
+// ── 자동 조준 반경 ──
+// ★SNAP_R(3.2m)은 **칼 사거리**에서 나온 값이라 활에 그대로 쓰면 안 된다
+//   (3.2m 밖은 조준이 안 걸려서 활이 근접무기가 된다).
+//   13m 의 근거: 이 카메라가 세로로 담는 세계가 약 14m 다. **화면에 보이는 놈까지만**
+//   자동으로 겨눈다 - 화면 밖의 놈을 겨누면 캐릭터가 이유 없이 홱 도는 그림이 된다.
+// ★반경 안에 아무도 없으면 바라보는 방향으로 그냥 쏜다(헛방의 자유를 남긴다).
+const BOW_AIM_R = 13.0;
+// 이번 캐스트에서 화살이 이미 떠났나. tryAttack 이 false 로 되돌린다.
+let arrowShot = false;
+
 function tryAttack() {
   if (!actions.Attack) return;
   if (isCleared()) return;         // 층 돌파 뒤에는 안 받는다(입력 버퍼로 새는 경로까지 막는다)
@@ -3831,14 +3927,22 @@ function tryAttack() {
   const fromSkill = attacking && atkClip && atkClip !== 'Attack';
   if (!fromSkill && (attacking || now < comboWindow)) comboStep = Math.min(2, comboStep + 1);
   else { comboStep = 0; resetCombo(null); }
-  const tgt = snapTarget();
+  // ★21차. 궁수 Attack 은 클립 하나에 쏘기 한 번이라 **단수라는 게 없다.**
+  //   표(ATK_STEP_T_BOW)가 세 칸 다 같은 값이라 그림은 어차피 같지만, 내부 카운터가
+  //   「3타」를 세고 있으면 언젠가 그 수를 읽는 자리가 생겨서 거짓말이 된다.
+  const bow = isArcher();
+  if (bow) comboStep = 0;
+  // 조준. 칼은 사거리(3.2m) 안, 활은 화면 안(13m)을 본다. 규칙은 같다.
+  const tgt = bow ? snapTargetBow() : snapTarget();
   attacking = true;
   heavy = false;
   clearBuffer();
   released = false; coil = 1;
   const a = actions.Attack;
   _lowHist.length = 0;
-  a.reset(); a.setEffectiveTimeScale(1.35); a.play();
+  // ★21차. 재생속도가 캐릭터별로 갈린다(궁수 2.00. 근거는 ARCHER_TS 주석).
+  const _ts = atkTimeScale();
+  a.reset(); a.setEffectiveTimeScale(_ts); a.play();
   // ★클립 진입점을 단수에 맞춘다. 그냥 0 부터 다시 틀면 세 번 눌러도 **같은 1타**만
   //   세 번 나간다. 진입점은 enemy.js 의 타격 게이트(hot)를 60fps 로 찍어 잰
   //   스윙 시작 시각(경과 ms -> 클립초 = ms/1000*1.35)에서 예비동작 0.09초를 뺀 값이다:
@@ -3846,7 +3950,7 @@ function tryAttack() {
   //     1타 hot 0.134s -> 클립 0.181s -> 진입 0     (클립 머리라 0)
   //     2타 hot 0.433s -> 클립 0.585s -> 진입 0.50
   //     3타 hot 0.883s -> 클립 1.192s -> 진입 1.10
-  a.time = ATK_STEP_T[comboStep] || 0;
+  a.time = atkStepT()[comboStep] || 0;
   // ── 크로스페이드 0.10 -> 0.06 되돌림 (2026-08-13 15-모션수제) ──
   // 수제 클립은 f0 이 Idle 첫 프레임과 같은 자세라 건너뛸 거리가 없다. 그래서
   // 14차가 유령을 누르려고 늘렸던 값을 되돌렸고, **되돌린 쪽이 더 조용했다**
@@ -3863,11 +3967,14 @@ function tryAttack() {
   //   ★판정에는 영향이 없다(유령 구간은 X·C 는 CAST_SETTLE 이, Z 는 SWING_GAP 이 흡수).
   if (current && current !== a) current.crossFadeTo(a, 0.06, false);
   current = a;
-  const dur = (a.getClip().duration - a.time) / 1.35;
+  const dur = (a.getClip().duration - a.time) / _ts;
   attackEnd = now + dur;
   comboWindow = now + dur * 0.75 + 0.25;   // 다음 단수를 이을 수 있는 창(캔슬 뒤 여유 포함)
   atkClip = 'Attack'; atkStartT = now; atkStruck = false; atkHitT = -99; atkStarts++; lastAtkStartT = now;   // 커밋 구간 시작(S1)
-  startStep(tgt);                                          // 붙는 전진 스텝(S3)
+  arrowShot = false;                       // ★21차. 이번 캐스트의 화살은 아직 안 떠났다
+  // ★궁수는 전진 스텝을 안 한다. 그건 "칼이 0.4m 모자라서 한 발 붙는" 보정인데
+  //   13m 를 쏘는 활에는 뜻이 없고, 활을 당기면서 앞으로 미끄러지는 그림이 된다.
+  if (!bow) startStep(tgt);                                // 붙는 전진 스텝(S3)
   // ★여기서 표시를 안 한다. 이 자리가 곧 "허공을 베어도 1 HIT" 의 원인이었다.
 }
 
@@ -4869,6 +4976,66 @@ const items = ITEMS_ON ? createItemSystem({
 }) : null;
 window.__items = items;
 
+// ── 화살 (21차. 오너 지시 「궁수 활 쏘는거 없으면 만들어줘」) ────────────────
+// ★롤백 스위치 ARROW_ON 의 **정의는 위(isArcher 바로 앞)** 에 있다. 여기 두면
+//   로딩 중 Z 를 누른 판에서 선언 전 접근(TDZ)이 난다 - 캐릭터 glb 로드 콜백은
+//   이 줄보다 앞에 있는 await 사이에 끼어들 수 있고, 그러면 actions.Attack 가드가
+//   이미 열린 채로 tryAttack -> isArcher() 가 ARROW_ON 을 읽는다.
+const { createArrowSystem } = await import('./arrow.js' + location.search);
+const arrows = ARROW_ON ? createArrowSystem({
+  scene, camera, level,
+  // ★판정 창구 둘. **화살표로 감싸는 이유는 items.js 의 heal 과 같다** - enemies/boss 는
+  //   아래에서 const 로 선언되므로 지금 참조를 잡으면 TDZ 에 걸린다(부를 때는 이미 풀려 있다).
+  //   창구가 없는 낡은 빌드와 짝을 지어도 게임은 그대로 돈다(0 / false 로 흐른다).
+  hitEnemies: (a, b, o) => (enemies && enemies.hitSegment) ? enemies.hitSegment(a, b, o) : 0,
+  hitBoss: (a, b, o) => (window.__boss && window.__boss.hitSegment)
+                          ? window.__boss.hitSegment(a, b, o) : false,
+  // 시위를 떠나는 그 순간.
+  onFire: () => sfx.bow(),
+  // ★명중 연출의 방향을 화살 진행 방향으로 세운다. 안 세우면 onHit 이 **직전 칼질의**
+  //   방향(swingDir)으로 참격·먹물을 눕힌다 - 활을 쏘는데 칼자국이 옆으로 눕는다.
+  beforeHit: (a, dir) => { swingDir.copy(dir); },
+}) : null;
+window.__arrows = arrows;
+
+// ── ★화살을 놓는다 (21차) ──────────────────────────────────────────────────
+// 부르는 자리는 아래 루프 한 곳뿐이다(클립 발사 프레임).
+// 정하는 것 둘:
+//   ① **어디서 떠나는가** = 활을 쥔 왼손. 몸 기준 어림값으로 하면 만작에서 팔이
+//      앞으로 뻗은 만큼(약 0.4m) 화살이 가슴에서 튀어나온다.
+//   ② **어디를 겨누는가** = 발사 순간에 **다시** 잰다. 입력 순간에 겨눈 놈은 0.35초
+//      동안 움직였고, 그 사이 더 가까운 놈이 들어왔을 수도 있다.
+//      아무도 없으면 바라보는 방향으로 그냥 쏜다(헛방의 자유).
+const _bowP = new THREE.Vector3();
+function fireArrow() {
+  if (!arrows) return null;
+  if (lhandBone) lhandBone.getWorldPosition(_bowP);
+  else {
+    // 왼손 본이 없는 캐릭터를 위한 어림값(가슴 높이 · 반 걸음 앞).
+    const gy = level.groundY(root.position.x, root.position.z);
+    _bowP.set(root.position.x + Math.sin(root.rotation.y) * 0.30,
+              gy + charH * 0.66,
+              root.position.z + Math.cos(root.rotation.y) * 0.30);
+  }
+  const t = enemies.nearestTo(root.position.x, root.position.z, BOW_AIM_R);
+  if (t) {
+    let d = t.yaw - root.rotation.y;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    // ★등 뒤는 안 겨눈다(snapTargetBow 와 **같은 게이트**). 몸은 앞을 보는데 화살만
+    //   뒤로 날아가는 그림을 막는 자리다.
+    if (Math.abs(d) <= SNAP_BACK_DEG * Math.PI / 180) {
+      // 표적 높이. 요괴 캡슐(enemy.js CAP_LO 0.20 ~ CAP_HI 0.74 x 키 1.30)의 한가운데가
+      // 발밑 +0.61m 다. 보스는 몸통 중심이 +1.55m(boss.js CENTER_Y 1.65 에 맞춘 값).
+      const ty = level.groundY(t.x, t.z) + (t.boss ? 1.55 : 0.61);
+      return arrows.fireAt(_bowP.x, _bowP.y, _bowP.z, t.x, ty, t.z);
+    }
+  }
+  // 자유 사격. 활을 쥔 손 높이에서 정면으로, 아주 살짝 위로(중력에 바로 먹히지 않게).
+  return arrows.fireDir(_bowP.x, _bowP.y, _bowP.z,
+                        Math.sin(root.rotation.y), 0.045, Math.cos(root.rotation.y));
+}
+
 const enemies = createEnemySystem({
   scene, camera,
   // 무리 자리는 맵이 정한다(level1.json 의 mobs[]). 마릿수·반경은 enemy.js 가 정한다.
@@ -4888,6 +5055,8 @@ const enemies = createEnemySystem({
     trailBuf.length = 0; spray.length = 0;
     // ★죽으면 주머니도 바닥의 물건도 비운다(오너 지시. R 재시작과 같은 규칙).
     if (items) items.reset();
+    // ★날아가던 화살도 같이 지운다. 안 지우면 되살아난 자리 옆으로 지난 판의 화살이 지나간다.
+    if (arrows) { arrows.reset(); arrowShot = false; }
   },
   // ── 칼이 닿는 그 프레임 ──
   // 여기 한 줄 한 줄이 "처치하는 맛"이다. 순서에 뜻이 있다:
@@ -5592,6 +5761,28 @@ function tick() {
     //   첫 위치를 잡아야 한 프레임 늦게 나타나지 않는다.
     // ★dt 는 게임시간이다(히트스톱·슬로모가 이미 곱해져 있다). 세상이 멎는 그 105ms
     //   동안 물건만 혼자 튀어오르면 처치의 정지가 통째로 무너진다.
+    // ── 화살 (21차) ──
+    // ★요괴·보스 **뒤**, 아이템 **앞**이다. 뒤인 이유는 이번 프레임에 움직인 요괴
+    //   자리로 판정해야 하기 때문이고, 앞인 이유는 화살이 벤 놈이 떨어뜨린 물건이
+    //   같은 프레임에 첫 위치를 잡아야 하기 때문이다(items.js 머리말과 같은 규칙).
+    // ★dt 는 게임시간이다. 세상이 멎는 70~112ms 동안 화살만 혼자 날아가면 안 된다.
+    if (arrows) {
+      // 발사 프레임. 클립 시각이 아니라 **경과 시간**으로 잰다 - 클립 시각은
+      // 크로스페이드·캔슬로 튀는데 경과는 안 튄다(ARCHER_RELEASE_T 주석이 정본).
+      if (!arrowShot && attacking && atkClip === 'Attack' && isArcher() &&
+          !preview.on && !cleared && (now - atkStartT) >= ARCHER_RELEASE_T) {
+        arrowShot = true;
+        fireArrow();
+        // ★★여기가 0.864초 완전 경직을 푸는 자리다.
+        //   atkStruck 은 여태 「attacking && enemies.hot」 한 곳에서만 켜졌는데(아래),
+        //   그 hot 은 **칼끝 속도** 게이트라 활에는 영영 안 켜진다. 그래서 궁수는
+        //   canCancelAttack 의 첫 관문(!atkStruck)을 못 지나 이동·점프·연타가 전부
+        //   클립이 끝날 때까지 잠겼다. 활에서 「한 번 휘둘렀다」에 해당하는 사건은
+        //   **화살이 시위를 떠난 것**이고, 그 자리가 정확히 여기다.
+        atkStruck = true;
+      }
+      arrows.update(dt, preview.on || cleared);
+    }
     if (items) items.update(dt, preview.on || cleared);
 
     // ── 휘두름 소리 ──

@@ -172,6 +172,7 @@ WASD·방향키 이동 / Shift 달리기 / **Space 점프** / **Z** 평타 3연�
 | `COMBO_UI_ON` | `web/main.js:3941` | `false` | `true` = 화면 중앙 상단 「1타/2타/3타 · 명중 N」 복귀. 내부 카운터는 지금도 돈다 |
 | `SKILL_CALLOUT_ON` | `web/main.js:3950` | `false` | `true` = 기술명 카드 복귀. **위와 일부러 분리**(오너 지시가 두 건이라 따로 되돌려야 한다) |
 | `ITEMS_ON` | `web/main.js:4839` | `true` | `false` = 드랍·주머니·아이템창이 통째로 안 돈다 |
+| `ARROW_ON` | `web/main.js:3889` (isArcher 바로 앞) | `true` | `false` = 궁수 화살이 통째로 죽는다. arrow.js 는 import 만 되고 시스템이 안 만들어지며(메시도 안 생김), `isArcher()` 가 늘 false 라 궁수 Attack 이 **검사 표·검사 재생속도(1.35)** 로 돌아간다. ★선언이 `isArcher()` 앞에 있어야 한다 - 아래(화살 블록)에 두면 로딩 중 Z 를 누른 판에서 TDZ 가 난다 |
 | `DROP_3D` | `web/items.js:108` | `true` | `false` = 옛 2D 빌보드 드랍 경로(시트·UV·알파 그대로 살아난다) |
 | `MARK_ATK_ON` | `web/enemy.js:209` | `false` | `true` = 고블린 머리 위 공격 예고 쐐기 복귀. 예고 시계·밸런스 영향 0 |
 | `MARK_ALERT_ON` | `web/enemy.js:219` | `false` | `true` = 머리 위 느낌표 복귀. 시야·추격 판정은 지금도 그대로 돈다(그림만 없다) |

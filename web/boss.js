@@ -255,6 +255,8 @@ const P_FIND = 0, P_FIGHT = 1, P_PICK = 2, P_ESCAPE = 3, P_CLEAR = 4;
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
 const _segA = new THREE.Vector3(), _segB = new THREE.Vector3();
 const _prevA = new THREE.Vector3(), _prevB = new THREE.Vector3();
+// ★21차. hitSegment 가 _prevA/_prevB 를 잠깐 화살 것으로 갈아 끼울 때 칼 값을 넣어 두는 자리.
+const _hsA = new THREE.Vector3(), _hsB = new THREE.Vector3();
 const _hitP = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _e = new THREE.Euler();
 const _mat = new THREE.Matrix4(), _sc = new THREE.Vector3();
@@ -878,6 +880,29 @@ export function createBossSystem(opts) {
     return false;
   }
 
+  // ── 칼이 아닌 것이 선분으로 때린다 (21차. 궁수 화살) ──
+  // enemy.js 의 같은 이름 함수와 **한 쌍**이다. 보스는 별도 체계라 창구도 따로 나야 한다.
+  // ★중복 명중 방지가 여기서는 `swing === lastSwing` 한 줄이다. 화살이 스윙 번호를
+  //   안 주면 한 발이 프레임마다 계속 때린다(0.3초면 20번). 그래서 **화살은 자기 id 를
+  //   스윙 번호로 넘겨야 한다** — 그 번호가 칼과 안 겹치도록 음수를 쓴다(칼은 0부터 증가).
+  // ★_prevA/_prevB 를 잠깐 갈아 끼우고 되돌리는 이유는 enemy.js hitSegment 주석과 같다.
+  //   되돌리지 않으면 다음 프레임 칼 판정이 화살 자리에서 출발한다.
+  // ★보스가 없는 맵(던전)에서는 spec 이 없어 pos 가 원점에 남는다. 거기서 판정을 돌리면
+  //   원점 근처를 지나는 화살이 유령 보스를 때린다 — 그래서 spec 게이트가 먼저다.
+  function hitSegment(a, b, opts) {
+    if (!a || !b || !spec) return false;
+    if (state === S_DEAD) return false;
+    const o = opts || {};
+    _hsA.copy(_prevA); _hsB.copy(_prevB);
+    _prevA.copy(o.prevA || a); _prevB.copy(o.prevB || b);
+    let hit = false;
+    //   ★기본값이 -2 다. **-1 은 쓰면 안 된다** — lastSwing 초깃값이 -1 이라 그 번호로
+    //     때리면 `swing === lastSwing` 에 걸려 첫 발이 통째로 무시된다.
+    try { hit = bladeHit(a, b, o.swing === undefined ? -2 : o.swing, !!o.heavy); }
+    finally { _prevA.copy(_hsA); _prevB.copy(_hsB); }
+    return hit;
+  }
+
   function die() {
     hp = 0;
     onEvent('die', {});
@@ -1294,6 +1319,9 @@ export function createBossSystem(opts) {
   const api = {
     update,
     restart,
+    // ── 칼이 아닌 것의 선분 타격 (21차. arrow.js 가 매 프레임 부른다) ──
+    // 정본 주석은 위 hitSegment 정의부. 칼 경로(update 안 bladeHit)는 한 줄도 안 바뀐다.
+    hitSegment,
     // ★넷코드 접점. 증표 소지자의 위치는 층 전체에 공개되는 값이다.
     //   지금은 솔로라 이 값을 볼 사람이 없지만, 구조를 먼저 넣어 둔다.
     get carrier() {
