@@ -172,6 +172,7 @@ WASD·방향키 이동 / Shift 달리기 / **Space 점프** / **Z** 평타 3연�
 | `COMBO_UI_ON` | `web/main.js:3941` | `false` | `true` = 화면 중앙 상단 「1타/2타/3타 · 명중 N」 복귀. 내부 카운터는 지금도 돈다 |
 | `SKILL_CALLOUT_ON` | `web/main.js:3950` | `false` | `true` = 기술명 카드 복귀. **위와 일부러 분리**(오너 지시가 두 건이라 따로 되돌려야 한다) |
 | `ITEMS_ON` | `web/main.js:4839` | `true` | `false` = 드랍·주머니·아이템창이 통째로 안 돈다 |
+| `MP_HIT_ON` | `web/main.js:5147` | `true` | `false` = 참가자가 다시 요괴를 못 때리고 요괴는 방장만 쫓는다(2단계 1차 상태). `enemy.js` 는 `ctx.netHit` 으로 값만 받고(`NET_HIT`), `mp.js`·`mpenemy.js` 에는 없다. 갈리는 자리 셋: 참가자의 `stepBlade`·`hitSegment`·`syncTargets` |
 | `MP_ENEMY_ON` | `web/main.js:5130` | `true` | `false` = 요괴가 다시 **각자 로컬**(1단계 그대로). 내가 잡은 고블린이 남의 화면에서는 살아 있는 상태로 복귀한다. `enemy.js`·`mp.js`·`mpenemy.js` 에는 스위치가 없고 `ctx` 로 받은 값이 null 인지만 본다 |
 | `MP_FX_ON` | `web/main.js:5112` | `true` | `false` = **남의 공격 이펙트**가 통째로 안 생긴다(궤적 rig 도 유령 화살 시스템도 안 만든다). 아바타·모션은 그대로 돈다. `mp.js` 는 `ctx.fx` 가 null 인지만 보므로 정의는 이 한 줄뿐이다 |
 | `ARROW_ON` | `web/main.js:3889` (isArcher 바로 앞) | `true` | `false` = 궁수 화살이 통째로 죽는다. arrow.js 는 import 만 되고 시스템이 안 만들어지며(메시도 안 생김), `isArcher()` 가 늘 false 라 궁수 Attack 이 **검사 표·검사 재생속도(1.35)** 로 돌아간다. ★선언이 `isArcher()` 앞에 있어야 한다 - 아래(화살 블록)에 두면 로딩 중 Z 를 누른 판에서 TDZ 가 난다 |

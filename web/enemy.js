@@ -1034,6 +1034,9 @@ const _sPrevA = new THREE.Vector3(), _sPrevB = new THREE.Vector3();
 // 하나로 돌려썼더니 한 스윙에 두 마리째부터 절단 평면이 엉뚱한 방향으로 잡혔다.
 const _cutW = new THREE.Vector3(), _cut = new THREE.Vector3();
 const _hitP = new THREE.Vector3();
+// resolveHit 가 시체에 넘길 타격점(2차). ★모듈 맨 위 임시 벡터들 곁에 둔다 -
+// 이 레포는 "const 선언을 그 값을 읽는 함수보다 뒤에 두지 마라"를 TDZ 사고로 배웠다.
+const _resP = new THREE.Vector3();
 // 처치 기록용(화면 안에서 죽었는지 NDC 로 재는 데만 쓴다). project() 가 값을
 // 덮어쓰므로 다른 임시값과 절대 나눠 쓰지 않는다.
 const _kv = new THREE.Vector3();
@@ -1227,6 +1230,40 @@ const NET_EXTRAP = 0.12;
 // 참가자가 "공격이 얼마나 남았나"를 이 값으로 역산한다.
 const ATK_DUR = (ATK_TO - ATK_FROM) / ATK_TS;
 
+// ---------------------------------------------------------------------------
+// ── 멀티 2단계 2차: 참가자도 때리고, 요괴도 참가자를 때린다 ──
+//
+// 1차에서 요괴는 방장 하나가 굴리고 참가자는 그림만 그렸다. 그래서 참가자의 칼도
+// 화살도 요괴를 못 건드렸고(hitSegment 가 통째로 0 을 돌려줬다), 요괴는 방장만
+// 쫓았다(getPlayerPos 하나뿐이었으니 세상에 사람이 한 명이었다).
+//
+// ★참가자의 피해를 **선분을 보내 방장이 다시 판정**하는 길로 안 갔다. 그러려면
+//   되감기(lag compensation)가 필요하다 - 참가자가 본 요괴 자리는 방장 기준
+//   30~85ms 전이라(1차 실측) 방장이 요괴 궤적 히스토리를 들고 있어야 한다.
+//   친구끼리 하는 P2P 데모에서 치팅 방어는 값이 없다. 그래서:
+//     참가자 : 자기 화면에서 **평소와 똑같이** doHits 를 돌리되(predictOnly)
+//              상태는 한 톨도 안 바꾸고, "몇 번 요괴를 어디서 어떤 기술로 쳤다"를
+//              **주장(claim)** 으로 보낸다. 화면에는 히트스톱·칼소리·참격·흰 번쩍만 난다.
+//     방장   : 싼 상식 검사(아래 두 상수)를 통과한 주장을 **자기 판정과 같은 자리**
+//              (resolveHit)로 흘린다. 그래서 결과물(사건 소식)의 생김새가 똑같다.
+// ★되돌리기(rollback)는 없다. 1차 실측에서 방장 확정본이 중앙 10~36ms 만에 돌아온다 -
+//   사람이 "때렸는데 늦게 죽는다"를 느끼는 문턱(약 100ms) 아래다. 기각되면 이미 나간
+//   히트스톱·이펙트만 남는데, 되돌릴 상태가 없으므로 "헛 스윙 한 번"으로 보인다.
+// ★예측은 **체력을 안 깎고 숫자도 안 띄운다.** 참가자가 굴린 rollDamage 는 방장의
+//   그것과 값이 다를 수 있어서(레벨·흔들림 씨앗), 예측 숫자와 확정 숫자가 잇달아
+//   두 번 뜨면 그게 곧 거짓말이다. 숫자는 확정본 하나만 뜬다.
+// ---------------------------------------------------------------------------
+// 이만큼 묵은 주장은 버린다(참가자가 자기 시각으로 잰 값을 실어 보낸다 - 두 기계의
+// 시계가 안 맞으므로 절대 시각은 못 쓴다. 선로 지연분은 못 재지만 그건 수십 ms 다).
+const CLAIM_MAX_MS = 400;
+// 칼 주장: 그 참가자의 마지막 좌표에서 그 요괴까지 이보다 멀면 버린다.
+// 칼 판정 리치가 3.2m 이고 두 화면의 좌표차가 1차 실측에서 26m 안쪽 중앙 0.1m 대라
+// 3.0 이면 정상 타격은 안 걸리고 엉뚱한 주장만 걸린다.
+const CLAIM_R_MELEE = 3.0;
+// 화살 주장: arrow.js 의 사거리(RANGE 26m)에 여유 2m. 칼과 같은 자로 재면
+// 궁수 참가자의 정상 명중이 전부 기각된다(20m 밖에서 쏘는 것이 활의 요점이다).
+const CLAIM_R_SHOT = 28.0;
+
 // 배치를 매번 똑같이 만들려고 Math.random 대신 쓴다.
 // 필드는 "어디에 뭐가 있다"를 외우는 곳이라 새로고침마다 달라지면 안 된다.
 function hash1(n) {
@@ -1246,6 +1283,18 @@ export function createEnemySystem(opts) {
   // 들고 있게 되어 나중에 손댈 수가 없다.
   const onHit = opts.onHit || function () {};
   const onPlayerHurt = opts.onPlayerHurt || function () {};
+  // ── 2차 멀티 창구 둘 ──
+  // ★새 통로를 두 개만 판다. 나가는 쪽이 onHit 하나였던 것과 같은 이유로, 이 파일은
+  //   전송을 모른다 - main.js 가 받아서 mpenemy.js 로 넘긴다.
+  //   onNetHurt : 요괴가 **남**을 때렸다(내 체력이 아니다). 맞은 사람에게 알려야 한다.
+  //   onClaim   : 참가자인 내가 요괴를 쳤다고 **주장**한다. 방장에게 보내야 한다.
+  const onNetHurt = opts.onNetHurt || function () {};
+  const onClaim = opts.onClaim || function () {};
+  // ★2차 롤백 스위치. **정의는 main.js 의 MP_HIT_ON 한 곳**이고 이 파일에는 스위치가
+  //   없다 - 여기서는 받은 값만 본다(1차의 MP_ENEMY_ON 과 같은 규칙이다).
+  //   false 면 ①참가자가 칼·화살 판정을 아예 안 돌리고(1차처럼 못 때린다)
+  //          ②요괴가 사람 목록을 안 본다 = 방장만 쫓고 방장만 때린다.
+  const NET_HIT = !!opts.netHit;
 
   const TRIS = GOBLIN
     ? (GOBLIN.skin.geometry.index ? GOBLIN.skin.geometry.index.count
@@ -2318,6 +2367,16 @@ export function createEnemySystem(opts) {
   //   똑같이 돌고, hitSegment 가 관통 없는 발사체를 넘길 때만 잠깐 1 로 내려간다.
   //   (상한을 doHits 안에 안 두고 여기 둔 이유: 판정 알고리즘을 두 벌로 만들지 않으려고)
   let hitCap = Infinity;
+  // ★참가자의 로컬 예측 중인가. 켜져 있으면 doHits 가 **판정은 그대로 하고 상태는
+  //   한 톨도 안 바꾼다**(체력·처치·시체·처치 수·아이템·데미지 숫자 전부 없음).
+  //   판정 알고리즘을 두 벌로 만들지 않으려고 플래그 하나로 갈랐다 - hitCap 과 같은 수법이다.
+  let predictOnly = false;
+  // 멀티에서 나를 가리키는 짧은 이름. '' = 혼자 하는 판 또는 방장.
+  // 사건 소식의 by 와 이 값을 비교해 "내가 때린 것인가"를 가린다.
+  let myTag = '';
+  // 주장 번호. **1 부터** 나간다 - 0·-1 은 이 레포에서 두 번 사고를 낸 값이다
+  // (요괴가 lastSwing:-1 로 태어나고, 화살 id 를 -1 부터 시작해 첫 발이 죽었다).
+  let claimId = 0;
   // ── 한 방짜리 기술의 캐스트 (2026-08-12 13차) ──
   // 수면참·횡일섬은 "크게 한 번"이다. 그런데 스윙 번호는 hot 이 켜질 때마다 발급되므로,
   // 한 캐스트 안에서 hot 이 두 번 켜지면 같은 요괴가 두 번 맞는다. SWING_GAP 은
@@ -2351,11 +2410,14 @@ export function createEnemySystem(opts) {
   let atkKind = 'Attack';
   // 레벨. **ui.js 뱃지와 같은 셈**이다(1 + 처치/5). 성장 배율만 상한에 걸린다.
   function levelNow() { return 1 + Math.floor(kills / LVL_PER_KILL); }
-  function levelMul() {
+  // ★레벨 배율을 **값으로도** 받게 갈랐다(2차). 참가자의 주장을 방장이 셈할 때
+  //   그 참가자의 레벨을 써야 하는데, 식을 두 벌로 두면 반드시 어긋난다.
+  function levelMulOf(lv) {
     if (!RPG_DMG) return 1;
-    const lv = Math.min(LVL_CAP, levelNow());
-    return 1 + LVL_STEP * (lv - 1);
+    const v = Math.min(LVL_CAP, Math.max(1, lv | 0));
+    return 1 + LVL_STEP * (v - 1);
   }
+  function levelMul() { return levelMulOf(levelNow()); }
   // 이번 레벨의 **최저타**(Z · 흔들림 0). 흔들림이 위로만 뜨므로 이 값은
   // "어떤 기술로 때려도 이만큼은 들어간다"는 보장이자 체력 바 표시 문턱이다.
   function dmgFloor() { return SWORD_DMG * levelMul(); }
@@ -2363,10 +2425,12 @@ export function createEnemySystem(opts) {
   // ★씨앗은 (스윙 번호 · 그 놈의 자리 씨앗)이다. 한 스윙에 넷을 베면 넷이 서로 다른
   //   수를 받고(자리 씨앗), 같은 놈을 계속 때리면 매 스윙 다른 수를 받는다(스윙 번호).
   //   sin 기반 hash1 은 인자가 커지면 정밀도를 잃으므로 9973 으로 접어서 넣는다.
-  function rollDamage(e) {
+  // ★kind·lv 를 **안 넘기면** 예전과 한 글자도 안 다르다(내 기술·내 레벨).
+  //   넘기는 자리는 하나뿐이다 - 참가자의 주장을 방장이 셈하는 netClaim.
+  function rollDamage(e, kind, lv) {
     if (!RPG_DMG) return SWORD_DMG;
-    const mul = SKILL_MUL[atkKind] || 1;
-    const base = SWORD_DMG * mul * levelMul();
+    const mul = SKILL_MUL[kind === undefined ? atkKind : kind] || 1;
+    const base = SWORD_DMG * mul * (lv === undefined ? levelMul() : levelMulOf(lv));
     const seed = ((swingId * 131 + (e.spot ? e.spot.seed : 0) * 7) % 9973 + 9973) % 9973;
     return base * (1 + hash1(seed) * DMG_JIT);
   }
@@ -2449,6 +2513,11 @@ export function createEnemySystem(opts) {
     e.netOn = false; e.netVx = 0; e.netVz = 0; e.netAge = 0; e.wantEma = 0;
     e.atkT = 0; e.hitT = -1;
     e.wndT = 0; e.stunT = 0; e.pipT = 0;
+    // ★이번에 휘두르기로 한 상대(2차). '' = 나(로컬), 그 밖 = 남의 짧은 이름.
+    //   예비 자세를 걸 때 못박고 타격 프레임에 그대로 쓴다 - 휘두르는 도중에
+    //   더 가까운 사람이 생겨도 그 스윙은 처음 겨눈 사람에게 간다
+    //   ("한 번 휘두르기로 한 놈은 끝까지 휘두른다"는 이 파일의 옛 규칙 그대로다).
+    e.vic = '';
     // 경로 재계산 시각을 개체마다 어긋나게 둔다(한 프레임에 40마리가 몰리면 튄다)
     e.pathT = hash1(spot.seed + 31) * REPATH;
     e.direct = true; e.tx = e.pos.x; e.tz = e.pos.z;
@@ -2527,6 +2596,7 @@ export function createEnemySystem(opts) {
     for (const s of g.spots) if (s.enemy) {
       s.enemy.mode = 2; s.enemy.sideT = 0;
       s.enemy.wndT = 0; s.enemy.atkT = 0; s.enemy.hitT = -1;   // 들던 칼도 거둔다
+      s.enemy.vic = '';
     }
   }
 
@@ -2544,6 +2614,7 @@ export function createEnemySystem(opts) {
       e.mode = 3;
       e.sideT = 0;
       e.atkT = 0; e.hitT = -1; e.wndT = 0;     // 휘두르던 칼은 거둔다
+      e.vic = '';
       e.searchT = SEARCH_MIN + hash1(s.seed + 51) * (SEARCH_MAX - SEARCH_MIN);
       // 마지막으로 본 자리. 아직 한 번도 못 봤으면(있을 수 없지만) 제자리를 본다.
       e.searchX = g.seenX === undefined ? e.pos.x : g.seenX;
@@ -2781,7 +2852,159 @@ export function createEnemySystem(opts) {
   // ★칼은 프레임 사이를 건너뛴다. 60fps 에서 칼끝 속도가 90 이면 한 프레임에
   //   1.5m 를 지나간다. 이전 프레임 선분과 이번 프레임 선분 사이를 잘게 쪼개
   //   전부 검사해야 빠른 스윙에서 적을 뚫고 지나가지 않는다.
+  // -------------------------------------------------------------------------
+  // ── 한 대가 실제로 몸에 들어가는 자리 (2단계 2차에 doHits 에서 떼어냈다) ──
+  // 떼어낸 이유는 **판정과 처리를 갈라 두면 입구를 하나 더 열 수 있어서**다.
+  //   입구 ① doHits      — 내 칼·내 화살이 훑어서 찾은 명중(여태 하던 그것)
+  //   입구 ② netClaim    — 참가자가 자기 화면에서 찾아 보낸 주장(방장만 지난다)
+  // 두 입구가 **같은 처리**를 지나므로 사건 소식(onHit)의 생김새가 똑같고,
+  // 참가자가 잡은 요괴와 방장이 잡은 요괴가 두 화면에서 한 글자도 안 다르게 죽는다.
+  //
+  // by = 이 한 대의 주인. '' 이면 나(= 처치 수·아이템·연출이 내 것),
+  //      그 밖이면 남의 것(= 소식에 실어 보내고 내 화면에는 손맛을 안 낸다).
+  // ★predictOnly 면 **상태를 한 톨도 안 바꾼다**(체력·처치·시체·처치 수·숫자 없음).
+  //   화면 신호(흰 번쩍·머리 위 바·경직 반동)와 손맛만 내고 주장을 하나 적는다.
+  function resolveHit(e, i, dmg, hx, hy, hz, cnx, cny, cnz, kx, kz, by) {
+    if (predictOnly) {
+      // ★참가자의 예측. netEvent(남의 타격을 그리는 자리)와 **같은 것만** 건드린다 -
+      //   두 자리가 다른 그림을 그리면 "내가 때린 놈"과 "남이 때린 놈"이 달라 보인다.
+      e.flash = 1;
+      e.pipT = PIP_SHOW;
+      e.sqT = SQUASH_T;
+      e.stunT = HIT_STUN;
+      e.kb.set(kx, 0, kz);
+      // ★주장은 자리(sid)가 있는 놈에만 쓴다. 자리 없는 개체(성능 실측용 임시 무리)는
+      //   방장에게 가리킬 이름이 없다.
+      if (e.spot) {
+        claimId++;
+        onClaim({ id: claimId, sid: e.spot.sid, kind: atkKind, lvl: levelNow(),
+                  x: hx, y: hy, z: hz, nx: cnx, ny: cny, nz: cnz, kx, kz });
+      }
+      // 손맛은 그대로 낸다(히트스톱·카메라 펀치·베는 소리·참격). 확정본이 10~36ms
+      // 뒤에 오므로 사람 눈에는 "때린 즉시 반응"으로 남는다. predicted 로 표시해
+      // 부르는 쪽이 아이템·처치 수를 안 굴리게 한다(예측은 절대 처치가 아니다).
+      onHit({ kill: false, wiped: false, swing: swingId, leader: false,
+              sid: e.spot ? e.spot.sid : -1, dmg: 0, by: '', predicted: true,
+              x: hx, y: hy, z: hz,
+              nx: cnx, ny: cny, nz: cnz, kx, kz });
+      return;
+    }
+    const hpBefore = e.hp;
+    // ★한 대의 값이 여기서 정해진다(기술 x 레벨 x 흔들림. RPG_DMG 주석이 정본).
+    //   화면의 수와 깎인 체력은 여전히 **곱셈 하나**로 이어져 있다 = 거짓말이 없다.
+    //   ★값은 부르는 쪽이 굴려서 넘긴다(내 칼이면 rollDamage, 참가자 주장이면
+    //     그 사람의 기술·레벨로 굴린 값이다).
+    e.hp -= dmg;
+    // ★e.flash 는 "방금 맞았다"의 시계로만 남는다. 몸에 얹히는 색은 0 이다
+    //   (FLASH_R 선언부 - 오너가 끄라고 한 그 번쩍이다).
+    e.flash = 1;
+    // 머리 위 체력 바를 띄운다. 맞은 놈만 1.2초. (죽으면 아래에서 despawn 되니 안 뜬다)
+    e.pipT = PIP_SHOW;
+    // ★20차: isLeader 를 여기서 잡아 둔다. 아래 despawn 이 e.spot 을 지우므로
+    //   처치 콜백에서 읽으면 두목이 늘 졸개로 보인다(아이템 드랍 등급이 갈린다).
+    const grp = e.grp, isLeader = !!(e.spot && e.spot.leader);
+    // ★멀티 신원도 같이 잡아 둔다(아래 despawn 이 e.spot 을 지운다 - isLeader 와 같은 이유).
+    //   -1 = 자리 없는 개체. 소식으로 나가는 값이라 여기서 한 번만 읽는다.
+    const eSid = e.spot ? e.spot.sid : -1;
+    if (grp) aggroGroup(grp);                   // 맞으면 그 무리가 같이 온다
+    // ★엡실론이 붙었다. 18차까지는 한 대가 0.5(IEEE754 정확값)라 3 - 0.5x6 = 0 이
+    //   오차 없이 떨어졌는데, 흔들림·레벨이 붙으면서 그 보장이 사라졌다.
+    //   여유 없이 `<= 0` 으로 두면 1e-16 이 남은 놈이 "한 대 더" 를 요구한다.
+    if (e.hp < HP_EPS) e.hp = 0;
+    const killed = e.hp <= 0;
+    // ★큰 데미지 숫자. **칼날이 실제로 닿은 그 점** 위에 띄운다(머리 위가 아니다 -
+    //   벤 자리에 떠야 "이 한 대"와 숫자가 한 사건으로 읽힌다).
+    spawnDmgPop(hx, hy + DMG_ANCHOR_Y, hz, dmg * DMG_SHOW, killed);
+    if (killed && by) {
+      // ★★남이 벤 놈이다(참가자의 주장을 내가 확정해 준 것). 시체·데미지 숫자는
+      //   위에서 이미 세웠고, **처치 수·연속 처치·처치 기록은 그 사람 것**이다.
+      //   실측(2026-08-20)에서 이 갈래가 없어 참가자가 벤 한 마리가 방장의 처치 수도
+      //   같이 올렸다 = 두 사람의 레벨이 남의 칼로 올라갔다.
+      //   그 사람은 확정 소식의 by 를 보고 자기 화면에서 자기 것을 굴린다(netEvent).
+      const vis0 = e.vis;
+      e.vis = null;
+      spawnCorpse(vis0, e, cnx, cny, cnz, _resP.set(hx, hy, hz), kx, kz);
+      despawn(i);
+    } else if (killed) {
+      kills++;
+      // ── ★유령 킬 추적 창구 ──
+      // "처치 수가 혼자 올라간다"는 보고를 눈이 아니라 **기록**으로 가린다.
+      // kills 를 올리는 자리는 이 한 줄뿐이므로, 여기 남는 기록이 곧 전수다.
+      // 남기는 것: 언제 · 어느 스윙에 · 어디 있던 놈을 · 플레이어와 몇 m 에서.
+      const pp = getPlayerPos();
+      // 화면 안에서 죽었나(NDC). 밖에서 죽으면 사람 눈에는 '유령 증가'로 보인다.
+      let ndx = 9, ndy = 9;
+      if (camera) {
+        _kv.set(e.pos.x, e.pos.y + e.h * 0.5, e.pos.z).project(camera);
+        ndx = +_kv.x.toFixed(2); ndy = +_kv.y.toFixed(2);
+      }
+      killLog.push({
+        t: +T.toFixed(2), swing: swingId, kills,
+        ex: +e.pos.x.toFixed(2), ez: +e.pos.z.toFixed(2),
+        d: +Math.hypot(e.pos.x - pp.x, e.pos.z - pp.z).toFixed(2),
+        hp0: +hpBefore.toFixed(2), maxHp: e.maxHp,
+        ndc: [ndx, ndy],
+        onScreen: Math.abs(ndx) <= 1 && Math.abs(ndy) <= 1,
+      });
+      if (killLog.length > 24) killLog.shift();
+      bumpStreak();
+      // ★시체가 고블린 오브젝트를 넘겨받는다. despawn 이 먼저 돌면 풀로 반납돼서
+      //   다음 스폰이 그 자리에서 그 몸을 다시 써 버린다(시체가 벌떡 일어난다).
+      const vis = e.vis;
+      e.vis = null;
+      spawnCorpse(vis, e, cnx, cny, cnz, _resP.set(hx, hy, hz), kx, kz);
+      despawn(i);
+    } else {
+      // 안 죽었으면 살짝 뒤로 밀린다. 이게 없으면 때린 느낌이 안 난다.
+      // ── ★밀림 실측 (17차) ──
+      // 옛 값 4.2 · 0.13초. 감쇠가 pow(0.02, dt) 라 시간상수가 0.256초이므로
+      //   실제 이동거리 = 4.2 x (1 - e^(-3.912 x 0.13)) / 3.912 = **0.43m**.
+      //   24m 카메라에서 27px. 있긴 있는데 0.13초 안에 끝나고 그 0.13초가
+      //   히트스톱과 겹쳐서 "밀렸다"가 화면에 남는 구간이 사실상 없었다.
+      // 새 값 5.2 · 0.15초 -> 5.2 x (1 - e^(-0.5868)) / 3.912 = **0.59m (37px)**.
+      //   히트스톱이 풀린 뒤에도 반 이상 남아 있어서 밀리는 장면이 실제로 보인다.
+      //   그 이상(0.7m+)은 작은 고블린이 날아가는 그림이 돼서 무게가 사라진다.
+      e.kb.set(kx, 0, kz).multiplyScalar(5.2);
+      e.kbT = 0.15;
+      // 경직 반동. 100ms 동안 납작해졌다가 돌아온다(y 0.85 / x 1.12).
+      // ★클립이 아니라 **루트 오브젝트 스케일**로 한다. glb 안의 스케일을 안
+      //   건드리므로 "glb 스케일 오염" 함정과 무관하고, 클립 없는 개체에도 먹는다.
+      e.sqT = SQUASH_T;
+      // ── ★경직 (9차) ──
+      // 발이 멎고 클립이 얼어붙는다. **휘두르던 칼은 통째로 취소된다.**
+      //   · 예비 자세(wndT)도 취소한다 = 예고를 보고 먼저 때리면 공격이 끊긴다.
+      //     이 한 줄이 "포위가 억울하지 않다"의 실체다(선타의 값어치).
+      //   · atkT 를 끊으면 이미 걸린 Attack 클립은 아래 클립 고르기가
+      //     Idle/Walk 로 갈아치운다(경직 중엔 재생속도를 STUN_TS 로 눌러 둔다).
+      e.stunT = HIT_STUN;
+      e.wndT = 0;
+      e.atkT = 0; e.hitT = -1;
+    }
+    // 무리 전멸 판정. 마지막 한 마리를 벤 그 프레임에만 true 다.
+    let wiped = false;
+    if (killed && grp) {
+      wiped = true;
+      for (const s of grp.spots) if (s.enemy) { wiped = false; break; }
+    }
+    // ★20차. leader 한 칸만 늘렸다(새 콜백을 만들지 않는다). 아이템 드랍이
+    //   "두목은 더 좋은 걸 떨어뜨린다"를 이 한 글자로 가린다.
+    // ★sid·dmg 두 칸이 늘었다(2단계 1차). 새 콜백을 만들지 않는다 - 이 한 통로가
+    //   "칼이 닿은 그 프레임" 의 유일한 출구이고, 멀티 소식도 같은 사건이기 때문이다.
+    //   dmg 는 **화면에 뜨는 수**(x DMG_SHOW)다. 참가자가 같은 수를 띄운다.
+    // ★by 한 칸이 늘었다(2단계 2차). '' 이면 내 것, 그 밖이면 남의 것이다.
+    //   main.js 는 이 한 글자로 "내 화면에 손맛을 낼까"를 가리고,
+    //   mpenemy.js 는 그대로 소식에 실어 그 사람이 자기 처치 수·아이템을 굴리게 한다.
+    onHit({ kill: killed, wiped, swing: swingId, leader: isLeader,
+            sid: eSid, dmg: dmg * DMG_SHOW, by,
+            x: hx, y: hy, z: hz,
+            nx: cnx, ny: cny, nz: cnz, kx, kz });
+  }
+
+  // ★★참가자(netMode 2)인가를 **여기 한 줄에서** 정한다. 칼(update)도 화살
+  //   (hitSegment)도 결국 이 함수를 지나므로, 예측인지 아닌지를 부르는 쪽마다
+  //   따로 세우면 반드시 한쪽이 빠진다(이 레포가 두 번 밟은 함정이다).
   function doHits(a, b) {
+    predictOnly = (netMode === 2);
     // 이번 프레임에 칼이 이동한 거리로 쪼갤 횟수를 정한다(느릴 땐 2번이면 충분)
     const travel = Math.max(a.distanceTo(_prevA), b.distanceTo(_prevB));
     const steps = Math.max(2, Math.min(6, Math.ceil(travel / 0.3) + 1));
@@ -2813,103 +3036,14 @@ export function createEnemySystem(opts) {
         _capB.set(e.pos.x, e.pos.y + e.h * CAP_HI, e.pos.z);
         if (segSegDist2(_segA, _segB, _capA, _capB, _hitP) > rad * rad) continue;
         e.lastSwing = swingId;
-        const hpBefore = e.hp;
+        hits++;
         // ★한 대의 값이 여기서 정해진다(기술 x 레벨 x 흔들림. RPG_DMG 주석이 정본).
         //   화면의 수와 깎인 체력은 여전히 **곱셈 하나**로 이어져 있다 = 거짓말이 없다.
-        const dmg = rollDamage(e);
-        e.hp -= dmg;
-        // ★e.flash 는 "방금 맞았다"의 시계로만 남는다. 몸에 얹히는 색은 0 이다
-        //   (FLASH_R 선언부 - 오너가 끄라고 한 그 번쩍이다).
-        e.flash = 1;
-        // 머리 위 체력 바를 띄운다. 맞은 놈만 1.2초. (죽으면 아래에서 despawn 되니 안 뜬다)
-        e.pipT = PIP_SHOW;
-        hits++;
-        // ★20차: isLeader 를 여기서 잡아 둔다. 아래 despawn 이 e.spot 을 지우므로
-        //   처치 콜백에서 읽으면 두목이 늘 졸개로 보인다(아이템 드랍 등급이 갈린다).
-        const grp = e.grp, isLeader = !!(e.spot && e.spot.leader);
-        // ★멀티 신원도 같이 잡아 둔다(아래 despawn 이 e.spot 을 지운다 - isLeader 와 같은 이유).
-        //   -1 = 자리 없는 개체. 소식으로 나가는 값이라 여기서 한 번만 읽는다.
-        const eSid = e.spot ? e.spot.sid : -1;
-        if (grp) aggroGroup(grp);                   // 맞으면 그 무리가 같이 온다
-        // ★엡실론이 붙었다. 18차까지는 한 대가 0.5(IEEE754 정확값)라 3 - 0.5x6 = 0 이
-        //   오차 없이 떨어졌는데, 흔들림·레벨이 붙으면서 그 보장이 사라졌다.
-        //   여유 없이 `<= 0` 으로 두면 1e-16 이 남은 놈이 "한 대 더" 를 요구한다.
-        if (e.hp < HP_EPS) e.hp = 0;
-        const killed = e.hp <= 0;
-        const hx = _hitP.x, hy = _hitP.y, hz = _hitP.z;
-        // ★큰 데미지 숫자. **칼날이 실제로 닿은 그 점** 위에 띄운다(머리 위가 아니다 -
-        //   벤 자리에 떠야 "이 한 대"와 숫자가 한 사건으로 읽힌다).
-        spawnDmgPop(hx, hy + DMG_ANCHOR_Y, hz, dmg * DMG_SHOW, killed);
-        if (killed) {
-          kills++;
-          // ── ★유령 킬 추적 창구 ──
-          // "처치 수가 혼자 올라간다"는 보고를 눈이 아니라 **기록**으로 가린다.
-          // kills 를 올리는 자리는 이 한 줄뿐이므로, 여기 남는 기록이 곧 전수다.
-          // 남기는 것: 언제 · 어느 스윙에 · 어디 있던 놈을 · 플레이어와 몇 m 에서.
-          const pp = getPlayerPos();
-          // 화면 안에서 죽었나(NDC). 밖에서 죽으면 사람 눈에는 '유령 증가'로 보인다.
-          let ndx = 9, ndy = 9;
-          if (camera) {
-            _kv.set(e.pos.x, e.pos.y + e.h * 0.5, e.pos.z).project(camera);
-            ndx = +_kv.x.toFixed(2); ndy = +_kv.y.toFixed(2);
-          }
-          killLog.push({
-            t: +T.toFixed(2), swing: swingId, kills,
-            ex: +e.pos.x.toFixed(2), ez: +e.pos.z.toFixed(2),
-            d: +Math.hypot(e.pos.x - pp.x, e.pos.z - pp.z).toFixed(2),
-            hp0: +hpBefore.toFixed(2), maxHp: e.maxHp,
-            ndc: [ndx, ndy],
-            onScreen: Math.abs(ndx) <= 1 && Math.abs(ndy) <= 1,
-          });
-          if (killLog.length > 24) killLog.shift();
-          bumpStreak();
-          // ★시체가 고블린 오브젝트를 넘겨받는다. despawn 이 먼저 돌면 풀로 반납돼서
-          //   다음 스폰이 그 자리에서 그 몸을 다시 써 버린다(시체가 벌떡 일어난다).
-          const vis = e.vis;
-          e.vis = null;
-          spawnCorpse(vis, e, _cutW.x, _cutW.y, _cutW.z, _hitP, kx, kz);
-          despawn(i);
-        } else {
-          // 안 죽었으면 살짝 뒤로 밀린다. 이게 없으면 때린 느낌이 안 난다.
-          // ── ★밀림 실측 (17차) ──
-          // 옛 값 4.2 · 0.13초. 감쇠가 pow(0.02, dt) 라 시간상수가 0.256초이므로
-          //   실제 이동거리 = 4.2 x (1 - e^(-3.912 x 0.13)) / 3.912 = **0.43m**.
-          //   24m 카메라에서 27px. 있긴 있는데 0.13초 안에 끝나고 그 0.13초가
-          //   히트스톱과 겹쳐서 "밀렸다"가 화면에 남는 구간이 사실상 없었다.
-          // 새 값 5.2 · 0.15초 -> 5.2 x (1 - e^(-0.5868)) / 3.912 = **0.59m (37px)**.
-          //   히트스톱이 풀린 뒤에도 반 이상 남아 있어서 밀리는 장면이 실제로 보인다.
-          //   그 이상(0.7m+)은 작은 고블린이 날아가는 그림이 돼서 무게가 사라진다.
-          e.kb.set(kx, 0, kz).multiplyScalar(5.2);
-          e.kbT = 0.15;
-          // 경직 반동. 100ms 동안 납작해졌다가 돌아온다(y 0.85 / x 1.12).
-          // ★클립이 아니라 **루트 오브젝트 스케일**로 한다. glb 안의 스케일을 안
-          //   건드리므로 "glb 스케일 오염" 함정과 무관하고, 클립 없는 개체에도 먹는다.
-          e.sqT = SQUASH_T;
-          // ── ★경직 (9차) ──
-          // 발이 멎고 클립이 얼어붙는다. **휘두르던 칼은 통째로 취소된다.**
-          //   · 예비 자세(wndT)도 취소한다 = 예고를 보고 먼저 때리면 공격이 끊긴다.
-          //     이 한 줄이 "포위가 억울하지 않다"의 실체다(선타의 값어치).
-          //   · atkT 를 끊으면 이미 걸린 Attack 클립은 아래 클립 고르기가
-          //     Idle/Walk 로 갈아치운다(경직 중엔 재생속도를 STUN_TS 로 눌러 둔다).
-          e.stunT = HIT_STUN;
-          e.wndT = 0;
-          e.atkT = 0; e.hitT = -1;
-        }
-        // 무리 전멸 판정. 마지막 한 마리를 벤 그 프레임에만 true 다.
-        let wiped = false;
-        if (killed && grp) {
-          wiped = true;
-          for (const s of grp.spots) if (s.enemy) { wiped = false; break; }
-        }
-        // ★20차. leader 한 칸만 늘렸다(새 콜백을 만들지 않는다). 아이템 드랍이
-        //   "두목은 더 좋은 걸 떨어뜨린다"를 이 한 글자로 가린다.
-        // ★sid·dmg 두 칸이 늘었다(2단계 1차). 새 콜백을 만들지 않는다 - 이 한 통로가
-        //   "칼이 닿은 그 프레임" 의 유일한 출구이고, 멀티 소식도 같은 사건이기 때문이다.
-        //   dmg 는 **화면에 뜨는 수**(x DMG_SHOW)다. 참가자가 같은 수를 띄운다.
-        onHit({ kill: killed, wiped, swing: swingId, leader: isLeader,
-                sid: eSid, dmg: dmg * DMG_SHOW,
-                x: hx, y: hy, z: hz,
-                nx: _cutW.x, ny: _cutW.y, nz: _cutW.z, kx, kz });
+        // ★예측(참가자)일 때는 안 굴린다. 값은 방장이 정한다 - 여기서 굴려 봐야
+        //   씨앗(스윙 번호·레벨)이 달라 방장 값과 어긋나고, 그러면 숫자가 두 번 뜬다.
+        const dmg = predictOnly ? 0 : rollDamage(e);
+        resolveHit(e, i, dmg, _hitP.x, _hitP.y, _hitP.z,
+                   _cutW.x, _cutW.y, _cutW.z, kx, kz, '');
       }
     }
     if (hits) {
@@ -2949,10 +3083,10 @@ export function createEnemySystem(opts) {
   // 돌려주는 값 = 이번에 실제로 맞은 마릿수.
   function hitSegment(a, b, opts) {
     if (!a || !b) return 0;
-    // ★참가자는 요괴를 못 때린다(2단계 1차의 범위). 칼은 update() 가 위에서 갈려
-    //   애초에 doHits 까지 안 가지만, 화살은 arrow.js 가 **매 프레임 직접** 부르므로
-    //   여기서 막지 않으면 궁수 참가자만 혼자 요괴를 잡는다.
-    if (netMode === 2) return 0;
+    if (!NET_HIT && netMode === 2) return 0;      // 2차를 끄면 1차 그대로(참가자는 못 때린다)
+    // ★1차에서는 여기서 `if (netMode === 2) return 0;` 으로 참가자를 통째로 막았다.
+    //   2차에서 그 빗장을 푼다 - 참가자의 화살도 doHits 를 지나되 doHits 첫 줄이
+    //   예측으로 갈라 준다(상태는 안 바뀌고 주장만 나간다).
     const o = opts || {};
     const sSwing = swingId, sKind = atkKind, sCap = hitCap;
     _sPrevA.copy(_prevA); _sPrevB.copy(_prevB);
@@ -3187,6 +3321,10 @@ export function createEnemySystem(opts) {
   // -------------------------------------------------------------------------
   let netMode = 0;                 // 0 = 혼자/평시, 1 = 방장, 2 = 참가자(그림만)
   let netApplied = 0, netUnknown = 0, netSpawned = 0, netCulled = 0, netEvN = 0;
+  // 2차 계측. 「참가자가 왜 못 때리나」의 원인은 여럿이고(주장이 안 나갔다·묵었다·
+  // 멀다·이미 죽었다) 눈으로는 못 가른다.
+  let claimOK = 0, netEvMine = 0, netHurtN = 0;
+  const claimNo = { mode: 0, old: 0, far: 0, gone: 0 };
   let netSeen = null;
   const _netP = new THREE.Vector3();
 
@@ -3294,15 +3432,20 @@ export function createEnemySystem(opts) {
     }
   }
 
-  // 타격·처치 한 건. ev = { sid, kill, dmg, hx,hy,hz, nx,ny,nz, kx,kz }
-  // ★여기서 하는 일은 **그림뿐**이다. 처치 수도 안 세고, 아이템도 안 떨어뜨리고,
+  // 타격·처치 한 건. ev = { sid, kill, dmg, hx,hy,hz, nx,ny,nz, kx,kz, by }
+  // ★남의 타격이면 하는 일이 **그림뿐**이다. 처치 수도 안 세고, 아이템도 안 떨어뜨리고,
   //   히트스톱·카메라 펀치도 안 건다(그건 때린 사람의 손맛이지 보는 사람 것이 아니다).
+  // ★★2차. by 가 **나**면 이야기가 다르다 - 그건 내가 친 주장을 방장이 받아준
+  //   확정본이다. 그때만 처치 수를 올리고 아이템을 떨어뜨리고 처치 손맛을 낸다.
+  //   (때린 순간의 히트스톱·소리·참격은 이미 예측이 냈다. 여기서 또 내지 않는다.)
   function netEvent(ev) {
     if (netMode !== 2) return false;
     const s = spotBySid[ev.sid];
     if (!s || !s.enemy) return false;
     const e = s.enemy;
+    const mine = !!ev.by && ev.by === myTag;
     netEvN++;
+    if (mine) netEvMine++;
     if (ev.dmg > 0) {
       // 칼이 닿은 그 점 위에 뜬다(방장 화면과 같은 자리·같은 수)
       spawnDmgPop(ev.hx, ev.hy + DMG_ANCHOR_Y, ev.hz, ev.dmg, !!ev.kill);
@@ -3313,9 +3456,28 @@ export function createEnemySystem(opts) {
       const idx = live.indexOf(e);
       const vis = e.vis;
       e.vis = null;
+      // ★무리 전멸은 **시체를 세우기 전에** 본다(despawn 이 e.spot 을 지운다).
+      const grp = e.grp, isLeader = !!(e.spot && e.spot.leader);
       _netP.set(ev.hx, ev.hy, ev.hz);
       spawnCorpse(vis, e, ev.nx, ev.ny, ev.nz, _netP, ev.kx, ev.kz);
       if (idx >= 0) despawn(idx);
+      if (mine) {
+        kills++;
+        bumpStreak();
+        let wiped = false;
+        if (grp) {
+          wiped = true;
+          for (const q of grp.spots) if (q.enemy) { wiped = false; break; }
+        }
+        // ★방장 판과 **같은 콜백**으로 나간다. main.js 의 처치 갈래(히트스톱·처치음·
+        //   먹링·아이템 드랍)가 통째로 그 한 통로에 걸려 있어서, 여기만 지나면
+        //   "내가 잡았다"의 그림이 혼자 할 때와 한 글자도 안 다르다.
+        //   ★아이템은 **각자 주머니**다. 내 화면에만 떨어지고 소식은 0바이트다.
+        onHit({ kill: true, wiped, swing: swingId, leader: isLeader,
+                sid: ev.sid, dmg: ev.dmg, by: '', confirmed: true,
+                x: ev.hx, y: ev.hy, z: ev.hz,
+                nx: ev.nx, ny: ev.ny, nz: ev.nz, kx: ev.kx, kz: ev.kz });
+      }
     } else {
       e.flash = 1;
       e.pipT = PIP_SHOW;
@@ -3326,6 +3488,44 @@ export function createEnemySystem(opts) {
       e.kb.set(ev.kx, 0, ev.kz);
     }
     return true;
+  }
+
+  // ── 참가자의 주장 한 건 (방장만 지난다) ──
+  // c = { sid, kind, lvl, x,y,z, nx,ny,nz, kx,kz, px, pz, age, by }
+  //   px·pz  주장한 사람이 그때 서 있던 자리(mp.js 가 들고 있는 마지막 좌표)
+  //   age    그 사람이 **자기 시각으로** 잰 「친 지 몇 ms 지났나」
+  //          (두 기계의 시계가 안 맞으므로 절대 시각은 못 쓴다. 선로 지연분은 못 재는데,
+  //           그건 수십 ms 라 400ms 문턱을 흔들지 않는다)
+  // 통과하면 **내 칼과 같은 자리**(resolveHit)로 흘린다 = 사건 소식의 생김새가 똑같다.
+  function netClaim(c) {
+    if (netMode !== 1) { claimNo.mode++; return 0; }
+    if (!(c.age >= 0 && c.age <= CLAIM_MAX_MS)) { claimNo.old++; return 0; }
+    const s = spotBySid[c.sid];
+    // 내 화면에서 이미 죽었거나(다른 사람이 먼저 벴다) 안 서 있는 자리다. 조용히 버린다.
+    if (!s || !s.enemy) { claimNo.gone++; return 0; }
+    const e = s.enemy;
+    const r = (c.kind === 'Arrow') ? CLAIM_R_SHOT : CLAIM_R_MELEE;
+    const dx = e.pos.x - c.px, dz = e.pos.z - c.pz;
+    if (dx * dx + dz * dz > r * r) { claimNo.far++; return 0; }
+    // ★자리 번호를 여기서 뽑아 넘긴다. resolveHit 의 처치 갈래가 despawn(i) 를 부르는데
+    //   -1 이 들어가면 풀이 통째로 어긋난다(요괴 하나가 두 번 반납된다).
+    const idx = live.indexOf(e);
+    if (idx < 0) { claimNo.gone++; return 0; }
+    claimOK++;
+    // ★값은 **그 사람의 기술·레벨**로 굴린다. 내 레벨로 굴리면 남의 칼이 내 성장에
+    //   끌려간다(레벨 8 방장 옆에서 참가자가 두 배로 때리는 그림).
+    predictOnly = false;                       // 방어. 이 자리는 늘 방장이라 이미 false 다
+    const dmg = rollDamage(e, c.kind, c.lvl);
+    resolveHit(e, idx, dmg, c.x, c.y, c.z, c.nx, c.ny, c.nz, c.kx, c.kz, c.by);
+    return 1;
+  }
+
+  // ── 방장이 "너를 때렸다"고 알려 왔다 (참가자) ──
+  // ★무적·새는 통·넉백·사망 연출은 **내가** 굴린다. 방장은 "얼마짜리를 어디서"만
+  //   말한다 - 그게 각자 자기 체력을 쥔다는 이 구조의 요점이다.
+  function netHurt(amount, srcX, srcZ) {
+    netHurtN++;
+    return damagePlayer(amount, srcX, srcZ);
   }
 
   // 참가자의 매 프레임. 받은 자리로 따라붙고 타이머를 굴린다.
@@ -3515,52 +3715,96 @@ export function createEnemySystem(opts) {
   //   2) 시야가 트였으면 직진 (트인 마당이 대부분이라 이 경우가 제일 흔하다)
   //   3) 막혔으면 흐름장에서 "내가 볼 수 있는 가장 먼 칸"을 받아 그리로 간다
   //   4) 흐름장이 못 닿는 자리(격자 밖·벽 속)면 어쩔 수 없이 직진 = 예전 동작
-  function repath(e, player) {
+  function repath(e, tgt) {
     if (e.sideT > 0) return;
     if (!usePath) { e.direct = true; return; }             // 검증용 스위치(끄면 옛 직진)
-    if (NAV.los(e.pos.x, e.pos.z, player.x, player.z)) { e.direct = true; return; }
+    if (NAV.los(e.pos.x, e.pos.z, tgt.x, tgt.z)) { e.direct = true; return; }
+    // ★흐름장은 **한 사람** 기준으로만 깔린다(NAV.rebuild 가 그렇게 생겼다). 남을
+    //   쫓는 놈에게 내 흐름장을 주면 엉뚱한 데로 간다. 그럴 땐 직진이다 = 길찾기가
+    //   없던 시절의 동작. 들판은 트인 곳이 대부분이라 이게 화면에 안 남는다
+    //   (던전에서 참가자를 쫓는 놈은 모서리에 걸릴 수 있다. 3인 이상과 같은 줄의 숙제다).
+    if (tgt.tag) { e.direct = true; return; }
     const t = NAV.target(e.pos.x, e.pos.z, 6);
     if (t.ok) { e.direct = false; e.tx = t.x; e.tz = t.z; }
     else e.direct = true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // ── 세상에 사람이 여럿이다 (2단계 2차) ──
+  // 1차까지 이 파일이 아는 사람은 getPlayerPos() 하나였다. 그래서 요괴는 방장만
+  // 쫓고 방장만 때렸다 - 참가자 체력이 100 에서 안 내려가던 것이 그 결과다.
+  // 이제 mp.js 가 들고 있는 사람 목록을 update(ctx.players)로 받아 **제일 가까운
+  // 사람**을 쫓는다. 목록이 없으면(혼자 하는 판) 예전과 한 글자도 안 다르다.
+  //   tag '' = 나(로컬). 그 밖 = 남의 짧은 이름. 요괴가 남을 때리면 그 이름으로
+  //   소식을 내보내고(onNetHurt), 그 사람이 자기 체력을 자기가 깎는다.
+  // ---------------------------------------------------------------------------
+  const targets = [];              // {x, z, tag} 재사용 그릇. 매 프레임 다시 채운다
+  let targetN = 0;                 // 이번 프레임에 실제로 쓰는 칸 수
+  let liveN = 0;                   // 그중 **살아 있는** 사람 수(0 이면 아무도 안 쫓는다)
+  let meSlot = -1;                 // 내 칸 번호(-1 = 내가 표적에 없다)
+  function pushTarget(x, z, tag) {
+    let t = targets[targetN];
+    if (!t) { t = { x: 0, z: 0, tag: '' }; targets[targetN] = t; }
+    t.x = x; t.z = z; t.tag = tag;
+    targetN++;
+  }
+  function syncTargets(list) {
+    targetN = 0; liveN = 0; meSlot = -1;
+    const me = getPlayerPos();
+    if (!dead) { meSlot = targetN; pushTarget(me.x, me.z, ''); liveN++; }
+    if (list) {
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        if (!p || p.dead) continue;
+        pushTarget(p.x, p.z, p.tag || '');
+        liveN++;
+      }
+    }
+    // ★아무도 안 살아 있으면 그래도 한 칸은 채운다. 표적이 0개인 갈래를 만들면
+    //   아래 추격 코드가 전부 null 검사를 달아야 한다(그게 더 위험하다).
+    //   대신 liveN 으로 "쫓을 사람이 없다"를 따로 가린다.
+    if (!targetN) { meSlot = 0; pushTarget(me.x, me.z, ''); }
+  }
+  // 쫓을 사람이 하나라도 살아 있나. 1차까지의 `if (dead)` 자리를 이 값이 대신한다 -
+  // 방장이 죽었다고 참가자를 쫓던 무리가 집으로 돌아가면 그게 더 이상하다.
+  // ★혼자 하는 판에서는 이 값이 정확히 `!dead` 다(= 예전과 한 글자도 안 다르다).
+  function anyoneAlive() { return liveN > 0; }
+  const _tgt0 = { x: 0, z: 0, tag: '' };
+  function nearestTarget(x, z) {
+    // ★★내 자리는 **부를 때마다** 다시 읽는다. root.position 은 한 프레임 안에서도
+    //   움직인다 - 요괴에게 맞으면 damagePlayer 가 넉백으로 0.15m 옮기고, 그 뒤
+    //   순번의 요괴들은 옮겨진 자리를 쫓는다. 프레임 머리에 찍어 둔 값을 쓰면
+    //   그 한 프레임이 조용히 달라진다(det 하네스 mats 가 0.2~0.8mm 로 잡아냈다.
+    //   혼자 하는 판의 회귀를 여기서 한 번 만들었다가 되돌린 자리다).
+    if (meSlot >= 0) { const me = getPlayerPos(); targets[meSlot].x = me.x; targets[meSlot].z = me.z; }
+    let best = targets[0], bd = Infinity;
+    for (let i = 0; i < targetN; i++) {
+      const t = targets[i];
+      const dx = t.x - x, dz = t.z - z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < bd) { bd = d2; best = t; }
+    }
+    return best || _tgt0;
+  }
+  // 이 요괴가 그 사람을 볼 수 있나.
+  // ★수풀 은신(stealth.js)은 **내 몸**만 아는 이야기다(남이 수풀에 들어갔는지는
+  //   소식으로 안 온다). 남에 대해서는 늘 보인다고 본다 - 모르는 것을 아는 척하는
+  //   것보다 낫고, 은신은 어차피 혼자 하는 판의 장치다.
+  function canSeeTarget(e, t, alerted) {
+    if (t.tag) return true;
+    return ST.canSee(e.pos.x, e.pos.z, alerted);
   }
 
   const shAttr = shadowMesh.geometry.attributes.aSA;
   const LEASH2 = LEASH_DIST * LEASH_DIST;
   const AGGRO2 = AGGRO_RADIUS * AGGRO_RADIUS;
 
-  // ── 참가자의 한 프레임 (그림만 그린다) ──
-  // 스폰·AI·이동·피해 판정이 전부 없다. 있는 것은 ①받은 자리로 따라붙기
-  // ②몸 세우기 ③마무리(시체·먹·숫자·판·내 체력) 셋뿐이고, ②③은 방장 판과 **같은 함수**다.
-  function updateRemote(dt, ctx) {
-    // 정지 중에는 아무것도 안 굴린다. 방장 판과 달리 칼 선분을 따라갈 이유가 없다 —
-    // 판정을 아예 안 하기 때문이다.
-    if (ctx.paused) return;
-    T += dt;
-    stepSnap(dt);          // 공격 방향 스냅은 내 몸 이야기라 그대로 돈다
-    netStep(dt);
-    renderBodies(dt);
-    stepTail(dt);
-  }
-
-  function update(dt, ctx) {
-    // ★참가자는 여기서 갈린다. 아래 한 줄 위로는 방장·혼자 하는 판과 **한 글자도**
-    //   다르지 않다(netMode 는 ?room 이 붙은 판에서만 2 가 된다).
-    if (netMode === 2) { updateRemote(dt, ctx); return; }
-    const player = getPlayerPos();
+  // ── 칼 한 프레임 (방장·혼자 하는 판·참가자 공통) ──
+  // 스윙 번호 발급 -> 판정(doHits) -> 직전 선분 갱신. **참가자도 이걸 그대로 돈다.**
+  // 참가자에게서는 doHits 첫 줄이 predictOnly 를 켜므로 상태가 한 톨도 안 바뀌고
+  // 주장 한 건이 나간다(위 resolveHit 머리 주석이 정본).
+  function stepBlade(ctx) {
     const a = ctx.a, b = ctx.b;
-
-    // 정지(클립 미리보기·__freeze) 중에도 칼 위치는 따라간다. 안 그러면 재개하는
-    // 순간 이전 프레임 선분이 몇 미터 떨어져 있어 허공을 훑으며 다 죽인다.
-    if (ctx.paused) {
-      if (a && b) { _prevA.copy(a); _prevB.copy(b); hasPrevBlade = true; }
-      return;
-    }
-
-    T += dt;
-    // 공격 방향 스냅 보간. 판정보다 **먼저** 돌아야 이번 프레임의 칼이 돌아간
-    // 몸을 따라간다(나중에 돌리면 한 프레임 늦게 겨눈다).
-    stepSnap(dt);
-
     // ── 피격 판정 ──
     // 히스테리시스로 '베는 중'을 판정한다. 켜지는 순간이 새 스윙이다.
     const fast = ctx.fast || 0;
@@ -3602,6 +3846,57 @@ export function createEnemySystem(opts) {
       }
       dbgLine.material.color.setHex(hotState ? 0xff3040 : 0x3060ff);
     }
+  }
+
+  // ── 참가자의 한 프레임 ──
+  // 스폰·AI·이동이 없다. 있는 것은 ①칼 판정(예측만) ②받은 자리로 따라붙기
+  // ③몸 세우기 ④마무리(시체·먹·숫자·판·내 체력)이고, ①③④는 방장 판과 **같은 함수**다.
+  // ★①이 2차에 새로 붙었다. 판정은 그대로 돌되 상태는 안 바꾼다(doHits 첫 줄).
+  function updateRemote(dt, ctx) {
+    // ★정지 중에도 칼 위치는 따라간다(방장 판과 **같은 이유·같은 코드**). 1차에서는
+    //   판정을 아예 안 해서 그냥 나갔는데, 2차부터는 예측이 돌므로 여기서 안 따라가면
+    //   재개하는 첫 프레임에 몇 미터짜리 선분이 허공을 훑는다(옛 사고와 같은 모양).
+    if (ctx.paused) {
+      if (ctx.a && ctx.b) { _prevA.copy(ctx.a); _prevB.copy(ctx.b); hasPrevBlade = true; }
+      return;
+    }
+    T += dt;
+    stepSnap(dt);          // 공격 방향 스냅은 내 몸 이야기라 그대로 돈다
+    // ★netStep **앞**이다. 방장 판도 판정을 요괴 이동보다 먼저 돌린다 -
+    //   두 화면이 같은 순서로 봐야 "내 화면에선 맞았는데" 가 안 생긴다.
+    if (NET_HIT) stepBlade(ctx);
+    netStep(dt);
+    renderBodies(dt);
+    stepTail(dt);
+  }
+
+  function update(dt, ctx) {
+    // ★참가자는 여기서 갈린다. 아래 한 줄 위로는 방장·혼자 하는 판과 **한 글자도**
+    //   다르지 않다(netMode 는 ?room 이 붙은 판에서만 2 가 된다).
+    if (netMode === 2) { updateRemote(dt, ctx); return; }
+    const player = getPlayerPos();
+    // ★사람 목록을 **판정보다 먼저** 채운다. 아래 무리 판단·추격이 전부 이 목록을 본다.
+    //   혼자 하는 판에서는 ctx.players 가 없어서 칸 하나(나)만 선다 = 예전과 같다.
+    syncTargets(NET_HIT ? ctx.players : null);
+    const a = ctx.a, b = ctx.b;
+
+    // 정지(클립 미리보기·__freeze) 중에도 칼 위치는 따라간다. 안 그러면 재개하는
+    // 순간 이전 프레임 선분이 몇 미터 떨어져 있어 허공을 훑으며 다 죽인다.
+    if (ctx.paused) {
+      if (a && b) { _prevA.copy(a); _prevB.copy(b); hasPrevBlade = true; }
+      return;
+    }
+
+    T += dt;
+    // 공격 방향 스냅 보간. 판정보다 **먼저** 돌아야 이번 프레임의 칼이 돌아간
+    // 몸을 따라간다(나중에 돌리면 한 프레임 늦게 겨눈다).
+    stepSnap(dt);
+
+    // ── 피격 판정 ──
+    // ★방장·혼자 하는 판과 참가자가 **같은 함수**를 쓴다(2차). 두 벌로 두면 한쪽만
+    //   고쳐져서 "내 화면에서만 안 맞는다"가 조용히 생긴다 - 이 파일이 renderBodies·
+    //   startAttackClip 에서 이미 두 번 택한 길이다.
+    stepBlade(ctx);
 
     // ── 무리 단위 판단 (무리 수가 한 자리라 매 프레임 다 돌아도 공짜다) ──
     for (let gi = 0; gi < groups.length; gi++) {
@@ -3624,7 +3919,9 @@ export function createEnemySystem(opts) {
       }
       g.respawnAt = -1;
       if (g.returning && homeN === aliveN) g.returning = false;   // 전원 복귀 완료
-      if (dead) { if (g.aggro || g.searching) leashGroup(g); continue; }
+      // ★1차까지는 `if (dead)`(= 내가 죽었나)였다. 이제 **아무도 안 살아 있을 때**만
+      //   거둔다 - 방장이 죽었다고 참가자를 쫓던 무리가 집으로 돌아가면 그게 더 이상하다.
+      if (!anyoneAlive()) { if (g.aggro || g.searching) leashGroup(g); continue; }
       // ★갈래 순서가 뜻을 갖는다. 수색(searching) 중인 무리를 "안 쫓는 무리"로 묶어
       //   아래 어그로 검사에 넣으면, 같은 수풀 안에 서 있다는 이유로 그 프레임에
       //   바로 다시 붙는다(= 수색이 없던 일이 된다).
@@ -3634,13 +3931,15 @@ export function createEnemySystem(opts) {
         // 동안 마지막 자리로 밀고 들어가 보다가 수색으로 넘어간다.
         // ★alerted=true 로 묻는다. 이미 쫓는 놈에게는 "같은 수풀이면 보인다"를
         //   안 준다(stealth.js canSee 주석 참고). 이게 v72 QA #2 의 수정 지점이다.
-        let sees = false;
+        let sees = false, seenT = null;
         for (const s of g.spots) {
-          if (s.enemy && ST.canSee(s.enemy.pos.x, s.enemy.pos.z, true)) { sees = true; break; }
+          if (!s.enemy) continue;
+          const t = nearestTarget(s.enemy.pos.x, s.enemy.pos.z);
+          if (canSeeTarget(s.enemy, t, true)) { sees = true; seenT = t; break; }
         }
         if (sees) {
           g.lostT = 0;
-          g.seenX = player.x; g.seenZ = player.z;   // 마지막으로 본 자리
+          g.seenX = seenT.x; g.seenZ = seenT.z;   // 마지막으로 본 자리
         } else {
           g.lostT += dt;
           if (g.lostT >= LOSE_SIGHT) { searchGroup(g); continue; }
@@ -3658,8 +3957,9 @@ export function createEnemySystem(opts) {
         for (const s of g.spots) {
           const e = s.enemy;
           if (!e) continue;
-          const dx = e.pos.x - player.x, dz = e.pos.z - player.z;
-          if (dx * dx + dz * dz < AGGRO2 && ST.canSee(e.pos.x, e.pos.z, true)) {
+          const t = nearestTarget(e.pos.x, e.pos.z);
+          const dx = e.pos.x - t.x, dz = e.pos.z - t.z;
+          if (dx * dx + dz * dz < AGGRO2 && canSeeTarget(e, t, true)) {
             g.searching = false; aggroGroup(g); break;
           }
         }
@@ -3679,8 +3979,9 @@ export function createEnemySystem(opts) {
         for (const s of g.spots) {
           const e = s.enemy;
           if (!e) continue;
-          const dx = e.pos.x - player.x, dz = e.pos.z - player.z;
-          if (dx * dx + dz * dz < AGGRO2 && ST.canSee(e.pos.x, e.pos.z)) { aggroGroup(g); break; }
+          const t = nearestTarget(e.pos.x, e.pos.z);
+          const dx = e.pos.x - t.x, dz = e.pos.z - t.z;
+          if (dx * dx + dz * dz < AGGRO2 && canSeeTarget(e, t, false)) { aggroGroup(g); break; }
         }
       }
     }
@@ -3691,6 +3992,9 @@ export function createEnemySystem(opts) {
     //   쫓는 놈이 하나도 없으면 아예 안 깐다(제자리 무리만 있는 평상시가 그렇다).
     let chasing = false;
     for (let gi = 0; gi < groups.length; gi++) if (groups[gi].aggro) { chasing = true; break; }
+    //   ★흐름장의 출처는 **나 하나**다(2차에도 그대로다). 격자 하나에 여러 사람의
+    //     흐름을 담으려면 사람마다 한 벌씩 깔아야 하는데, 그 값을 치를 만큼 던전에서
+    //     둘이 갈라져 다니는 일이 흔하지 않다. 남을 쫓는 놈은 repath 가 직진으로 보낸다.
     if (chasing && NAV.needRebuild(player.x, player.z)) NAV.rebuild(player.x, player.z);
 
     // ── 개체 행동 ──
@@ -3730,7 +4034,10 @@ export function createEnemySystem(opts) {
             e.hitT = -1;
             // 때린 놈의 자리를 같이 넘긴다(넉백 방향). 안 넘기면 제일 가까운 놈
             // 기준으로 밀리는데, 넷이 겹쳐 있으면 엉뚱한 쪽으로 밀린다.
-            if (!dead) damagePlayer(ENEMY_DMG, e.pos.x, e.pos.z);
+            // ★맞는 사람이 나인가 남인가(2차). 남이면 **그 사람에게 알리고 끝**이다 -
+            //   체력은 각자 자기 것을 자기가 깎는다(무적·새는 통·넉백이 전부 그쪽 상태다).
+            if (e.vic) onNetHurt(e.vic, ENEMY_DMG, e.pos.x, e.pos.z);
+            else if (!dead) damagePlayer(ENEMY_DMG, e.pos.x, e.pos.z);
           }
         }
       }
@@ -3757,18 +4064,20 @@ export function createEnemySystem(opts) {
         // ★두 갈래다. 시야가 트였으면 플레이어에게 직진하고, 막혔으면 흐름장이
         //   내준 경유점으로 간다. **공격 판단은 언제나 플레이어와의 실제 거리**로
         //   한다(경유점 거리로 하면 벽 뒤에서 허공에 칼질을 한다).
-        const d = Math.hypot(player.x - e.pos.x, player.z - e.pos.z) || 1e-4;
+        // ★쫓을 사람 = **제일 가까운 사람**(2차). 혼자 하는 판에서는 늘 나 하나다.
+        const tp = nearestTarget(e.pos.x, e.pos.z);
+        const d = Math.hypot(tp.x - e.pos.x, tp.z - e.pos.z) || 1e-4;
         e.pathT -= dt;
-        if (e.pathT <= 0) { e.pathT = REPATH; repath(e, player); }
+        if (e.pathT <= 0) { e.pathT = REPATH; repath(e, tp); }
         let tgx, tgz;
-        if (e.direct) { tgx = player.x; tgz = player.z; }
+        if (e.direct) { tgx = tp.x; tgz = tp.z; }
         else {
           // 경유점에 닿았으면 기다리지 말고 그 자리에서 다음 걸 뽑는다
           if (Math.hypot(e.tx - e.pos.x, e.tz - e.pos.z) < WAYPOINT_HIT) {
-            e.pathT = REPATH; repath(e, player);
+            e.pathT = REPATH; repath(e, tp);
           }
-          tgx = e.direct ? player.x : e.tx;
-          tgz = e.direct ? player.z : e.tz;
+          tgx = e.direct ? tp.x : e.tx;
+          tgz = e.direct ? tp.z : e.tz;
         }
         let dx = tgx - e.pos.x, dz = tgz - e.pos.z;
         const dLen = Math.sqrt(dx * dx + dz * dz) || 1;
@@ -3783,7 +4092,7 @@ export function createEnemySystem(opts) {
         const stop = ENEMY_ATK_RANGE + e.size * ENEMY_ATK_SIZE;
         // ★사거리 안이면 경유점이 아니라 **플레이어**를 본다. 경유점을 보게 두면
         //   코앞에서 옆을 보고 칼질하는 그림이 나온다.
-        if (d <= stop + 0.35) e.yaw = Math.atan2((player.x - e.pos.x) / d, (player.z - e.pos.z) / d);
+        if (d <= stop + 0.35) e.yaw = Math.atan2((tp.x - e.pos.x) / d, (tp.z - e.pos.z) / d);
         else e.yaw = Math.atan2(dx, dz);
         // 휘두르는 중(예비 자세 포함)에는 발이 안 나간다. 경직 중에도 안 나간다.
         // ★예비 자세를 **정지**로 두는 게 이 예고의 핵심이다. 달려오면서 드는 그림은
@@ -3795,12 +4104,16 @@ export function createEnemySystem(opts) {
             mvx += dx * e.speed * dt;
             mvz += dz * e.speed * dt;
           }
-        } else if (!dead && e.atkCd <= 0 && !busy && d <= stop + 0.35) {
+        // ★남을 쫓는 놈에게는 내 죽음이 상관없다. 표적이 나일 때만 내 dead 를 본다.
+        } else if ((tp.tag ? true : !dead) && e.atkCd <= 0 && !busy && d <= stop + 0.35) {
           // 쿨을 매번 ±18% 흔든다. 어쩌다 박자가 맞아도 저절로 다시 흩어진다.
           e.atkCd = ENEMY_ATK_CD * (1 + (hash1(e.spot ? e.spot.seed + (T * 3 | 0) : T * 3 | 0) - 0.5) * 2 * ATK_CD_JITTER);
           // ★여기서는 **예비 자세만** 건다. 클립·판정은 wndT 가 0 이 되는 프레임에
           //   위쪽 진행 블록이 건다(그 사이에 맞으면 통째로 취소된다).
           e.wndT = ATK_WIND;
+          // ★이 스윙의 상대를 여기서 못박는다. 타격 프레임(위 hitT 갈래)이 이 값을 쓴다 -
+          //   휘두르는 도중에 더 가까운 사람이 생겨도 처음 겨눈 사람에게 간다.
+          e.vic = tp.tag;
         }
       } else if (e.mode === 3) {
         // ── 수색: 마지막 목격 지점까지 가 보고 두리번거린다 ──
@@ -3981,6 +4294,13 @@ export function createEnemySystem(opts) {
     },
     get netMode() { return netMode === 1 ? 'host' : (netMode === 2 ? 'remote' : 'local'); },
     netScan, netApply, netEvent,
+    // ── 2단계 2차 창구 셋 ──
+    //   netClaim  (방장)   참가자의 주장 한 건을 상식 검사하고 내 판정 자리로 흘린다
+    //   netHurt   (참가자) 방장이 알려 온 내 피해를 내 규칙으로 적용한다
+    //   setNetTag (양쪽)   사건 소식의 by 와 견줄 **내 짧은 이름**. mp.js 가 붙는 순간 세운다
+    netClaim, netHurt,
+    setNetTag(t) { myTag = t || ''; return myTag; },
+    get netTag() { return myTag; },
     netStride: NET_STRIDE, netEvStride: NET_EV_STRIDE, netEvQ: NET_EV_Q,
     // 두 화면을 나란히 놓고 재는 창구. **신원(sid) 없이는 짝을 못 맞춘다** —
     // positions 는 무리 번호만 주므로 "몇 번 요괴가 몇 m 어긋났나"를 못 낸다.
@@ -4001,7 +4321,11 @@ export function createEnemySystem(opts) {
       return { mode: netMode === 1 ? 'host' : (netMode === 2 ? 'remote' : 'local'),
                live: live.length, tracked: on, spots: spotBySid.length,
                applied: netApplied, spawned: netSpawned, culled: netCulled,
-               unknown: netUnknown, events: netEvN };
+               unknown: netUnknown, events: netEvN,
+               // 2차: 주장이 받아들여진 수 · 기각 사유별 수 · 내 것으로 확정된 사건 수 ·
+               //      방장이 알려 온 내 피해 수 · 지금 쫓을 사람이 몇인가
+               tag: myTag, claimOK, claimNo: { ...claimNo }, claimId,
+               evMine: netEvMine, hurtRx: netHurtN, targets: targetN };
     },
     get kills() { return kills; },
     // ★처치 수는 "판(R~클리어)" 기준이다. R 재시작에서 main.js 가 부른다.

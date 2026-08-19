@@ -6,8 +6,11 @@
 //   2단계 1차(요괴 동기화) : 요괴를 **방장 한 명만** 굴린다. 참가자는 받은 상태를
 //     그림으로만 그린다 = 같은 요괴가 같은 자리에 있고 같이 죽는다.
 //     그 규약은 enemy.js 의 NET_* 머리 주석, 전송 정책은 mpenemy.js 가 정본이다.
-//   아직 못 하는 것 : **참가자는 요괴를 못 때린다**(칼도 화살도). 요괴도 참가자를
-//     안 쫓고 안 때린다 - 방장의 AI 는 방장만 안다. 그게 2단계 2차의 몫이다.
+//   2단계 2차(같이 잡고 같이 맞는다) : 참가자의 칼·화살이 요괴에 닿는다(주장 + 방장
+//     확정), 요괴가 **제일 가까운 사람**을 쫓고 때린다, 참가자 화면에도 드랍이 뜬다.
+//     이 파일이 그 둘에 대는 것은 **사람 목록**(요괴의 표적·관심 영역의 중심)과
+//     주장을 방장에게 실어 나르는 자리뿐이다. 규약은 mpenemy.js·enemy.js 가 안다.
+//   아직 못 하는 것 : 보스는 여전히 각자 로컬이다(따로 안 맞춘다).
 // ★전송은 net.js 뒤에 숨어 있다. 스팀으로 가면 그 파일만 갈아끼운다.
 //
 // ── 좌표를 어떻게 넘기는가 (여기가 이 파일에서 제일 조심스러운 대목) ──
@@ -46,6 +49,14 @@ export function createMultiplayer(ctx) {
   // 관심 영역의 중심 = 사람이 서 있는 자리. [x,z, x,z, ...] 로 매 프레임 다시 채운다
   // (배열을 새로 만들지 않는다 - 10Hz 라도 GC 에 쓰레기를 쌓을 이유가 없다).
   const aoi = [];
+  // ── 사람 목록 (2차) ──
+  // 요괴가 **제일 가까운 사람**을 쫓게 하려면 enemy.js 가 남의 자리를 알아야 한다.
+  // main.js 가 매 프레임 enemies.update(ctx.players) 로 넘긴다.
+  // ★그릇을 재사용한다(매 프레임 객체를 새로 지으면 60fps x 인원수만큼 쓰레기가 쌓인다).
+  // ★자리는 tgt(마지막으로 받은 값)를 쓴다. cur(화면에 그려지는 보간값)은 한 박자
+  //   뒤라, 판정에 쓰면 요괴가 실제보다 뒤를 때린다.
+  const players = [];
+  const aoi2 = [];
   // 마지막으로 보낸 내 자리. 관심 영역의 중심으로만 쓴다(아래 송신부가 적는다).
   let selfX = 0, selfZ = 0, selfOK = false;
 
@@ -212,6 +223,19 @@ export function createMultiplayer(ctx) {
       if (enemy && net && !net.isHost) enemy.recv(msg);
       return;
     }
+    // ── 참가자의 주장 (2차) ──
+    // ★방장만 받는다. 별 구조라 방장이 다른 참가자에게 그대로 중계하는데, 그쪽에서는
+    //   isHost 가 false 라 mpenemy 가 조용히 버린다(3인 이상에서 낭비되는 건
+    //   주장 한 건 크기뿐이고, 지금 상정 인원에서 값을 치를 만한 낭비가 아니다).
+    // ★상식 검사의 자 = **그 사람의 마지막 좌표**. 여기가 그 값을 들고 있는 유일한
+    //   자리라 여기서 꺼내 넘긴다(mpenemy 는 아바타를 모른다).
+    if (msg.t === 'eh') {
+      if (enemy && net && net.isHost) {
+        const p = peers.get(from);
+        if (p) enemy.recvClaim(msg, from, p.tgt.x, p.tgt.z);
+      }
+      return;
+    }
     if (msg.t === 'st') {
       // ★층이 다르면 서로의 아바타가 남의 맵 좌표에 서게 된다(벽 속·허공). 그림이
       //   깨지기 전에 말해 주는 편이 낫다 - 테스트에서 제일 먼저 밟는 함정이다.
@@ -247,6 +271,9 @@ export function createMultiplayer(ctx) {
       // 캐릭터를 바꿔서 다시 들어온 경우(홈으로 나갔다 온다)
       if (msg.k && msg.k !== p.char) { despawn(from); spawn(from, msg.k); return; }
       p.tgt.x = msg.x; p.tgt.y = msg.y; p.tgt.z = msg.z; p.tgt.yaw = msg.r;
+      // ★죽은 사람은 요괴의 표적에서 뺀다(2차). 안 빼면 무리가 시체 곁에 모여 선다.
+      //   평시에는 이 칸이 아예 안 실린다(getSelf 가 죽었을 때만 붙인다).
+      p.dead = msg.d === 1;
       if (!p.seen) {                       // 첫 소식이면 순간이동으로 자리를 잡는다
         p.cur.x = msg.x; p.cur.y = msg.y; p.cur.z = msg.z; p.cur.yaw = msg.r;
         p.seen = true;
@@ -334,6 +361,9 @@ export function createMultiplayer(ctx) {
         net.close(); net = null;
         throw e;
       }
+      // ★내 짧은 이름을 여기서 세운다(2차). 붙기 전에는 peerjs id 자체가 없다.
+      //   mpenemy 가 enemy.js 에도 같은 값을 넣어 준다 - 정의는 그 한 곳뿐이다.
+      if (enemy && enemy.setTag) enemy.setTag(net.id);
       roster();
       // 나갈 때 남의 화면에서 내 아바타를 지운다(브라우저를 닫아도 불린다)
       window.addEventListener('pagehide', () => { try { net && net.send({ t: 'bye' }); } catch (_) {} });
@@ -394,7 +424,8 @@ export function createMultiplayer(ctx) {
           for (const [, p] of peers) aoi.push(p.tgt.x, p.tgt.z);
           enemy.tickHost(txNow, aoi, sendEn);
         } else {
-          enemy.tickGuest(txNow);      // 소식이 끊겼는지만 본다
+          // 소식이 끊겼는지 보고, 내가 친 주장을 방장에게 내보낸다(2차).
+          enemy.tickGuest(txNow, sendEn);
         }
       }
       if (txNow - lastSendMs < 1000 / SEND_HZ) return;
@@ -433,6 +464,24 @@ export function createMultiplayer(ctx) {
         gapMaxMs: Math.round(rxGapMax), stale: rxStale,
         peers: net ? net.count : 1, host: net ? net.isHost : null,
       };
+    },
+    // ── 요괴가 쫓을 사람들 (2차) ──
+    // ★게터다. main.js 가 enemies.update 를 부르는 **그 자리에서** 읽으므로,
+    //   미리 만들어 두면 한 프레임 낡은 값이 된다(이 파일의 update 는 그보다 뒤에 돈다).
+    // ★내 자리는 안 넣는다 - enemy.js 가 getPlayerPos() 로 이미 알고 있고,
+    //   두 곳에서 넣으면 내가 두 번 세어진다.
+    get players() {
+      players.length = 0;
+      if (!net || !enemy) return players;
+      let i = 0;
+      for (const [id, p] of peers) {
+        if (!p.seen) continue;                 // 아직 소식이 한 번도 안 온 사람
+        let o = aoi2[i];
+        if (!o) { o = { tag: '', x: 0, z: 0, dead: false }; aoi2[i] = o; }
+        o.tag = enemy.tagOf(id); o.x = p.tgt.x; o.z = p.tgt.z; o.dead = !!p.dead;
+        players.push(o); i++;
+      }
+      return players;
     },
     // 남의 공격 이펙트 상태(자세한 창구는 window.__mpfx). 여기 둔 이유는
     // "아바타는 보이는데 이펙트가 안 보인다"를 한 화면에서 갈라 보기 위해서다.
