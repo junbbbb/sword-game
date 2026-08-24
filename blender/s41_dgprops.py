@@ -111,6 +111,31 @@ LIGHTS = [(l[0], l[1], l[2], l[3], l[4], np.array(l[5:8], np.float64), l[8])
           for l in B["lights"]]
 BLOCKED = [row for row in B["blocked"]]
 
+# ── ★24차 — 구역 색온도(zoneTint). s40 4a절이 격자로 구워 배치표에 실었다 ──
+# 키가 없으면(=DG_ZONELOOK=0 굽기) 중립으로 돈다. 곱하는 식은 s40 lum() 과
+# **한 글자도 다르면 안 된다**(아래 lumCheck 가 잡는다).
+_ZT = B.get("zoneTint")
+ZT_GRID = _ZT["grid"] if _ZT else None
+ZT_AMB_W = _ZT["ambW"] if _ZT else 0.0
+
+
+def _zt_at(gx, gz):
+    """칸 중심 격자 쌍선형 보간 — s40 의 ztint() 복사본."""
+    u = (gx + HALF) / CELL - 0.5
+    v = (gz + HALF) / CELL - 0.5
+    i0 = max(0, min(GRID - 2, int(math.floor(u))))
+    j0 = max(0, min(GRID - 2, int(math.floor(v))))
+    fu = min(1.0, max(0.0, u - i0))
+    fv = min(1.0, max(0.0, v - j0))
+    a = ZT_GRID[j0][i0]
+    b = ZT_GRID[j0][i0 + 1]
+    c = ZT_GRID[j0 + 1][i0]
+    d = ZT_GRID[j0 + 1][i0 + 1]
+    return tuple(
+        (a[i] * (1 - fu) + b[i] * fu) * (1 - fv)
+        + (c[i] * (1 - fu) + d[i] * fu) * fv
+        for i in range(3))
+
 
 def height_fall(y):
     # ★★★17차. s40 과 **한 글자도 다르면 안 된다**(아래 lumCheck 가 잡는다).
@@ -151,6 +176,10 @@ def lum(gx, gz, y, moss=0.0, nrm=None):
                 if ndl is not None:
                     fn *= NEAR_NL + (1.0 - NEAR_NL) * max(0.0, ndl)
                 acc = acc + rgb * fn
+    # ★24차 — 구역 색온도. 빛의 몫은 방 틴트를 다 받고 어둠(AMB)은 ambW 만큼만.
+    if ZT_GRID is not None:
+        zt = np.array(_zt_at(gx, gz), np.float64)
+        acc = AMB * (1.0 + (zt - 1.0) * ZT_AMB_W) + (acc - AMB) * zt
     acc = acc * height_fall(y)
     if moss > 0.0:
         acc = acc + np.array((0.06, 0.16, 0.04)) * moss

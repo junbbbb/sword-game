@@ -83,6 +83,18 @@ RND = random.Random(40_1)
 LAYOUT = os.environ.get("DG_LAYOUT", "v2")
 V2 = (LAYOUT != "v1")
 
+# ═════════════════════════════════════════════════════════════
+# ★24차 — 구역 시각 정체성 스위치 (오너: "크게 바뀐 건 없네")
+# ═════════════════════════════════════════════════════════════
+# 23차가 방 그래프를 갈았지만 시야 14m 짜리 쿼터뷰에서 위상은 화면에 없다 —
+# 보이는 건 표면인데 모든 방이 같은 벽·같은 바닥·같은 횃불이었다. 이 스위치가
+# 방마다 (바닥 / 빛 색 / 대표 실루엣 / 형태) 네 축을 갈라 "여긴 다른 방"을 만든다.
+#   DG_ZONELOOK=0 blender -b -P blender/s40_dungeon1.py   -> 23차 균일 판 그대로
+#   기본(1) = 24차 구역 정체성 판
+# ★롤백 관례: OFF 면 새 코드가 **한 줄도** 안 돈다(난수 스트림·부동소수 연산 순서까지
+#   23차와 같아야 level2.json 이 바이트 단위로 재현된다. 새 코드는 RND 를 안 쓴다).
+ZONELOOK = V2 and os.environ.get("DG_ZONELOOK", "1") != "0"
+
 
 # ═════════════════════════════════════════════════════════════
 # 1) 치수
@@ -193,6 +205,7 @@ WALL_INSET = 0.22
 #     어둠의 색은 여기서 절반, 나머지 절반은 반구광 아랫빛(main.js)이 낸다.
 #   휘도는 0.42 -> 0.16 으로 내렸다. 어둠이 깊어야 횃불이 정보가 된다.
 AMB = np.array((0.165, 0.150, 0.315), np.float32)
+AMB64 = AMB.astype(np.float64)     # ★24차 구역 틴트 계산용(soul: s41 과 같은 자)
 # ★AMB_MIN 은 높이 감쇠·접지 어둠이 곱해진 뒤의 바닥이다. 13차 0.028(사실상 검정) ·
 #   14차 0.30(너무 밝아 어둠이 없었다). 이번엔 0.10 —
 #   컨셉의 제일 깊은 구석(#080b0f, Y 0.0034)과 "걷는 바닥이 보인다"의 절충이다.
@@ -206,6 +219,15 @@ TORCH_RGB = np.array((1.00, 0.63, 0.33), np.float32)   # 횃불 빛의 색
 # ★14차. 계단의 찬 빛을 파랑에서 **청록**으로 옮겼다. 이 팔레트에서 파랑은
 #   어둠의 색이라(AMB 가 보라·코발트) 파란 빛은 "빛"으로 안 읽힌다.
 COLD_RGB = np.array((0.30, 0.86, 0.92), np.float32)    # 계단·천장 틈의 찬 빛
+# ── ★24차 — 방마다 불의 색을 가른다 (구역 정체성 축 ②) ──
+# 팔레트 계약("어두우면 파랗고 밝으면 따뜻")의 회전이다: 따뜻한 방들은 호박축 위에서
+# 금/구리/잉걸로 갈리고, 찬 빛 둘(우물 파랑·감옥 창백)은 COLD 계열의 회전이다.
+# 어둠(AMB)은 어느 방에서나 남보라 그대로다.
+GOLD_RGB = np.array((1.00, 0.78, 0.36), np.float32)    # 제단 성소 - 금빛(더 세게)
+COPPER_RGB = np.array((1.00, 0.47, 0.17), np.float32)  # 봉인 곳간 - 호박·구리빛
+EMBER_RGB = np.array((1.00, 0.55, 0.22), np.float32)   # 취사장 - 모닥불 주황
+WELL_RGB = np.array((0.34, 0.58, 1.00), np.float32)    # 우물방 - 찬 파랑(청록보다 파랗다)
+PALE_RGB = np.array((0.74, 0.81, 1.00), np.float32)    # 감옥 - 창백한 빛(창살 창문)
 MOSS_RGB = np.array((0.06, 0.16, 0.04), np.float32)    # 벽 밑동 이끼(정점색에 더한다)
 TORCH_R = 4.2         # 횃불 반경(m). 이 거리에서 세기의 1/2 x 창 이 남는다
 # ★★13차는 1.06 이었다. AMB 가 0.034 -> 0.46 으로 올라가 **남은 폭이 0.54 뿐**이라
@@ -396,6 +418,117 @@ for (kid, c0, r0, c1, r1) in CORRIDORS:
 ROOM_BOX = {rid: (c0, r0, c1, r1) for (rid, c0, r0, c1, r1) in ROOMS}
 CORR_BOX = {kid: (c0, r0, c1, r1) for (kid, c0, r0, c1, r1) in CORRIDORS}
 
+# ═════════════════════════════════════════════════════════════
+# 3b) ★24차 — 방 형태(축 ④) · 구역 색온도(축 ②의 정점색 쪽)
+# ═════════════════════════════════════════════════════════════
+# ── 형태 ①: 취사장 남서 모서리 L자 결손 ──
+# 지금까지 방 아홉이 전부 직사각형이었다. 취사장 남서 2x2칸(x 14..18, z -6..-4)을
+# 도로 막아 L자로 만든다 - 벽·콜라이더·nav·벽 금 검사가 전부 walk 를 보므로
+# 여기서 칸만 되막으면 아래 전 공정이 자동으로 따라온다(수제 콜라이더 0).
+# ★캠프 i4(22.2,-9.8)·모닥불(19,-9)·K9 문(x 18..22)·K11 문(z -12..-8)을 다 피한 자리.
+ZONE_NOTCH = [(21, 10), (22, 10), (21, 11), (22, 11)] if ZONELOOK else []
+for (_nc, _nr) in ZONE_NOTCH:
+    walk[_nr][_nc] = False
+    ROOM_OF.pop((_nc, _nr), None)
+
+# ── 구역 색온도(정점색 베이크에 실리는 방별 틴트) ──
+# lum() 끝에서  acc = AMB x (1+(zt-1)x0.35) + (acc-AMB) x zt  로 곱한다.
+#   · 빛의 몫(acc-AMB)은 zt 를 다 받고, 어둠(AMB)은 35%만 받는다
+#     -> "어두우면 파랗다" 계약이 산다(±18% 틴트로는 R/B 가 안 뒤집힌다. 실측 0.68).
+#   · 각 틴트는 상대휘도 ~1.0 으로 맞춰 밝기 게이트(A표)를 안 민다.
+# ★값은 칸 격자에 구워 **쌍선형**으로 읽는다(문지방에서 색이 계단지지 않게).
+#   벽 칸은 이웃한 걷는 칸의 평균을 물려받는다(벽이 제 방의 색을 입는다).
+ZONE_TINT = {
+    "R_ALTAR": (1.10, 1.02, 0.82),   # 금빛 성소
+    "R_VAULT": (1.16, 0.94, 0.74),   # 구리빛 곳간
+    "R_NE":    (1.12, 0.97, 0.80),   # 잉걸·재의 취사장
+    "R_NW":    (0.86, 0.98, 1.20),   # 물기 찬 우물방
+    "R_WEST":  (0.92, 0.97, 1.10),   # 먼지 찬 창고
+    "R_EAST":  (1.00, 1.01, 1.08),   # 창백한 감옥
+    "R_HALL":  (1.05, 1.00, 0.95),   # 따뜻한 회랑(가장 밝은 방)
+    "R_ENTRY": (0.94, 1.00, 1.09),   # 달빛 낙하방
+    "R_STAIR": (1.00, 1.00, 1.00),   # 계단방(냉광 자체가 표식)
+}
+ZT_AMB_W = 0.35        # 어둠이 틴트를 받는 몫
+_ZT_ONE = (1.0, 1.0, 1.0)
+ZT_GRID = [[_ZT_ONE] * GRID for _ in range(GRID)]
+if ZONELOOK:
+    for _r in range(GRID):
+        for _c in range(GRID):
+            _tag = ROOM_OF.get((_c, _r), "")
+            if _tag in ZONE_TINT:
+                ZT_GRID[_r][_c] = ZONE_TINT[_tag]
+    # 벽 칸은 걷는 이웃(8방)의 평균을 두 번 물려받는다(테두리 벽까지 번지게)
+    for _pass in range(2):
+        _new = [row[:] for row in ZT_GRID]
+        for _r in range(GRID):
+            for _c in range(GRID):
+                if walk[_r][_c] or ZT_GRID[_r][_c] != _ZT_ONE:
+                    continue
+                _acc = [0.0, 0.0, 0.0]
+                _n = 0
+                for _dr in (-1, 0, 1):
+                    for _dc in (-1, 0, 1):
+                        _rr, _cc = _r + _dr, _c + _dc
+                        if 0 <= _rr < GRID and 0 <= _cc < GRID:
+                            _t3 = ZT_GRID[_rr][_cc]
+                            if _t3 != _ZT_ONE:
+                                _acc = [_acc[i] + _t3[i] for i in range(3)]
+                                _n += 1
+                if _n:
+                    _new[_r][_c] = tuple(_acc[i] / _n for i in range(3))
+        ZT_GRID = _new
+    # ★s41(소품 굽기)이 같은 값을 써야 하므로 6자리로 **먼저** 반올림해 두고
+    #   s40 자신도 그 반올림값을 쓴다(JSON 왕복 후에도 두 판이 같은 수).
+    ZT_GRID = [[tuple(round(v, 6) for v in t) for t in row] for row in ZT_GRID]
+
+
+def ztint(gx, gz):
+    """(gx, gz)의 구역 틴트. 칸 중심 격자를 쌍선형 보간(float64 - s41 과 같은 자)."""
+    u = (gx + HALF) / CELL - 0.5
+    v = (gz + HALF) / CELL - 0.5
+    i0 = max(0, min(GRID - 2, int(math.floor(u))))
+    j0 = max(0, min(GRID - 2, int(math.floor(v))))
+    fu = min(1.0, max(0.0, u - i0))
+    fv = min(1.0, max(0.0, v - j0))
+    a = ZT_GRID[j0][i0]
+    b = ZT_GRID[j0][i0 + 1]
+    c = ZT_GRID[j0 + 1][i0]
+    d = ZT_GRID[j0 + 1][i0 + 1]
+    return tuple(
+        (a[i] * (1 - fu) + b[i] * fu) * (1 - fv)
+        + (c[i] * (1 - fu) + d[i] * fu) * fv
+        for i in range(3))
+
+
+# ── 방마다 불의 색(축 ② 광원 쪽). 횃불·화로가 어느 방을 보고 있는가로 정한다 ──
+_ZONE_FIRE = {"R_ALTAR": GOLD_RGB, "R_VAULT": COPPER_RGB, "R_NE": EMBER_RGB}
+
+
+def zone_fire_rgb(gx, gz):
+    """이 자리의 불이 낼 색. 통로·그 밖의 방은 기본 횃불색."""
+    if not ZONELOOK:
+        return TORCH_RGB
+    return _ZONE_FIRE.get(ROOM_OF.get(cell_of(gx, gz), ""), TORCH_RGB)
+
+
+# ── 구역 소품이 앉는 벽 칸은 횃불 후보에서 뺀다 ──
+# 첫 굽기 실측: 성소 사선 모서리 속 2자루 · 감방 블록 속 1자루가 파묻혔다.
+# pick_spread 는 결정적이라 후보에서 빼면 같은 방의 딴 벽으로 옮겨 앉는다.
+#   (9,6)(10,6)(8,7) 성소 북서 사선 · (17,6)(18,6)(19,7) 북동 사선 · (8,11) 남서 사선
+#   (26,14..17) 감옥 동벽(감방·창살 창의 벽) · (23,6)(24,6)(25,6) 취사장 화덕 뒷벽
+#   (1,15..17) 창고 서벽(궤짝·통·선반 자리)
+ZONE_NO_TORCH = set()
+if ZONELOOK:
+    ZONE_NO_TORCH = {(9, 6), (10, 6), (8, 7), (17, 6), (18, 6), (19, 7), (8, 11),
+                     (26, 14), (26, 15), (26, 16), (26, 17),
+                     (23, 6), (24, 6), (25, 6), (1, 15), (1, 16), (1, 17),
+                     # 2차 굽기 실측 둘: 제단 뒷벽 받침대가 (altar·화로·벽) 사이
+                     # nav 한 칸을 섬으로 만들었고((-1.6,-12.8) 포켓), 감옥 북벽
+                     # 동단 횃불이 감방 칸막이에 스쳤다. 제단 뒷벽 c11-14 와
+                     # 감옥 북벽 동단을 후보에서 뺀다.
+                     (11, 6), (12, 6), (13, 6), (14, 6), (25, 13)}
+
 # ── 스폰 정면 통로 ★"첫 15초"가 여기서 결정된다 ──
 # 초원(15m x 4.4m)보다 짧다. 낙하방이 10m 깊이라 그만큼이 없다. 첫 화면에 들어오는
 # 구간만 확실히 비우면 목적은 같다. ★소품 배치와 자기 검증이 **같은 상수**를 본다
@@ -512,8 +645,9 @@ def mount_torch(c, r):
     ped = in_room and (len(TORCH_PROPS) % 2 == 0)
     y = PED_Y if ped else TORCH_Y
     TORCH_PROPS.append((gx, gz, y, dx, dz, ped))
+    # ★24차 — 불의 색은 이 불이 비추는 방이 정한다(성소 금빛·곳간 구리·취사장 잉걸)
     add_light(gx + dx * (PED_OUT if ped else 0.30), gz + dz * (PED_OUT if ped else 0.30),
-              y, TORCH_R, TORCH_P, TORCH_RGB, near=1.0)
+              y, TORCH_R, TORCH_P, zone_fire_rgb(fx, fz), near=1.0)
     return True
 
 
@@ -549,7 +683,7 @@ for (rid, c0, r0, c1, r1) in ROOMS:
         ring += [(c, r0 - 1), (c, r1 + 1)]
     for r in range(r0, r1 + 1):
         ring += [(c0 - 1, r), (c1 + 1, r)]
-    cands = [x for x in ring if can_mount(*x)]
+    cands = [x for x in ring if can_mount(*x) and x not in ZONE_NO_TORCH]
     area = (c1 - c0 + 1) * (r1 - r0 + 1)
     want = 3 if area >= 36 else 2
     if rid == "R_HALL":
@@ -580,7 +714,7 @@ for (kid, c0, r0, c1, r1) in CORRIDORS:
         ring += [(c, r0 - 1), (c, r1 + 1)]
     for r in range(r0 - 1, r1 + 2):
         ring += [(c0 - 1, r), (c1 + 1, r)]
-    cands = [x for x in ring if can_mount(*x)]
+    cands = [x for x in ring if can_mount(*x) and x not in ZONE_NO_TORCH]
     long_side = max(c1 - c0, r1 - r0) + 1
     n_want = 2 if long_side >= 5 else 1
     if V2:
@@ -605,6 +739,10 @@ SEEPS_V2 = [
     (12.0,  2.6, 2.8, 0.32),    # K14B 붕괴 틈 세로대
     (-20.0, -1.6, 3.0, 0.28),   # K8 (서쪽 위 연결부)
 ]
+if ZONELOOK:
+    # ★24차 — 창고(서쪽 어둠) 성격 강화: 방 안에도 무너진 틈으로 찬 빛이 샌다.
+    #   서쪽 길의 "최소광 + 찬 스며듦"(redesign §2)을 방 안까지 잇는다.
+    SEEPS_V2 = SEEPS_V2 + [(-21.2, 2.2, 3.0, 0.30)]   # R_WEST 북서부
 if V2:
     for (_sx, _sz, _sr, _sp) in SEEPS_V2:
         add_light(_sx, _sz, 2.1, _sr, _sp, COLD_RGB)
@@ -629,18 +767,25 @@ ALTAR_TOP = 0.32 if V2 else 0.30  # 제단 단 높이(platforms[] 로 나간다)
 ALT_BRAZ = ((-2.4, 0.0, 0.63, 0.35, 4.05, 1.10, 0.16),
             (2.4, 0.0, 0.57, 2.31, 3.42, 0.90, -0.11))
 for (_ax, _az, _as, _ay, _apr, _afs, _aft) in ALT_BRAZ:
-    add_light(ALTAR_X + _ax, ALTAR_Z + 0.2 + _az, 1.15, 7.0, 0.95,
-              TORCH_RGB, near=1.0)
+    # ★24차 — 성소의 화로는 금빛으로 탄다(축 ②). 세기도 반 단 올린다("더 세게").
+    add_light(ALTAR_X + _ax, ALTAR_Z + 0.2 + _az, 1.15, 7.0,
+              1.04 if ZONELOOK else 0.95,
+              GOLD_RGB if ZONELOOK else TORCH_RGB, near=1.0)
 
 CAMP_X, CAMP_Z = (gx_of(23), gz_of(9)) if V2 else (gx_of(23), gz_of(5))   # 북동 취사장 모닥불
-add_light(CAMP_X, CAMP_Z, 0.55, 6.2, 0.85, TORCH_RGB, near=1.0)
+add_light(CAMP_X, CAMP_Z, 0.55, 6.2, 0.85,
+          EMBER_RGB if ZONELOOK else TORCH_RGB, near=1.0)
 
 SHAFT_X, SHAFT_Z = gx_of(13), gz_of(23)   # 낙하방 천장 구멍에서 내려오는 찬 빛
 # ★13차D. 반경 6.0 -> 3.4. 오너 "달빛 샤프트는 국소 연출로만."
 #   찬 빛의 반경이 횃불(3.8)보다 넓으면 달빛이 방을 통째로 물들여서 던전이
 #   **지붕 없는 마당**이 된다(옛 판 화면의 파란 안개 절반이 이 둘이었다).
 #   컨셉의 샤프트는 바닥에 지름 4m 짜리 웅덩이 하나를 만들고 그걸로 끝난다.
-add_light(SHAFT_X, SHAFT_Z, 2.6, 3.4, 0.72, COLD_RGB)
+# ★24차 — 낙하방의 정체성이 이 빛기둥이다("천장 구멍에서 꽂히는 빛"). 원판 컨셉이
+#   화면에서 안 읽혀서 한 단 세게 간다(3.4->4.0 · 0.72->0.90). "국소 연출" 계약은
+#   지킨다 - 반경이 방(13x8m)의 절반을 못 덮는다.
+add_light(SHAFT_X, SHAFT_Z, 2.6, 4.0 if ZONELOOK else 3.4,
+          0.90 if ZONELOOK else 0.72, COLD_RGB)
 
 # ── 세워 두는 화로 (13차B 신설) ──
 # ★★컨셉 홀의 주역은 벽걸이 관솔이 아니라 **바닥에 선 받침대 화로**다. 기둥 옆에
@@ -667,7 +812,9 @@ FREE_BRAZIERS_V2 = [
 ]
 FREE_BRAZIERS = FREE_BRAZIERS_V2 if V2 else FREE_BRAZIERS_V1
 for (_bx, _bz) in FREE_BRAZIERS:
-    add_light(_bx, _bz, 1.34, TORCH_R * 1.05, TORCH_P * 1.05, TORCH_RGB, near=1.0)
+    # ★24차 — 제단 방 남쪽 어귀의 두 화로는 성소를 따라 금빛이 된다(zone_fire_rgb)
+    add_light(_bx, _bz, 1.34, TORCH_R * 1.05, TORCH_P * 1.05,
+              zone_fire_rgb(_bx, _bz), near=1.0)
 
 STAIR_C0, STAIR_R0 = (22, 22) if V2 else (22, 21)   # 계단 바닥 칸(북으로 오른다)
 STAIR_X = gxf(STAIR_C0 + 1.0)
@@ -688,6 +835,26 @@ add_light(ALTAR_X, ALTAR_Z + 0.10, 1.30, 3.00, 0.50, COLD_RGB)
 # ★v2 우물 자리: 방 남동 구석. 캠프(i3, -19,-11 r2.2)와 콜라이더 겹침 검사(13절 5)
 #   를 피하고 K8·K10 어귀 동선도 안 막는 자리다.
 WELL_X, WELL_Z = (-15.6, -5.6) if V2 else (gx_of(4), gz_of(5))       # 북서 우물
+
+# ═════════════════════════════════════════════════════════════
+# 4a) ★24차 — 구역 광원 (축 ② 나머지. 반드시 지오메트리 **전**에 등록)
+# ═════════════════════════════════════════════════════════════
+# 취사장 큰 화덕. 북벽(z -14)에 파묻힌 석조 화덕 - 지오메트리는 11-8c 절이 같은
+# 상수로 세운다. DRESS(18,-13.2)와 캠프 i4(22.2,-9.8)를 피해 x 20.4.
+HEARTH_X, HEARTH_Z = 20.4, -13.5
+# 감옥 동벽의 창살 창 둘. 창백한 빛이 새고 바닥에 창살 그림자(dg_bars)가 눕는다.
+# 감방 칸막이(z 0.7 / 4.3 / 7.6)의 두 칸 한가운데다.
+PRISON_WINS = ((23.5, 2.5), (23.5, 6.0))
+if ZONELOOK:
+    # 화덕 잉걸: 아가리(남쪽) 앞을 데운다. near=1.0 = 근접 웜 + 바닥 고운 격자
+    add_light(HEARTH_X, HEARTH_Z + 0.7, 0.75, 5.2, 0.85, EMBER_RGB, near=1.0)
+    # 우물 냉광: "우물 중심의 찬 파랑 + 물기"
+    add_light(WELL_X, WELL_Z, 1.05, 3.4, 0.62, WELL_RGB)
+    # 감옥 창백광: 동벽 높은 창에서 서쪽으로
+    for (_wx, _wz) in PRISON_WINS:
+        add_light(_wx, _wz, 2.45, 3.8, 0.55, PALE_RGB)
+    # 곳간 잉곳 더미의 구리 글린트(항아리 줄 사이. 약하게)
+    add_light(0.9, -22.6, 0.62, 2.6, 0.40, COPPER_RGB)
 
 
 def height_fall(y):
@@ -851,6 +1018,13 @@ def lum(gx, gz, y, moss=0.0, nrm=None):
                 if ndl is not None:
                     fn *= NEAR_NL + (1.0 - NEAR_NL) * max(0.0, ndl)
                 acc = acc + rgb * fn
+    # ★24차 — 구역 색온도(축 ②). 빛의 몫은 방의 틴트를 다 받고 어둠(AMB)은
+    #   35%만 받는다 = "어두우면 파랗다" 계약 유지. s41 의 복사본과 **한 글자**
+    #   차이면 lumCheck 가 잡는다(float64 로 계산해 두 판의 자를 맞춘다).
+    if ZONELOOK:
+        _zt = np.array(ztint(gx, gz), np.float64)
+        acc = (AMB64 * (1.0 + (_zt - 1.0) * ZT_AMB_W)
+               + (acc.astype(np.float64) - AMB64) * _zt)
     acc = acc * height_fall(y)
     if moss > 0.0:
         acc = acc + MOSS_RGB * moss
@@ -932,6 +1106,9 @@ IMG_BLOCK, BLOCK_LIN = load_tex("dg_block")
 IMG_WGLOW, _ = load_tex("dg_wglow", "png")
 IMG_WEAR, WEAR_LIN = load_tex("dg_wear", "png")
 IMG_CRACK, CRACK_LIN = load_tex("dg_crack", "png")
+# ★24차 신설. 감옥 창살 그림자 데칼(tools/dungeon_tex.py `bars` 모드가 굽는다)
+if ZONELOOK:
+    IMG_BARS, BARS_LIN = load_tex("dg_bars", "png")
 
 
 # ═════════════════════════════════════════════════════════════
@@ -997,6 +1174,17 @@ PAL = {
     "crack":  "1a1917",     # 바닥 마모·자갈·이끼·흙 데칼
     "flame":  "ffd27a",     # 이미시브. 조명도 정점색도 안 탄다
 }
+# ── ★24차 구역 정체성 팔레트(스위치 안쪽 — 꺼지면 dgprops_build.json 의 pal 도
+#    23차와 바이트 단위로 같아야 한다) ──
+if ZONELOOK:
+    PAL.update({
+        # 창살 그림자: 데칼 텍스처(lin 0.017/0.025/0.047)가 이미 어두워서 균열(crack)과
+        # 같은 이유로 목표를 한 단 낮춰 곱수 자리를 만든다(감옥 바닥 정점색 ~0.3 기준).
+        "bars": "0d121a",
+        # 나무(우물 지지대·궤짝·통·선반): 던전 첫 나무 재질. 찬 방들 속에서 따뜻한
+        # 어두운 갈색이라야 돌과 갈린다. mat_solid 라 채도가 그대로 산다.
+        "wood": "554233",
+    })
 
 # ★타일의 **색기를 얼마나 살릴 것인가**(0 = 목표색으로 완전히 끌어당김 / 1 = 타일 그대로).
 # ★★14차에서 이 손잡이의 뜻이 뒤집혔다. 13차는 타일이 찬 청록이라 살릴수록 팔레트
@@ -1468,6 +1656,16 @@ buf_wear = Buf("FLOOR_WEAR", tile=True, glow=False)       # 바닥 마모·이�
 #   "금이 판석을 무시하고 지나간다. 판석보다 한 단계 큰 스케일의 두 번째 그림이라
 #    '칸 격자' 읽기를 부순다"(처방전 1-3). 길이 3~6m.
 buf_crack = Buf("FLOOR_CRACK", tile=True, glow=False)
+# ── ★24차 — 구역 정체성 버퍼 셋 ──
+# FLOOR_DGV: 성소·곳간의 **정연한 바닥**(축 ①). 같은 dg_floor 타일을 3.4m·회전 0
+#   으로 받는다 = 판석이 0.7m 로 잘고 벽과 나란하다. "만든 방"과 "굴 같은 방"이
+#   발밑에서 갈린다. FLOOR_ 접두라 그림자를 안 던진다(level.js 계약).
+buf_floorv = Buf("FLOOR_DGV", tile=True, uv_scale=3.4, uv_rot=0.0)
+# FLOOR_BARS: 감옥 창살 그림자 데칼(dg_bars). 균열(FLOOR_CRACK)과 같은 문법 -
+#   조명·정점색을 타는 알파 데칼이고 ORDER 표 밖이라 renderOrder 기본(균열 전례).
+buf_bars = Buf("FLOOR_BARS", tile=True, glow=False)
+# DECO_WOOD: 나무 단색(우물 지지대·창고 궤짝·통). 던전에 나무 재질이 하나도 없었다.
+buf_wood = Buf("DECO_WOOD")
 
 
 # ═════════════════════════════════════════════════════════════
@@ -1952,6 +2150,45 @@ def contact_ao(gx, gz):
     return (1.0 - CONTACT_AO * t) * (1.0 - CONTACT_AO2 * t2)
 
 
+def zone_floor_mul(gx, gz):
+    """★24차 — 방 성격이 바닥에 남긴 자국(정점색 곱수. 어둡게만 한다).
+
+      취사장: 화덕 아가리·모닥불 둘레의 **그을음·재**(중심 0.60배)
+      우물방: 우물 둘레 0.9~2.8m 고리의 **물기 얼룩**(0.84배)
+    ★p25 게이트: 방별 바닥 p25 를 13절이 다시 재서 완전 어둠 구멍(§7-12)을 막는다."""
+    if not ZONELOOK:
+        return 1.0
+    m = 1.0
+    # 화덕 그을음(아가리 남쪽으로 번진 부챗살)
+    d = math.hypot(gx - HEARTH_X, gz - (HEARTH_Z + 0.9))
+    if d < 2.6:
+        t = 1.0 - d / 2.6
+        m *= 1.0 - 0.40 * t * t
+    # 모닥불 재
+    d = math.hypot(gx - CAMP_X, gz - CAMP_Z)
+    if 0.0 < d < 2.1:
+        t = 1.0 - d / 2.1
+        m *= 1.0 - 0.22 * t * t
+    # 우물 둘레 물기(고리. 심은 우물 콜라이더 밑이라 안 보인다)
+    d = math.hypot(gx - WELL_X, gz - WELL_Z)
+    if d < 2.8:
+        ring = 1.0 - abs(d - 1.7) / 1.1
+        if ring > 0.0:
+            m *= 1.0 - 0.16 * ring * ring
+    return m
+
+
+def zone_floor_moss(gx, gz):
+    """★24차 — 우물 둘레의 젖은 이끼(moss 가산분). 물기가 초록을 부른다."""
+    if not ZONELOOK:
+        return 0.0
+    d = math.hypot(gx - WELL_X, gz - WELL_Z)
+    if d >= 2.6:
+        return 0.0
+    t = 1.0 - d / 2.6
+    return 0.55 * t * t * (0.6 + 0.6 * _vnoise2(gx, gz, 1.7, 91.0))
+
+
 def _fv(buf, i, j):
     """바닥 격자 정점(i = x 방향, j = z 방향)을 만들거나 재사용한다."""
     key = (id(buf), i, j)
@@ -1962,10 +2199,14 @@ def _fv(buf, i, j):
     gz = -HALF + j * (CELL / SUB_FINE)
     idx = len(buf.v)
     buf.v.append(bpos(gx, gz, FLOOR_Y))
-    col = lum(gx, gz, FLOOR_Y, moss_at(gx, gz), (0.0, 1.0, 0.0))
+    # ★24차 — 우물 둘레 젖은 이끼(zone_floor_moss)가 moss 에 더해진다
+    col = lum(gx, gz, FLOOR_Y, moss_at(gx, gz) + zone_floor_moss(gx, gz),
+              (0.0, 1.0, 0.0))
     # ★13차C 탈타일화. 격자 주기(4.5m)와 약분 안 되는 3~9m 얼룩 + 벽 밑 접지 어둠.
     #   AMB_MIN 아래로는 안 내린다(구석이 검은 구멍이 되면 캐릭터가 안 뜬다).
-    col = np.clip(col * (macro_at(gx, gz) * contact_ao(gx, gz)), AMB_MIN * 0.80, 1.0)
+    #   ★24차 — 그을음·재·물기(zone_floor_mul)가 같은 자리에서 곱해진다.
+    col = np.clip(col * (macro_at(gx, gz) * contact_ao(gx, gz)
+                         * zone_floor_mul(gx, gz)), AMB_MIN * 0.80, 1.0)
     buf.c.append((float(col[0]), float(col[1]), float(col[2])))
     _vidx[key] = idx
     return idx
@@ -2008,6 +2249,13 @@ def _paved(c, r):
     score = (0.55 if wall_dist(cx, cz) < 1.30 else 0.0)
     if tag.startswith("K"):
         score -= 0.16                    # 통로는 더 닳았다
+    # ★24차 — 흙 드러남 비율이 방 성격이다(축 ①): 회랑·계단방은 지은 그대로 남았고
+    #   취사장은 재에 덮였고 창고는 닳았다. 성소·곳간은 아래 층에서 FLOOR_DGV 로
+    #   통째로 갈리므로 여기 표에는 없다.
+    if ZONELOOK:
+        score += {"R_HALL": 0.28, "R_STAIR": 0.18, "R_EAST": 0.10,
+                  "R_NW": -0.05, "R_ENTRY": -0.08, "R_WEST": -0.12,
+                  "R_NE": -0.25}.get(tag, 0.0)
     return score + _vnoise2(cx, cz, 6.50, 71.0) > 0.76
 
 
@@ -2017,7 +2265,12 @@ for r in range(GRID):
         if not _floor_needed[r][c]:
             continue
         tag = ROOM_OF.get((c, r), "")
-        if _paved(c, r):
+        # ★24차 — 성소·곳간은 **정연한 바닥**(FLOOR_DGV: 잘고 벽과 나란한 판석).
+        #   "만든 방"의 바닥이 발밑에서 갈린다(축 ①의 판석 크기·정렬).
+        if ZONELOOK and tag in ("R_ALTAR", "R_VAULT"):
+            tgt = buf_floorv
+            _paved_n += 1
+        elif _paved(c, r):
             tgt = buf_floor
             _paved_n += 1
         else:
@@ -2751,7 +3004,9 @@ DRESS_V2 = [
     # R_EAST (r14-19)
     ("rubble_small",   18.6,   1.2, 1.72, 0.60, "rubble"),
     ("coping_chunk",   15.2,  11.2, 0.28, 0.74, "trim"),
-    ("rubble_large",   22.0,   5.4, 3.95, 0.70, "rubble"),
+    # ★24차 — ZONELOOK 이면 (22.0, 5.4)가 감방 우리 콜라이더와 겹쳐 서쪽으로 옮긴다
+    ("rubble_large",   20.4 if ZONELOOK else 22.0, 4.6 if ZONELOOK else 5.4,
+     3.95, 0.70, "rubble"),
     # R_NE (r7-11)
     ("rubble_small",   18.0, -13.2, 2.65, 0.56, "rubble"),
     ("coping_chunk",   22.4,  -5.2, 4.55, 0.68, "trim"),
@@ -2835,6 +3090,170 @@ if V2:
     add_pool(9.0, -2.0, 1.9, cold=True, squash=0.80)
     add_pool(12.0, 2.6, 1.7, cold=True, squash=0.80)
 
+# ═════════════════════════════════════════════════════════════
+# 11-8c) ★24차 — 구역 정체성 지오메트리 (축 ③ 실루엣 · 축 ④ 형태)
+# ═════════════════════════════════════════════════════════════
+# 방마다 첫 3초에 "여긴 다른 방"이 읽히게 하는 층이다. 계약:
+#   · RND 를 한 번도 안 당긴다(전부 상수 + _wall_hash) -> DG_ZONELOOK=0 이면
+#     23차 판이 바이트 단위로 되돌아온다
+#   · 콜라이더는 축정렬 box+circle 뿐이므로 사선(제단 모서리)은 시각 메시 +
+#     계단식 콜라이더로 짓는다. 안쪽으로 내접시켜 **보이지 않는 벽을 안 만든다**
+#     (몸이 사선 벽에 최대 0.34m 파묻힌다 - 기존 벽 인셋 0.22 와 같은 등급)
+#   · 새 물건 둘레는 ZONE_EXCLUDE 에 적어 잔해·마모 난수 배치가 피해 가게 한다
+ZONE_EXCLUDE = []      # (x, z, r) - RUBBLE 에 합류(난수 소품 배제) + 횃불 겹침 검사
+if ZONELOOK:
+    def _zx(gx, gz, r):
+        ZONE_EXCLUDE.append((gx, gz, r))
+
+    # ── 형태 ②: 제단 성소 모서리 사선(팔각 성소) ──
+    # 직사각형 성소의 세 모서리를 사선 벽으로 접는다(남동 모서리는 K14A 로 트여
+    # 있어 그대로). 남서는 앞벽 높이(1.45)로 낮게 - 카메라 가림 계약(원판 §5).
+    for (_fpx, _fpz, _fsx, _fsz, _fL, _fH) in (
+            (-10.0, -14.0, 1.0, 1.0, 2.4, WALL_BACK_H),    # 북서(높다)
+            (10.0, -14.0, -1.0, 1.0, 2.4, WALL_BACK_H),    # 북동(높다)
+            (-10.0, -4.0, 1.0, -1.0, 2.0, WALL_FRONT_H)):  # 남서(낮다 - 가림 방지)
+        _fmx = _fpx + _fsx * (_fL * 0.5 - 0.297)
+        _fmz = _fpz + _fsz * (_fL * 0.5 - 0.297)
+        _frot = math.atan2(-_fsz, _fsx)
+        _fhx = _fL * 0.3536 + 0.55
+        add_box(buf_wall, _fmx, _fmz, FLOOR_Y, _fH, _fhx, 0.60, rot=_frot, seg=1.1)
+        # 갓돌 한 줄(사선 실루엣의 윗선)
+        add_box(buf_trim, _fmx, _fmz, _fH - 0.02, _fH + 0.15, _fhx * 0.92, 0.33,
+                rot=_frot, seg=1.2, top_boost=TOP_BONUS)
+        # 계단식 콜라이더 4개(내접 - 사선 안쪽만 막는다)
+        _fs = _fL / 5.0
+        for _fk in range(4):
+            _fu = _fs * (4 - _fk)
+            push_col_box(_fpx + _fsx * _fu * 0.5,
+                         _fpz + _fsz * _fs * (_fk + 0.5),
+                         _fu * 0.5, _fs * 0.5, _fH, "fillet")
+        _zx(_fmx, _fmz, 1.7)
+
+    # ── 실루엣 ①: 취사장 큰 화덕 (북벽. 아가리가 남쪽을 본다) ──
+    _hx0, _hz0 = HEARTH_X, HEARTH_Z          # (20.4, -13.5)
+    add_box(buf_wall, _hx0, _hz0 - 0.45, FLOOR_Y, 2.50, 1.50, 0.30)          # 등판
+    for _hpk in (-1.05, 1.05):                                               # 양 기둥
+        add_box(buf_cut, _hx0 + _hpk, _hz0 + 0.05, FLOOR_Y, 1.65, 0.45, 0.62)
+    add_box(buf_wall, _hx0, _hz0, 1.62, 2.55, 1.58, 0.72)                    # 가슴돌
+    add_box(buf_wall, _hx0, _hz0 - 0.20, 2.55, 3.60, 0.95, 0.50)             # 굴뚝
+    add_box(buf_trim, _hx0, _hz0 - 0.20, 3.60, 3.78, 1.08, 0.60,
+            top_boost=TOP_BONUS)                                             # 굴뚝 갓
+    add_box(buf_stair, _hx0, _hz0 + 0.30, FLOOR_Y, FLOOR_Y + 0.13, 1.35, 0.85,
+            top_boost=TOP_BONUS + 0.05)                                      # 화덕 바닥돌
+    add_arch(buf_trim, _hx0, _hz0 + 0.67, True, 1.02, 1.10, 1.62, 0.14,
+             seg=9, slim=True)                                               # 아가리 아치
+    # 걸린 솥 + 불. 웜 풀은 아가리 앞 바닥과 화덕 바닥돌 위 두 겹이다
+    add_prism(buf_iron, _hx0 - 0.42, _hz0 + 0.28, FLOOR_Y + 0.13, FLOOR_Y + 0.47,
+              0.26, 0.21, n=8, smooth=True)
+    add_flame(_hx0 + 0.12, _hz0 + 0.18, FLOOR_Y + 0.34, w=0.80, h=0.86,
+              seed=_wall_hash(41, 7, 1), tilt=0.05)
+    add_flame(_hx0 - 0.38, _hz0 + 0.30, FLOOR_Y + 0.47, w=0.44, h=0.50,
+              seed=_wall_hash(41, 7, 2), tilt=-0.08)
+    add_halo(_hx0, _hz0 + 0.25, FLOOR_Y + 0.62, r=0.92)
+    add_pool(_hx0, _hz0 + 0.30, 1.0, y=FLOOR_Y + 0.145)
+    add_pool(_hx0, _hz0 + 1.35, 2.9)
+    add_wall_glow(_hx0, _hz0 + 0.55, 0.0, 1.0, 1.30, w=1.95, h=1.55, back=0.1)
+    push_col_box(_hx0, _hz0 - 0.05, 1.66, 0.95, 2.55, "hearth")
+    _zx(_hx0, _hz0 + 0.3, 2.1)
+
+    # ── 실루엣 ②: 우물 업그레이드 (두단 우물턱 + 지지대 + 도르래 + 물빛) ──
+    add_prism(buf_cut, WELL_X, WELL_Z, FLOOR_Y + 0.72, FLOOR_Y + 0.92,
+              1.24, 1.30, n=10, smooth=True, cap=False)                      # 벌어진 윗단
+    for _wpk in (-0.98, 0.98):                                               # 나무 기둥
+        add_box(buf_wood, WELL_X + _wpk, WELL_Z, FLOOR_Y + 0.60, 1.98,
+                0.11, 0.11)
+    add_box(buf_wood, WELL_X, WELL_Z, 1.80, 1.94, 1.16, 0.08)                # 가로보
+    add_box(buf_iron, WELL_X, WELL_Z, 1.52, 1.70, 0.24, 0.09)                # 도르래 축
+    add_box(buf_wood, WELL_X + 0.55, WELL_Z + 0.75, FLOOR_Y, FLOOR_Y + 0.30,
+            0.16, 0.16, rot=0.5)                                             # 두레박
+    # "물기": 우물 속 찬 물빛 + 둘레 바닥의 젖은 냉광(달빛 웅덩이 재활용. 가산이라
+    # 돌이 안 지워진다). 정점색 쪽 물기 얼룩은 zone_floor_mul/moss 가 굽는다.
+    add_pool(WELL_X, WELL_Z, 0.86, cold=True, y=FLOOR_Y + 0.55)
+    add_pool(WELL_X + 0.4, WELL_Z + 0.5, 2.2, cold=True, squash=0.85)
+    _zx(WELL_X, WELL_Z, 1.9)
+
+    # ── 실루엣 ③: 감옥 감방 블록 (동벽. 칸막이 + 창살 우리 + 부서진 창살) ──
+    # 칸막이 셋(z 0.7 / 4.3 / 7.6)이 감방 두 칸을 만든다. K14B 쪽 감방(북)은
+    # 창살이 무너져 걸어 들어갈 수 있고, 남쪽 감방은 성해서 문이 반쯤 열려 있다.
+    for _psz in (0.7, 4.3, 7.6):
+        add_box(buf_wall, 23.225, _psz, FLOOR_Y, 2.35, 0.725, 0.30)
+        push_col_box(23.225, _psz, 0.725, 0.30, 2.35, "cell")
+        _zx(23.225, _psz, 1.1)
+    # 남쪽 감방(성한 우리): 창살 + 가로대 + 반쯤 열린 문
+    for _pbk in range(7):
+        _pbz = 4.85 + _pbk * 0.42
+        if _pbk == 5:
+            continue                                   # 문 자리
+        add_box(buf_iron, 22.5, _pbz, FLOOR_Y, 2.05, 0.045, 0.045)
+    add_box(buf_iron, 22.5, 5.95, 1.98, 2.06, 0.05, 1.32)                    # 윗 가로대
+    add_box(buf_iron, 22.5, 5.60, 1.02, 1.10, 0.05, 0.95)                    # 중간 가로대
+    add_box(buf_iron, 22.62, 7.28, FLOOR_Y, 1.95, 0.045, 0.42, rot=0.65)     # 열린 문짝
+    push_col_box(22.5, 5.55, 0.15, 1.10, 2.1, "cage")
+    _zx(22.5, 5.6, 1.0)
+    # 북쪽 감방(무너진 우리): 부러진 창살 밑동 + 쓰러진 창살 격자
+    for (_pbz, _pbh) in ((1.15, 0.62), (1.57, 0.38), (3.55, 0.80)):
+        add_box(buf_iron, 22.5, _pbz, FLOOR_Y, FLOOR_Y + _pbh, 0.045, 0.045)
+    add_box(buf_iron, 21.4, 2.35, FLOOR_Y + 0.02, FLOOR_Y + 0.07,
+            1.05, 0.52, rot=0.48)                                            # 쓰러진 격자판
+    for _plk in range(3):
+        add_box(buf_iron, 20.6 + _plk * 0.5, 1.5 + _plk * 0.35,
+                FLOOR_Y + 0.015, FLOOR_Y + 0.055, 0.65, 0.04,
+                rot=0.9 + _plk * 0.4)                                        # 흩어진 창살
+    _zx(21.4, 2.3, 1.3)
+    # 동벽 높은 창 둘(창백광의 출처) + 바닥 창살 그림자 데칼
+    for (_pwx, _pwz) in PRISON_WINS:
+        add_box(buf_trim, 23.92, _pwz, 1.64, 1.76, 0.14, 0.62)               # 창턱
+        add_box(buf_trim, 23.92, _pwz, 2.52, 2.64, 0.14, 0.62)               # 인방
+        for _pwk in (-0.36, -0.12, 0.12, 0.36):
+            add_box(buf_iron, 23.92, _pwz + _pwk, 1.76, 2.52, 0.05, 0.045)
+        add_ground_card(buf_bars, 22.15, _pwz, FLOOR_Y + 0.0125,
+                        1.55, 1.05, rot=math.pi)
+        # 창에서 새는 빛의 웅덩이(창백 - 찬 웅덩이 재활용)
+        add_pool(22.6, _pwz, 1.6, cold=True, squash=0.78)
+
+    # ── 실루엣 ④: 창고 저장 더미 (서벽. 궤짝·통·자루·선반) ──
+    add_box(buf_wood, -23.05, 3.30, FLOOR_Y, FLOOR_Y + 0.56, 0.42, 0.42, rot=0.06)
+    add_box(buf_wood, -22.98, 3.24, FLOOR_Y + 0.56, FLOOR_Y + 1.02,
+            0.34, 0.34, rot=0.48)                                            # 궤짝 2단
+    add_box(buf_wood, -22.95, 4.55, FLOOR_Y, FLOOR_Y + 0.50, 0.36, 0.36, rot=-0.31)
+    push_col_box(-23.0, 3.35, 0.46, 0.46, 1.05, "crate")
+    push_col_box(-22.95, 4.55, 0.38, 0.38, 0.55, "crate")
+    _zx(-23.0, 3.4, 1.1)
+    _zx(-22.95, 4.55, 0.9)
+    for (_bbx, _bbz, _bbs) in ((-22.95, 6.35, 1.0), (-22.52, 6.92, 0.84)):   # 통 둘
+        add_prism(buf_wood, _bbx, _bbz, FLOOR_Y, FLOOR_Y + 0.48 * _bbs,
+                  0.27 * _bbs, 0.33 * _bbs, n=9, smooth=True, cap=False)
+        add_prism(buf_wood, _bbx, _bbz, FLOOR_Y + 0.48 * _bbs,
+                  FLOOR_Y + 0.92 * _bbs, 0.33 * _bbs, 0.26 * _bbs, n=9,
+                  smooth=True)
+        add_prism(buf_iron, _bbx, _bbz, FLOOR_Y + 0.44 * _bbs,
+                  FLOOR_Y + 0.52 * _bbs, 0.335 * _bbs, 0.335 * _bbs, n=9)
+        push_col_circle(_bbx, _bbz, 0.36 * _bbs, 0.95 * _bbs, "barrel")
+        _zx(_bbx, _bbz, 0.9)
+    for (_ssx, _ssz, _ssr) in ((-22.62, 2.20, 0.36), (-22.30, 2.52, 0.30)):  # 곡물 자루
+        add_prism(buf_banner, _ssx, _ssz, FLOOR_Y, FLOOR_Y + 0.40,
+                  _ssr, _ssr * 0.62, n=7, smooth=True)
+    add_box(buf_wood, -23.55, 4.0, 1.15, 1.23, 0.20, 1.55)                   # 벽 선반
+    _zx(-22.5, 2.35, 0.8)
+
+    # ── 회랑 기둥 세로빛: 남쪽 화로(±3.0, 11.3)가 제 곁 기둥(±3.2, 10.5)의
+    #    남면을 타고 오른다(벽 자국 카드 재활용. 가산이라 돌 무늬가 산다) ──
+    for _ppx in (-3.2, 3.2):
+        _ppz = 10.5 + 0.53
+        add_card(buf_wglow,
+                 (_ppx - 0.48, _ppz, FLOOR_Y + 0.45),
+                 (_ppx + 0.48, _ppz, FLOOR_Y + 0.45),
+                 (_ppx + 0.48, _ppz, FLOOR_Y + 2.90),
+                 (_ppx - 0.48, _ppz, FLOOR_Y + 2.90))
+
+    # ── 곳간 잉곳 더미 하나 더(구리 글린트 광원 곁) ──
+    for _ii2 in range(6):
+        _ix2 = 1.35 + (_ii2 % 3) * 0.34 - 0.34
+        _iz2 = -22.35 + (_ii2 // 3) * 0.22
+        add_box(buf_iron, _ix2, _iz2, FLOOR_Y + (_ii2 // 3) * 0.07,
+                FLOOR_Y + (_ii2 // 3) * 0.07 + 0.07,
+                0.19, 0.13, rot=(_ii2 * 41 % 7) / 7.0 * 0.5)
+
 # ── 북서 우물 ──
 add_prism(buf_cut, WELL_X, WELL_Z, FLOOR_Y, FLOOR_Y + 0.72, 1.28, 1.22, n=10, smooth=True,
           top_boost=TOP_BONUS)
@@ -2852,13 +3271,16 @@ add_halo(CAMP_X, CAMP_Z, FLOOR_Y + 0.40, r=1.05)
 push_col_circle(CAMP_X, CAMP_Z, 1.05, 1.1, "campfire")
 
 # ── 동쪽 감옥 철창 ──
+# ★24차 — ZONELOOK 이면 이 한 줄짜리 창살(벽에 붙어 안 읽히던 것)을 걷어내고
+#   11-8c 절의 **감방 블록**(칸막이 둘 + 창살 우리 + 부서진 창살)으로 갈아 끼운다.
 EAST_C0, EAST_R0, EAST_C1, EAST_R1 = ROOM_BOX["R_EAST"]
-for _i in range(9):
-    _bx = gx_of(EAST_C1) + 0.55
-    _bz = gz_of(EAST_R0) + 0.6 + _i * 0.55
-    add_box(buf_iron, _bx, _bz, FLOOR_Y, 2.30, 0.05, 0.05)
-add_box(buf_iron, gx_of(EAST_C1) + 0.55, gz_of(EAST_R0) + 2.8,
-        2.24, 2.36, 0.06, 2.35)
+if not ZONELOOK:
+    for _i in range(9):
+        _bx = gx_of(EAST_C1) + 0.55
+        _bz = gz_of(EAST_R0) + 0.6 + _i * 0.55
+        add_box(buf_iron, _bx, _bz, FLOOR_Y, 2.30, 0.05, 0.05)
+    add_box(buf_iron, gx_of(EAST_C1) + 0.55, gz_of(EAST_R0) + 2.8,
+            2.24, 2.36, 0.06, 2.35)
 
 # ── 쓰러진 원기둥 (13차B 신설) ──
 # 컨셉 홀 전경을 가로지르는 그 물건. 자리는 손으로 적는다 - 무리 자리·스폰 정면·
@@ -3069,6 +3491,11 @@ for _r in range(GRID):
 # 방 구석에만 둔다. 통로와 스폰 정면은 아래 자기 검증이 다시 잰다.
 # ★쓰러진 원기둥을 먼저 등록해 둔다. 안 그러면 잔해가 원기둥 속에서 솟는다.
 RUBBLE = [(_fx, _fz, max(_fl * 0.5, _fr) * 0.8) for (_fx, _fz, _fy, _fl, _fr) in FALLEN]
+# ★24차 — 구역 소품 둘레(ZONE_EXCLUDE)도 배제 목록에 합류한다. 화덕 속에서
+#   잔해가 솟거나 창살 위에 마모 데칼이 깔리는 것을 여기서 막는다.
+_ZONE_EXCL_AT = len(RUBBLE)
+if ZONELOOK:
+    RUBBLE.extend(ZONE_EXCLUDE)
 
 
 def rubble_ok(gx, gz, rad):
@@ -3135,7 +3562,9 @@ for (rid, c0, r0, c1, r1) in ROOMS:
 # 잔해 둘레에는 부스러기가 쌓인다. 바닥 한 장짜리 화면을 깬다.
 # ★반경을 잔해의 1.5배까지만 잡는다. 첫 판의 2.3배는 바닥에 깔린 **검은 구멍**으로
 #   읽혔다. 색도 바닥과 한 단 차이(0.0199 대 0.0267)뿐이어야 얼룩으로 읽힌다.
-for (gx, gz, rad) in RUBBLE[len(FALLEN):]:      # 앞 넷은 쓰러진 원기둥이라 건너뛴다
+# ★24차 — 배제용 항목(ZONE_EXCLUDE)에는 부스러기를 안 깐다(화덕 앞 3m 검은 원반 방지)
+_dirt_from = len(FALLEN) + (len(ZONE_EXCLUDE) if ZONELOOK else 0)
+for (gx, gz, rad) in RUBBLE[_dirt_from:]:      # 앞 넷은 쓰러진 원기둥이라 건너뛴다
     add_prism(buf_dirt, gx, gz, FLOOR_Y + 0.008, FLOOR_Y + 0.010,
               rad * 1.5, rad * 1.5, n=9, phase=RND.uniform(0, 2))
 
@@ -3263,8 +3692,12 @@ for (_rid, _c0, _r0, _c1, _r1) in ROOMS:
 # 천장 틈에서 꽂히는 푸른 빛 한 줄. 반투명 가산 콘 + 바닥 타원 + 먼지 몇 알.
 # ★두 자리에만 둔다(낙하방 = 떨어진 구멍 / 중앙 회랑 = 홀의 주역). 늘리면
 #   "천장이 통째로 무너진 집"이 되고 어둠이 정보를 잃는다.
+# ★24차 — 낙하방 콘을 굵고 크게(1.05->1.38 · 1.55->2.05). "천장 구멍에서 꽂히는
+#   빛기둥"이 낙하방의 정체성인데 원판 크기로는 화면에서 안 읽혔다(광원도 4a절에서
+#   한 단 세게). 회랑 콘은 그대로 - 회랑의 정체성은 기둥이다.
 SHAFTS = [
-    (SHAFT_X, SHAFT_Z, 1.05, 1.55, 6.2, 0.22),   # 낙하방. 굵고 곧다
+    (SHAFT_X, SHAFT_Z, 1.38 if ZONELOOK else 1.05, 2.05 if ZONELOOK else 1.55,
+     6.6 if ZONELOOK else 6.2, 0.22),            # 낙하방. 굵고 곧다
     # 중앙 회랑 — v2 는 회랑이 r14-19 로 내려왔다
     (gx_of(13), gz_of(16), 0.82, 1.22, 5.6, -0.28) if V2
     else (gx_of(13), gz_of(12), 0.82, 1.22, 5.6, -0.28),
@@ -3287,12 +3720,13 @@ def add_shaft(gx, gz, r_bot, r_top, h, tilt):
                  (top_x - sx * r_top, gz - sz * r_top, FLOOR_Y + h))
 
 
-for (_sx, _sz, _rb, _rt, _sh, _tl) in SHAFTS:
+for _si, (_sx, _sz, _rb, _rt, _sh, _tl) in enumerate(SHAFTS):
     add_shaft(_sx, _sz, _rb, _rt, _sh, _tl)
     add_pool(_sx, _sz, _rb * 2.0, cold=True, squash=0.78,
              rot=RND.uniform(0, 1.0))
     # 먼지 몇 알. 빛줄기 안에서만 보이는 작은 판들
-    for _d in range(9):
+    # ★24차 — 낙하방(_si 0)만 먼지를 더 띄운다(빛기둥이 정체성이라 몸집을 준다)
+    for _d in range(14 if (ZONELOOK and _si == 0) else 9):
         _da = RND.uniform(0, 6.283)
         _dr = RND.uniform(0.1, _rb * 1.5)
         _dy = RND.uniform(0.6, _sh * 0.82)
@@ -3394,6 +3828,27 @@ _dress_ov = [(k, x, z) for (k, x, z, _y, _s, _a) in DRESS
              if not blocked(*cell_of(x, z)) and _col_hits(x, z, 0.45)]
 if _dress_ov:
     FAIL.append("세트드레싱이 콜라이더와 겹친다: %s" % (_dress_ov,))
+
+# ★24차 — 구역 소품과 횃불의 겹침 검사. 횃불 자리는 pick_spread 가 결정적으로
+#   고르지만 사람이 예측하기 어렵다 — 화덕·감방·궤짝 속에 횃불 받침대가 서면
+#   그림이 깨지므로 여기서 잡아 좌표를 고치게 한다.
+if ZONELOOK:
+    _zt_ov = []
+    for (_tgx, _tgz, _tgy, _tdx, _tdz, _tped) in TORCH_PROPS:
+        _tfx = _tgx + _tdx * (PED_OUT if _tped else 0.2)
+        _tfz = _tgz + _tdz * (PED_OUT if _tped else 0.2)
+        for (_ex, _ez, _er) in ZONE_EXCLUDE:
+            if (_tfx - _ex) ** 2 + (_tfz - _ez) ** 2 < (_er * 0.9) ** 2:
+                _zt_ov.append((round(_tfx, 1), round(_tfz, 1),
+                               round(_ex, 1), round(_ez, 1)))
+    if _zt_ov:
+        FAIL.append("횃불이 구역 소품 속이다(소품을 옮겨라): %s" % (_zt_ov,))
+    # DRESS(Meshy 소품)와 구역 소품의 시각 겹침도 잡는다(콜라이더 없는 것 포함)
+    _zd_ov = [(k, x, z) for (k, x, z, _y, _s, _a) in DRESS
+              for (_ex, _ez, _er) in ZONE_EXCLUDE
+              if (x - _ex) ** 2 + (z - _ez) ** 2 < (_er * 0.85) ** 2]
+    if _zd_ov:
+        FAIL.append("세트드레싱이 구역 소품과 겹친다: %s" % (_zd_ov,))
 
 # 1) nav 흉내: 1.6m 격자 x 반경 0.55 로 실제 통과 가능한 칸을 뽑는다
 NAV_CELL, NAV_R = 1.6, 0.55
@@ -3654,6 +4109,39 @@ for (kid, _p25v) in _corp:
     if _p25v < 0.115:
         FAIL.append("통로 %s 바닥 p25 %.3f — 완전 어둠 구멍(§7-12 재발)" % (kid, _p25v))
 
+# 8b) ★24차 — 방별 바닥 정점색 실측(구역 색온도가 실제로 갈렸는가 + 어둠 구멍 방지).
+# R/B 는 색온도의 자다. 그을음·물기(zone_floor_mul)가 p25 를 0.105 밑으로 누르면 실패.
+if ZONELOOK:
+    _zverts = (_fverts + list(zip(buf_floorv.v, buf_floorv.c)))
+    _zrows = []
+    for (_rid9, _c09, _r09, _c19, _r19) in ROOMS:
+        _x09, _x19 = gxf(_c09), gxf(_c19 + 1)
+        _z09, _z19 = gzf(_r09), gzf(_r19 + 1)
+        _cs9 = [_cc for (_vv, _cc) in _zverts
+                if _x09 <= _vv[0] <= _x19 and _z09 <= -_vv[1] <= _z19 and _vv[2] < 0.5]
+        if not _cs9:
+            continue
+        _a9 = np.array(_cs9, np.float32)
+        _l9 = 0.2126 * _a9[:, 0] + 0.7152 * _a9[:, 1] + 0.0722 * _a9[:, 2]
+        _rb9 = float(_a9[:, 0].mean() / max(1e-6, _a9[:, 2].mean()))
+        _p9 = float(np.percentile(_l9, 25))
+        _zrows.append((_rid9, float(_l9.mean()), _p9, _rb9))
+        if _p9 < 0.105:
+            FAIL.append("방 %s 바닥 p25 %.3f — 구역 어둠이 구멍이 됐다(그을음·물기 과다)"
+                        % (_rid9, _p9))
+    NOTE.append("방별 바닥 정점색 [평균/p25/R비B]: "
+                + " · ".join("%s %.2f/%.2f/%.2f" % _t for _t in _zrows))
+    # 색온도가 실제로 갈렸는가: 제일 따뜻한 방(곳간·성소·취사장 중)과 제일 찬 방
+    # (우물방·창고 중)의 R/B 비가 1.25배도 안 벌어지면 이 파도의 목적 미달이다.
+    _zrb = {t[0]: t[3] for t in _zrows}
+    _warm9 = max(_zrb.get(k, 0) for k in ("R_VAULT", "R_ALTAR", "R_NE"))
+    _cold9 = min(_zrb.get(k, 9) for k in ("R_NW", "R_WEST"))
+    NOTE.append("색온도 폭: 따뜻 최대 R/B %.2f vs 찬 최소 %.2f (%.2f배)"
+                % (_warm9, _cold9, _warm9 / max(1e-6, _cold9)))
+    if _warm9 / max(1e-6, _cold9) < 1.25:
+        FAIL.append("방별 색온도 폭 %.2f배 — 구역 정체성이 정점색에서 안 갈렸다"
+                    % (_warm9 / max(1e-6, _cold9)))
+
 
 # ═════════════════════════════════════════════════════════════
 # 14) 재질 — 정점색 평균을 **재서** 곱수를 푼다 (두 번 훑기)
@@ -3692,7 +4180,9 @@ def shade_mean_of(buf):
 ALL_BUFS = [buf_floor, buf_floorb, buf_dirt, buf_wall, buf_cut, buf_altar,
             buf_stair, buf_iron, buf_banner, buf_rubble, buf_trim,
             buf_medal, buf_pool, buf_poolc, buf_shaft, buf_flame, buf_dust,
-            buf_wglow, buf_halo, buf_wear, buf_crack]
+            buf_wglow, buf_halo, buf_wear, buf_crack,
+            # ★24차 — 구역 버퍼 셋(OFF 면 비어 있어서 메시가 안 나간다)
+            buf_floorv, buf_bars, buf_wood]
 for _b in ALL_BUFS:
     if _b.glow:
         _b.c = []          # 이미시브는 정점색을 안 탄다. 버퍼에서 지운다
@@ -3808,6 +4298,18 @@ buf_wear.mat = mat_decal("MAT_DG_WEAR", PAL["wear"], IMG_WEAR, WEAR_LIN,
                          shade=buf_wear.shade)
 buf_crack.mat = mat_decal("MAT_DG_CRACK", PAL["crack"], IMG_CRACK, CRACK_LIN,
                           shade=buf_crack.shade)
+# ── ★24차 — 구역 재질 셋 ──
+if ZONELOOK:
+    # 성소·곳간의 정연한 바닥. 같은 dg_floor 타일 + 같은 목표색(계약 동일) —
+    # 다른 것은 UV(3.4m·회전 0)뿐이라 "판석 크기·정렬"만 갈린다.
+    buf_floorv.mat = mat_tex("MAT_DG_FLOORV", PAL["floor"], IMG_FLOOR, FLOOR_LIN,
+                             shade=buf_floorv.shade, hue_keep=0.92)
+    # 감옥 창살 그림자(조명·정점색을 타는 알파 데칼. 균열과 같은 문법)
+    buf_bars.mat = mat_decal("MAT_DG_BARS", PAL["bars"], IMG_BARS, BARS_LIN,
+                             shade=buf_bars.shade)
+    # 나무(우물 지지대·창고 궤짝·통·선반)
+    buf_wood.mat = mat_solid("MAT_DG_WOOD", PAL["wood"], rough=0.90,
+                             shade=buf_wood.shade)
 
 
 # ═════════════════════════════════════════════════════════════
@@ -4112,7 +4614,10 @@ data = {
         "glb 안에서 COL_ 로 시작하는 메시가 막는 지형이고 DECO_ 는 안 막는다. "
         "tag: wall=돌벽 · pillar=회랑 기둥 · altar=제단 · brazier=화로 · "
         "well=우물 · campfire=모닥불 · rubble=큰 잔해"
-        + (" · jar=곳간 항아리 · chest=곳간 궤짝" if V2 else "") + ". "
+        + (" · jar=곳간 항아리 · chest=곳간 궤짝" if V2 else "")
+        + (" · fillet=제단 성소 사선 모서리(계단식 근사) · hearth=취사장 화덕 · "
+           "cell=감방 칸막이 · cage=감방 창살 · crate=창고 궤짝 · barrel=창고 통"
+           if ZONELOOK else "") + ". "
         + ("★벽 콜라이더 인셋은 **면 단위**다(23차 벽 금 수리): 걷는 칸을 마주보는 "
            "면만 %.2fm 안으로 들어가고(통로 실폭 %.2fm), 벽끼리 맞닿는 면은 칸 "
            "경계까지 붙어 있어 벽 속에 빈 틈이 없다." % (WALL_INSET, CELL * 2 + WALL_INSET * 2)
@@ -4208,6 +4713,12 @@ if DGP_ON:
         "counts": _kinds,
         "props": DGP,
     }
+    # ★24차 — 구역 색온도. s41 의 lum() 복사본이 같은 격자·같은 식으로 곱해야
+    #   소품이 방의 색을 입는다. OFF 면 키 자체를 안 적는다(23차 파일과 그대로 호환
+    #   — s41 은 키가 없으면 중립으로 돈다).
+    if ZONELOOK:
+        _dgdata["zoneTint"] = {"ambW": ZT_AMB_W,
+                               "grid": [[list(t) for t in row] for row in ZT_GRID]}
     with open(os.path.join(ROOT, "blender", "dgprops_build.json"), "w") as _f:
         json.dump(_dgdata, _f, ensure_ascii=False, indent=1)
     NOTE.append("Meshy 소품 %d자리 %s · 되감은 절차 삼각형 %d개"

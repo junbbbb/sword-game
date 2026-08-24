@@ -1532,9 +1532,63 @@ def bake_flip_only():
     save_rgba("dg_flame_fb", rgb, a)
 
 
+# ═════════════════════════════════════════════════════════════
+# ★24차 — 감옥 창살 그림자 데칼 (구역 시각 정체성)
+# ═════════════════════════════════════════════════════════════
+def bake_bars_decal(res=256, seed=9401):
+    """동벽 창에서 서쪽 바닥으로 눕는 **창살 그림자** 한 장(알파 데칼).
+
+    ★빛이 아니라 **그림자**라 mat_decal(알파 블렌딩)로 깐다 — 균열(dg_crack)과
+      같은 문법이다. 색은 s40 의 PAL["bars"] 가 정한다(어두운 청회).
+    ★u 축 = 창(광원)에서 멀어지는 방향. 창살 다섯 줄이 u 를 따라 길게 눕고,
+      멀어질수록 그림자가 넓어지고 옅어진다(반그림자). v=0.5 에서 살짝 벌어진다
+      (창이 점광원이 아니라 면광원이라 그림자가 부챗살로 퍼진다)."""
+    rs = np.random.RandomState(seed)
+    u = np.linspace(0.0, 1.0, res, dtype=np.float32)[None, :]      # 창 -> 먼 쪽
+    v = np.linspace(-1.0, 1.0, res, dtype=np.float32)[:, None]     # 창의 좌우
+    a = np.zeros((res, res), np.float32)
+    n_bar = 5
+    for i in range(n_bar):
+        c0 = -0.72 + i * (1.44 / (n_bar - 1))                      # 창턱에서의 자리
+        wob = (rs.rand() - 0.5) * 0.04
+        c = c0 * (1.0 + 0.34 * u) + wob * u                        # 부챗살 벌어짐
+        hw = 0.055 * (1.0 + 1.9 * u)                               # 멀수록 넓은 반그림자
+        s = np.clip(1.0 - np.abs(v - c) / np.maximum(hw, 1e-4), 0, 1)
+        a = np.maximum(a, s ** 1.35)
+    # 창틀(가로 인방)의 그림자 한 줄 - 창살이 매달린 데가 있다는 정보
+    sill = np.clip(1.0 - np.abs(u - 0.045) / 0.05, 0, 1) ** 1.2
+    sill = sill * np.clip((0.86 - np.abs(v)) / 0.10, 0, 1)
+    a = np.maximum(a, sill[0:1, :] * np.clip((0.86 - np.abs(v)) / 0.10, 0, 1))
+    # 멀어질수록 옅어진다 + 창 바로 앞도 살짝 뗀다(벽 접지 어둠과 안 겹치게)
+    fade = np.clip(1.0 - u, 0, 1) ** 0.9 * np.clip(u / 0.03, 0, 1)
+    a = a * fade * np.clip((0.97 - np.abs(v)) / 0.06, 0, 1).clip(0, 1)
+    a = (a * 0.62).astype(np.float32)                              # 알파 상한(돌이 안 죽는다)
+    # 색: 어두운 청회(그림자는 하늘빛을 받는다). 채도는 조용하게
+    rgb = np.zeros((res, res, 3), np.float32)
+    rgb[:, :, 0] = 0.14
+    rgb[:, :, 1] = 0.17
+    rgb[:, :, 2] = 0.24
+    return rgb, a
+
+
+def bake_bars_only():
+    """창살 데칼만 굽고 META 의 lin 항목을 제자리에서 갱신한다(다른 타일은 안 만진다)."""
+    os.makedirs(OUT_DIR, exist_ok=True)
+    rgb, a = bake_bars_decal(256)
+    save_rgba("dg_bars", rgb, a)
+    meta = json.load(open(META)) if os.path.exists(META) else {"lin": {}}
+    meta.setdefault("lin", {})["dg_bars"] = [
+        float(x) for x in srgb_to_lin(rgb).reshape(-1, 3).mean(axis=0)]
+    with open(META, "w") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=1)
+    print("   [메타] dg_bars lin %s" % meta["lin"]["dg_bars"])
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "flame":
         bake_flip_only()
+    elif len(sys.argv) > 1 and sys.argv[1] == "bars":
+        bake_bars_only()
     elif len(sys.argv) > 1 and sys.argv[1] == "light":
         bake_light_only()
     elif len(sys.argv) > 1 and sys.argv[1] == "floor":
