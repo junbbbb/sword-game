@@ -4,6 +4,18 @@
     blender -b -P blender/s31_basic2_body.py
     -> web/basic2_body.glb   (액션 없음. 모션은 이어서 s24_moveset.py 가 이식한다)
 
+★★2026-08-24 23차부터 공정은 **일곱 줄**이다 — 아래 여섯 줄 뒤에 s42(Soldier 하체)가
+  붙는다(2026-08-14 커밋 6a8dbf8 부터. 이 헤더가 그동안 여섯 줄로 남아 있었다):
+    # 7) Walk/Run 하체만 Soldier 로 교체 (자세한 건 s42 헤더)
+    DST_GLB=web/basic2.glb OUT_GLB=<임시>.glb blender -b -P blender/s42_basic2_soldier_legs.py
+    cp <임시>.glb web/basic2.glb
+★★md5 계보: 18차 여섯 줄 = fa19aa9d → +s42 = 5013a2f4(구 커밋본)
+  → 23차 모션재작(MOVES_V23=1, s24 베기 3종 재작) 여섯 줄 = 106f43ae → +s42 = **9c5d4f7e**
+  ★2번 줄 재현 주의: 커밋본은 **IDLE_E=70 IDLE_AZ=35 를 명시**해서 구웠다(run6.sh 기본값.
+    s24 코드 기본은 78/22 라 안 넘기면 md5 가 어긋난다. 23차 재현으로 실측 확인).
+  일곱 줄 전체를 돌리는 스크립트 = renders/history/v99_wave23/motion/scripts/run7_final.sh
+  (재현 검증용 = 같은 폴더 run7_repro.sh — 2026-08-24 에 5013a2f4 를 재현 확인한 뒤 고쳤다)
+
 전체 공정 **여섯 줄**(이 순서대로 다시 돌리면 언제든 재현된다. 2026-08-11 실행 기록.
 1~4 는 2026-08-11 재실행에서 **바이트 단위로 같은 파일**이 다시 나왔다.
 2026-08-12 에는 여섯 줄 전부가 committed basic2.glb 와 md5 까지 같았다.
