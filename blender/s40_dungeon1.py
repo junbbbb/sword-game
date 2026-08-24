@@ -72,6 +72,17 @@ TMP = os.environ.get("TMPDIR_LEVEL") or "/tmp"
 #   통째로 흔들려서 "무엇을 바꿨는지"를 렌더로 비교할 수 없게 된다.
 RND = random.Random(40_1)
 
+# ═════════════════════════════════════════════════════════════
+# ★23차 — 레이아웃 스위치 (docs/dungeon1-redesign.md)
+# ═════════════════════════════════════════════════════════════
+#   DG_LAYOUT=v1 blender -b -P blender/s40_dungeon1.py   -> 22차까지의 옛 판(8방 12통로)
+#   기본(v2) = 23차 재설계: 9방 + K13(봉인 곳간) + K14(붕괴 틈 탈출 지름길)
+# ★롤백 관례: 옛 방 표·통로 표·앵커 좌표를 지우지 않는다. 이 스위치 하나로 옛 판을
+#   그대로 되구울 수 있어야 한다. 콜라이더 emit 방식(벽 금 수리)도 같이 갈린다 —
+#   v1 은 옛 emit(상자 전체 인셋)까지 재현해서 "옛 판"이 거짓말이 되지 않게 한다.
+LAYOUT = os.environ.get("DG_LAYOUT", "v2")
+V2 = (LAYOUT != "v1")
+
 
 # ═════════════════════════════════════════════════════════════
 # 1) 치수
@@ -295,7 +306,8 @@ def yaw_to(gx, gz, tx, tz):
 # ═════════════════════════════════════════════════════════════
 # 칸 좌표는 (c0, r0, c1, r1) 닫힌 구간. r 이 작을수록 북쪽(-Z), c 가 작을수록 서쪽(-X).
 # 값의 근거는 docs/dungeon1-design.md 1절 표에 그대로 있다.
-ROOMS = [
+# ── v1 (22차까지. DG_LAYOUT=v1 로 되굽는다) ──
+ROOMS_V1 = [
     # id,          c0, r0, c1, r1,  뜻
     ("R_ALTAR",     9,  2, 18,  7),   # 제단 방. 증표가 여기 있다
     ("R_NW",        2,  2,  6,  7),   # 북서 우물방
@@ -306,10 +318,7 @@ ROOMS = [
     ("R_ENTRY",    10, 21, 16, 25),   # 낙하방. 여기서 시작한다
     ("R_STAIR",    20, 21, 25, 25),   # 계단방. 잠긴 탈출 계단
 ]
-
-# 통로는 전부 폭 2칸(4.0m). 왜 4.0 인가는 설계 문서 "문폭" 절에 계산이 있다
-# (nav.js 가 1.6m 격자 x 반경 0.55 로 판정하므로 W-1.1 이 실제 통과 폭이다).
-CORRIDORS = [
+CORRIDORS_V1 = [
     ("K1",  12, 19, 13, 20),   # 낙하방 <-> 중앙 회랑 (가운데 갈래)
     ("K2",   3, 22,  9, 23),   # 낙하방 <-> 서쪽 통로
     ("K3",   3, 19,  4, 23),   # 서쪽 통로 <-> 서쪽 창고
@@ -323,6 +332,48 @@ CORRIDORS = [
     ("K11", 19,  4, 20,  5),   # 북동 취사장 <-> 제단 방
     ("K12", 13,  8, 14,  9),   # 중앙 회랑 <-> 제단 방 (지름길의 끝)
 ]
+
+# ── ★v2 (23차 재설계. docs/dungeon1-redesign.md §1) ──
+# 북쪽에 봉인 곳간(R_VAULT, 유일한 의도적 막다른 방)이 끼면서 판 전체가 남으로
+# 눌렸다: 북 밴드 r7-11 · 중간 밴드 r14-19 · 낙하방 r22-25. 방 사이 벽은 여전히
+# 두 칸(4.0m)이라 앞벽 1.45 + 뒷벽 3.6 문법이 그대로 산다.
+ROOMS_V2 = [
+    ("R_VAULT", 10,  2, 17,  4),   # ★봉인 곳간. 일부러 막다른 방(리스크 = 퇴로 하나)
+    ("R_NW",     2,  7,  6, 11),   # 북서 우물방 (어두운 우회로의 둘째)
+    ("R_ALTAR",  9,  7, 18, 11),   # 제단 방. 증표가 여기 있다
+    ("R_NE",    21,  7, 25, 11),   # 북동 취사장
+    ("R_WEST",   2, 14,  6, 19),   # 서쪽 창고 (어두운 우회로의 첫째)
+    ("R_HALL",  11, 14, 16, 19),   # 중앙 회랑. 값을 치르는 지름길(가장 밝다)
+    ("R_EAST",  21, 14, 25, 19),   # 동쪽 감옥 (당당한 큰길)
+    ("R_ENTRY", 10, 22, 16, 25),   # 낙하방. 여기서 시작한다
+    ("R_STAIR", 20, 22, 25, 25),   # 계단방. 잠긴 탈출 계단(첫 3분에 보인다)
+]
+# 통로는 전부 폭 2칸(4.0m). 왜 4.0 인가는 설계 문서 "문폭" 절에 계산이 있다
+# (nav.js 가 1.6m 격자 x 반경 0.55 로 판정하므로 W-1.1 이 실제 통과 폭이다).
+# ★K14 는 축정렬 두 조각(A 가로 + B 세로)으로 "붕괴 틈" 대각선을 흉내낸다.
+#   A 는 제단 남동 모서리에서 남으로 트이고, B 는 감옥 북서 모서리로 옆구리가
+#   트인다(감옥 서벽 r14-15 어귀). 시각적 좁힘은 콜라이더 없는 잔해로만 한다.
+CORRIDORS_V2 = [
+    ("K1",   12, 20, 13, 21),   # 낙하방 <-> 중앙 회랑 (가운데 갈래)
+    ("K2",    3, 23,  9, 24),   # 낙하방 <-> 서쪽 통로 (어두운 우회로 들머리)
+    ("K3",    3, 20,  4, 24),   # 서쪽 통로 <-> 서쪽 창고
+    ("K4",   17, 23, 19, 24),   # 낙하방 <-> 계단방 (잠긴 계단 복선)
+    ("K5",   23, 20, 24, 21),   # 계단방 <-> 동쪽 감옥
+    ("K6",    7, 16, 10, 17),   # 서쪽 창고 <-> 중앙 회랑
+    ("K7",   17, 17, 20, 18),   # 동쪽 감옥 <-> 중앙 회랑 (★K14B 와 r16 벽 한 줄로 갈라진다)
+    ("K8",    3, 12,  4, 13),   # 서쪽 창고 <-> 북서 우물방
+    ("K9",   23, 12, 24, 13),   # 동쪽 감옥 <-> 북동 취사장
+    ("K10",   7,  8,  8,  9),   # 북서 우물방 <-> 제단 방
+    ("K11",  19,  8, 20,  9),   # 북동 취사장 <-> 제단 방
+    ("K12",  13, 12, 14, 13),   # 중앙 회랑 <-> 제단 방 (지름길의 끝)
+    ("K13",  15,  5, 16,  6),   # ★제단 <-> 봉인 곳간. 제단(x=0) 뒤 오른쪽 문 —
+    #                             한가운데(c13-14)에 내면 제단 콜라이더가 문을 막는다
+    ("K14A", 17, 12, 20, 13),   # ★붕괴 틈 가로대. 제단 남동 모서리에서 트인다
+    ("K14B", 19, 14, 20, 15),   # ★붕괴 틈 세로대. 감옥 북서 모서리로 트인다
+]
+
+ROOMS = ROOMS_V2 if V2 else ROOMS_V1
+CORRIDORS = CORRIDORS_V2 if V2 else CORRIDORS_V1
 
 # walk[r][c] = True 면 걸을 수 있다. 처음엔 통째로 막혀 있다
 walk = [[False] * GRID for _ in range(GRID)]
@@ -349,15 +400,19 @@ CORR_BOX = {kid: (c0, r0, c1, r1) for (kid, c0, r0, c1, r1) in CORRIDORS}
 # 초원(15m x 4.4m)보다 짧다. 낙하방이 10m 깊이라 그만큼이 없다. 첫 화면에 들어오는
 # 구간만 확실히 비우면 목적은 같다. ★소품 배치와 자기 검증이 **같은 상수**를 본다
 # (첫 판에서 배제 창은 5.5m 인데 검사는 6.5m 까지 훑어서 잔해 하나가 새어 들어왔다).
-SPAWN_LANE_LEN = 5.0
+# ★v2 낙하방은 8m 깊이(r22-25)라 v1(10m)의 5.0m 레인이 북벽 콜라이더 면(0.22 인셋)
+#   을 검사 반경(1.5) 안에 걸어 버린다. 스폰을 한 줄 남으로(z 22) 물리고 레인을
+#   4.2m 로 줄인다 — "첫 15초 비운다"는 목적은 같다(낙하방엔 어차피 몹이 없다).
+SPAWN_LANE_LEN = 4.2 if V2 else 5.0
 SPAWN_LANE_HALF = 1.5
 
 # 스폰 자리. 낙하방 남쪽에 셋. 소품 배치가 여기를 침범하면 안 되므로 먼저 정한다
 ENT_C0, ENT_R0, ENT_C1, ENT_R1 = ROOM_BOX["R_ENTRY"]
+_SPAWN_Z = gzf(ENT_R1) if V2 else gz_of(ENT_R1 - 1)
 SPAWN_PTS = [
-    (gx_of(ENT_C0 + 1), gz_of(ENT_R1 - 1)),
-    (gx_of(13), gz_of(ENT_R1 - 1)),
-    (gx_of(ENT_C1 - 1), gz_of(ENT_R1 - 1)),
+    (gx_of(ENT_C0 + 1), _SPAWN_Z),
+    (gx_of(13), _SPAWN_Z),
+    (gx_of(ENT_C1 - 1), _SPAWN_Z),
 ]
 
 
@@ -503,6 +558,15 @@ for (rid, c0, r0, c1, r1) in ROOMS:
         want = 5              # 제단 방은 목표라서 유일하게 환하다
     if rid == "R_ENTRY":
         want = 2              # 낙하방은 천장 구멍의 찬 빛이 주역이다
+    if V2:
+        # ★23차 — 세 갈래의 비대칭(redesign §2). 서쪽 우회로는 횃불을 절반으로
+        #   (어둠이 서쪽 길의 성격이다), 동쪽 큰길은 하나 더 얹어 당당하게 밝다.
+        #   곳간은 문지기 캠프가 보일 만큼만(2자루) — 어둑한 보물창고 무드.
+        #   ★어둠 구멍(§7-12)은 아래 SEEPS(찬 스며듦 빛)가 막는다. 팔레트 계약
+        #   ("어두우면 파랗고 밝으면 따뜻") 그대로다.
+        want = {"R_HALL": 5, "R_ALTAR": 5, "R_ENTRY": 2, "R_VAULT": 2,
+                "R_WEST": 1, "R_NW": 1, "R_EAST": 3, "R_NE": 3,
+                "R_STAIR": 2}.get(rid, want)
     for cd in pick_spread(cands, want):
         if not mount_torch(*cd):
             _torch_bad.append(cd)
@@ -518,14 +582,41 @@ for (kid, c0, r0, c1, r1) in CORRIDORS:
         ring += [(c0 - 1, r), (c1 + 1, r)]
     cands = [x for x in ring if can_mount(*x)]
     long_side = max(c1 - c0, r1 - r0) + 1
-    for cd in pick_spread(cands, 2 if long_side >= 5 else 1):
+    n_want = 2 if long_side >= 5 else 1
+    if V2:
+        # ★서쪽 갈래(K2·K3·K8)는 절반, 붕괴 틈(K14)은 횃불 0(찬 스며듦 빛만),
+        #   동쪽 갈래(K4)는 하나 더 — 갈래의 성격이 빛에서 먼저 읽히게(redesign §2).
+        n_want = {"K2": 1, "K3": 0, "K8": 1, "K4": 2,
+                  "K14A": 0, "K14B": 0}.get(kid, n_want)
+    for cd in pick_spread(cands, n_want):
         if not mount_torch(*cd):
             _torch_bad.append(cd)
 
+# ── ★23차 — 찬 스며듦 빛(cold seep) ──
+# 서쪽 우회로와 붕괴 틈은 횃불을 뺐다. 그러나 "통로 한복판 완전 어둠(p25 0.0024)"은
+# 원판의 지적된 결함(§7-12)이라 되풀이하면 안 된다 — 무너진 틈으로 새는 달빛을
+# 약하게 깐다. 찬 빛이라 "어두우면 파랗다" 팔레트 계약 안이고, 세기가 횃불(0.96)의
+# 1/3 이라 서쪽 길의 "어둡다"는 성격은 산다. 자리는 13절의 통로별 p25 실측으로 판다.
+SEEPS_V2 = [
+    # (gx, gz, 반경, 세기)
+    (-20.0, 16.0, 3.4, 0.34),   # K3 한복판 (서쪽 세로 통로)
+    (-14.0, 20.8, 3.2, 0.30),   # K2 서쪽 절반
+    (9.0,  -2.0, 3.0, 0.36),    # K14A 붕괴 틈 가로대
+    (12.0,  2.6, 2.8, 0.32),    # K14B 붕괴 틈 세로대
+    (-20.0, -1.6, 3.0, 0.28),   # K8 (서쪽 위 연결부)
+]
+if V2:
+    for (_sx, _sz, _sr, _sp) in SEEPS_V2:
+        add_light(_sx, _sz, 2.1, _sr, _sp, COLD_RGB)
+
 # ── 특수 광원 (지오메트리가 따로 있는 것들) ──
-ALTAR_C, ALTAR_R = 13, 3          # 제단 칸(방 R_ALTAR 안. 북쪽에 붙인다)
+ALTAR_C, ALTAR_R = 13, 3          # 제단 칸(방 R_ALTAR 안. 북쪽에 붙인다) — v1
 ALTAR_X, ALTAR_Z = gxf(ALTAR_C + 1.0), gz_of(ALTAR_R)   # 제단 중심(칸 경계에 걸친다)
-ALTAR_TOP = 0.30                  # 제단 단 높이(platforms[] 로 나간다)
+if V2:
+    # ★v2 제단: 방이 r7-11 로 내려왔다. x=0(칸 경계), 북벽에서 두 칸째.
+    #   K13(곳간 문, c15-16)이 제단 뒤 오른쪽이라 제단 콜라이더가 문을 안 막는다.
+    ALTAR_X, ALTAR_Z = gxf(14), gzf(8)          # (0, -12)
+ALTAR_TOP = 0.32 if V2 else 0.30  # 제단 단 높이(platforms[] 로 나간다). v2 = redesign §5
 # 제단 화로 둘. 던전에서 가장 밝은 자리가 목표다
 # ★★★17차 — 비평 부가 "화로가 좌우 대칭으로 똑같이 반복". 광원 · 지오메트리 ·
 #   웜 풀 · 불꽃이 **이 한 표를 같이 본다**(넷이 어긋나면 불꽃과 웅덩이가 따로 노는
@@ -541,7 +632,7 @@ for (_ax, _az, _as, _ay, _apr, _afs, _aft) in ALT_BRAZ:
     add_light(ALTAR_X + _ax, ALTAR_Z + 0.2 + _az, 1.15, 7.0, 0.95,
               TORCH_RGB, near=1.0)
 
-CAMP_X, CAMP_Z = gx_of(23), gz_of(5)      # 북동 취사장 모닥불
+CAMP_X, CAMP_Z = (gx_of(23), gz_of(9)) if V2 else (gx_of(23), gz_of(5))   # 북동 취사장 모닥불
 add_light(CAMP_X, CAMP_Z, 0.55, 6.2, 0.85, TORCH_RGB, near=1.0)
 
 SHAFT_X, SHAFT_Z = gx_of(13), gz_of(23)   # 낙하방 천장 구멍에서 내려오는 찬 빛
@@ -557,17 +648,28 @@ add_light(SHAFT_X, SHAFT_Z, 2.6, 3.4, 0.72, COLD_RGB)
 #   1차 홀이 텅 비어 보인 이유의 절반이 이거였다 - 기둥이 있었지만 안 보였다.
 # ★광원은 지오메트리보다 **먼저** 등록해야 한다(정점색을 굽기 전에 목록이 완성돼야
 #   한다). 그래서 자리를 여기서 손으로 적고, 아래 11절이 같은 좌표에 물건을 세운다.
-FREE_BRAZIERS = [
+FREE_BRAZIERS_V1 = [
     (-5.0, -5.0), (5.0, -5.0), (-5.0, 3.0), (5.0, 3.0),     # 중앙 회랑 기둥 옆
     # ★낙하방은 **스폰 정면 통로**(x -6.5~-3.5 / -2.5~0.5 / 1.5~4.5, z 16~22.5)를
     #   피해야 한다. 첫 배치가 거기 걸려 자기 검증이 두 건 실패로 잡았다.
     (-7.6, 16.4), (5.2, 16.4),                              # 낙하방 양 끝
     (-7.2, -17.2), (7.2, -17.2),                            # 제단 방 입구
 ]
+# ★v2 — 회랑(r14-19, x -6..6 · z 0..12) 네 귀 + 낙하방 양 끝 + 제단 방 남쪽 어귀.
+#   기둥(x ±3.2)·스폰 정면 통로(스폰 x -5/-1/3, 반폭 2.0)·K12 어귀(x -2..2)를 피한 값.
+# ★회랑 화로를 벽 쪽(x ±5.2)에 세우면 옆 복도(폭 1.98m)의 nav 줄이 죽는다(첫 굽기
+#   섬 3칸의 공범). 기둥 밑동 곁(x ±3.0)에 붙여 세운다 — 컨셉의 "화로가 기둥을
+#   아래에서 비춘다" 그림도 이쪽이 맞다.
+FREE_BRAZIERS_V2 = [
+    (-3.0, 0.9), (3.0, 0.9), (-3.0, 11.3), (3.0, 11.3),     # 중앙 회랑 기둥 밑동 곁
+    (-7.4, 17.0), (5.2, 17.0),                              # 낙하방 양 끝
+    (-3.6, -5.2), (3.6, -5.2),                              # 제단 방 남쪽 어귀(K12 좌우)
+]
+FREE_BRAZIERS = FREE_BRAZIERS_V2 if V2 else FREE_BRAZIERS_V1
 for (_bx, _bz) in FREE_BRAZIERS:
     add_light(_bx, _bz, 1.34, TORCH_R * 1.05, TORCH_P * 1.05, TORCH_RGB, near=1.0)
 
-STAIR_C0, STAIR_R0 = 22, 21               # 계단 바닥 칸(북으로 오른다)
+STAIR_C0, STAIR_R0 = (22, 22) if V2 else (22, 21)   # 계단 바닥 칸(북으로 오른다)
 STAIR_X = gxf(STAIR_C0 + 1.0)
 STAIR_Z = gz_of(STAIR_R0 + 1)
 # 계단 위 찬 빛. 유일한 출구가 유일하게 차다
@@ -583,7 +685,9 @@ add_light(STAIR_X, gz_of(STAIR_R0) - 0.6, 1.9, 3.6, 0.92, COLD_RGB)
 #     끼워 넣으면 그 줄 앞에 만들어진 면은 이 빛을 못 받아 방 절반만 밝아진다.
 add_light(ALTAR_X, ALTAR_Z + 0.10, 1.30, 3.00, 0.50, COLD_RGB)
 
-WELL_X, WELL_Z = gx_of(4), gz_of(5)       # 북서 우물
+# ★v2 우물 자리: 방 남동 구석. 캠프(i3, -19,-11 r2.2)와 콜라이더 겹침 검사(13절 5)
+#   를 피하고 K8·K10 어귀 동선도 안 막는 자리다.
+WELL_X, WELL_Z = (-15.6, -5.6) if V2 else (gx_of(4), gz_of(5))       # 북서 우물
 
 
 def height_fall(y):
@@ -1698,8 +1802,81 @@ for _cls in (H_FRONT, H_BACK, H_EDGE):
         #   좌표를 bounds ± 반경으로 끌어당기는데, 그 자리가 벽 콜라이더와 맵 경계 사이의
         #   빈 띠면 플레이어가 벽 속에 놓인다. 테두리는 어차피 걸을 수 있는 칸과
         #   안 붙어 있어서(껍질이 두 칸이다) 통과 폭에 아무 영향이 없다.
-        ins = 0.0 if edge else WALL_INSET
-        push_col_box(gx, gz, max(0.30, hx - ins), max(0.30, hz - ins), h, "wall")
+        if not V2:
+            # ── v1 콜라이더: 상자 네 면을 전부 0.22 인셋 ──
+            # ★이게 벽 금 71군데의 뿌리였다(17차 진단). 앞벽·뒷벽처럼 **벽끼리 맞닿는
+            #   면까지** 물러나서 상자 사이에 0.44m 틈이 남았다. v1 재현용으로만 남긴다.
+            ins = 0.0 if edge else WALL_INSET
+            push_col_box(gx, gz, max(0.30, hx - ins), max(0.30, hz - ins), h, "wall")
+
+
+# ═════════════════════════════════════════════════════════════
+# 8c) ★23차 — 벽 콜라이더 면별 인셋 (벽 금 71군데의 근본 수리)
+# ═════════════════════════════════════════════════════════════
+# 17차 진단(LOG.md): 인셋 0.22 의 **목적은 통로 실폭**(4.0 - 1.1 + 0.44 = 3.34m 로
+# nav 두 줄 보장)인데, v1 은 상자의 네 면을 몽땅 물렸다. 그래서 앞벽(1.45)과
+# 뒷벽(3.6)처럼 **벽끼리 맞닿는 면** 사이에 0.44m 짜리, 눈에 안 보이는 금이
+# 71군데(총 420.8m) 남았고, 대시 한 프레임 이동이 밀어내기 축을 뒤집어 사람이
+# 그 금에 박혔다(40초 정지·지붕 보행·카메라 매몰이 전부 이 한 뿌리).
+#
+# 수리: 인셋을 **면 단위**로 준다 — 걷는 칸을 마주보는 면만 0.22 물리고,
+# 벽 칸을 마주보는 면은 칸 경계까지 붙인다. 그러면
+#   · 통로 실폭·nav 두 줄 보장은 그대로다(걷는 면 인셋 불변)
+#   · 벽 속 금은 정의상 0 이 된다(맞닿는 면끼리 좌표가 같다)
+# 검증은 13절이 벽-벽 이음매 전수 커버리지로 잰다(최대 틈 0 이어야 한다).
+# 17차가 이동 규칙 쪽에 깐 방어(moveBy 조각·unwedge, web/main.js)는 그대로 둔다 —
+# 이중 안전이다.
+if V2:
+    def _side_ins(c, r, dc, dr):
+        """(c,r) 벽 칸의 (dc,dr) 쪽 면 인셋. 걷는 칸을 마주볼 때만 물러난다."""
+        return WALL_INSET if not blocked(c + dc, r + dr) else 0.0
+
+    def _cell_h(c, r):
+        cls = wall_class(c, r)
+        h = WALL_H_OF[cls]
+        # v1 rect 경로와 같은 규칙: 남쪽 맨 바깥 줄만 낮은 테두리(4.2m)
+        if cls == H_EDGE and r >= GRID - 1:
+            h = WALL_EDGE_S_H
+        return h
+
+    # 행마다 (높이, 북면 인셋, 남면 인셋)이 같은 벽 칸을 가로로 묶는다.
+    # 묶음 안 칸들의 동·서 면은 이웃이 벽이라 인셋 0 = 이어진 한 상자가 된다.
+    _runs = []
+    for _r in range(GRID):
+        _c = 0
+        while _c < GRID:
+            if not blocked(_c, _r):
+                _c += 1
+                continue
+            _key = (_cell_h(_c, _r), _side_ins(_c, _r, 0, -1), _side_ins(_c, _r, 0, 1))
+            _c1 = _c
+            while (_c1 + 1 < GRID and blocked(_c1 + 1, _r)
+                   and (_cell_h(_c1 + 1, _r), _side_ins(_c1 + 1, _r, 0, -1),
+                        _side_ins(_c1 + 1, _r, 0, 1)) == _key):
+                _c1 += 1
+            _x0 = gxf(_c) + _side_ins(_c, _r, -1, 0)
+            _x1 = gxf(_c1 + 1) - _side_ins(_c1, _r, 1, 0)
+            _z0 = gzf(_r) + _key[1]
+            _z1 = gzf(_r + 1) - _key[2]
+            _runs.append([_x0, _x1, _z0, _z1, _key[0]])
+            _c = _c1 + 1
+    # 세로 병합: x 범위·높이가 같고 z 로 정확히 맞닿는 줄은 한 상자로(콜라이더 수 절감)
+    _runs.sort(key=lambda a: (round(a[0], 3), round(a[1], 3), a[4], a[2]))
+    _merged = []
+    for _ru in _runs:
+        if (_merged and abs(_merged[-1][0] - _ru[0]) < 1e-6
+                and abs(_merged[-1][1] - _ru[1]) < 1e-6
+                and abs(_merged[-1][4] - _ru[4]) < 1e-6
+                and abs(_merged[-1][3] - _ru[2]) < 1e-6):
+            _merged[-1][3] = _ru[3]
+        else:
+            _merged.append(list(_ru))
+    for (_x0, _x1, _z0, _z1, _h) in _merged:
+        push_col_box((_x0 + _x1) * 0.5, (_z0 + _z1) * 0.5,
+                     max(0.15, (_x1 - _x0) * 0.5), max(0.15, (_z1 - _z0) * 0.5),
+                     _h, "wall")
+    print("[콜라이더] 벽 상자 %d개 (가로 묶음 %d -> 세로 병합 후)"
+          % (len(_merged), len(_runs)))
 
 
 # ═════════════════════════════════════════════════════════════
@@ -2022,13 +2199,23 @@ for _kid in CORR_BOX:
 ARCHG_S = 1.684
 ARCHG_D = 0.38 * ARCHG_S            # 0.64 — 두께
 # (x, z, yaw, 파묻을 것인가, 뜻)  yaw 0 = 남(+Z)을 본다
-DG_ARCHES = [
+DG_ARCHES_V1 = [
     (-7.0,  14.0,  0.0,          True,  "낙하방 북벽. 스폰 첫 화면의 배경"),
     (0.0,  -24.0,  0.0,          True,  "제단 뒤 북벽. 제단 클로즈업의 초점"),
     (-6.0,  -3.0,  math.pi / 2,  True,  "중앙 회랑 서벽"),
     (6.0,    5.0, -math.pi / 2,  True,  "중앙 회랑 동벽"),
     (18.0,  20.6,  0.0,          False, "탈출 계단 앞 門. 층의 목표"),
 ]
+# ★v2 — 새 방 그래프 기준. 어귀(K6 z4~8 · K7 z6~10 · K13 x2~6)를 피한 자리다.
+DG_ARCHES_V2 = [
+    (-6.0,  16.0,  0.0,          True,  "낙하방 북벽. 스폰 첫 화면의 배경"),
+    (0.0,  -14.0,  0.0,          True,  "제단 뒤 북벽(곳간 문 K13 왼편). 제단 클로즈업의 초점"),
+    (-1.0, -24.0,  0.0,          True,  "곳간 북벽. 막다른 방의 안쪽 벽이 목표처럼 읽힌다"),
+    (-6.0,   9.8,  math.pi / 2,  True,  "중앙 회랑 서벽(K6 어귀 남쪽)"),
+    (6.0,    1.8, -math.pi / 2,  True,  "중앙 회랑 동벽(K7 어귀 북쪽)"),
+    (18.0,  22.3,  0.0,          False, "탈출 계단 앞 門. 층의 목표"),
+]
+DG_ARCHES = DG_ARCHES_V2 if V2 else DG_ARCHES_V1
 for (_ax, _az, _ay, _emb, _why) in DG_ARCHES:
     # 파묻는 아치는 벽면에서 **0.22m 만** 나온다(벽 콜라이더 인셋과 같은 값).
     _bx, _bz = _ax, _az
@@ -2337,11 +2524,16 @@ def add_wear(gx, gz, rad, cell, rot=0.0, squash=1.0):
 HALL_C0, HALL_R0, HALL_C1, HALL_R1 = ROOM_BOX["R_HALL"]
 PILLARS = []
 _BROKEN_PILLAR = {2, 5}
+# ★v2 회랑은 12x12m(r14-19)라 v1 의 "두 칸(4m) 간격 네 줄" 식이 방을 벗어난다.
+#   2.6m 간격 네 줄(z 2.2~10.0)로 여덟 기둥을 세운다 — 기둥 콜라이더(0.60) 사이
+#   1.4m 가 남고 가운데 복도(6.4 - 1.2 = 5.2m)는 그대로다. nav 는 13절이 잰다.
+# ★기둥 줄 z: 3.0m 간격이어야 줄 사이 nav 칸(1.6m 격자)이 살아서 옆 복도가
+#   섬이 안 된다(2.6m 간격의 첫 굽기에서 동쪽 복도 3칸이 섬이 됐다).
+_PILLAR_Z = [1.5, 4.5, 7.5, 10.5] if V2 else [gz_of(HALL_R0 + 1 + i * 2) for i in range(4)]
 for _i in range(4):
-    _rr = HALL_R0 + 1 + _i * 2
     for _k, _dx in enumerate((-3.2, 3.2)):
         px = gxf(HALL_C0 + (HALL_C1 - HALL_C0 + 1) * 0.5) + _dx
-        pz = gz_of(_rr)
+        pz = _PILLAR_Z[_i]
         PILLARS.append((px, pz))
         _idx = _i * 2 + _k
         _bk = 0.42 if _idx in _BROKEN_PILLAR else 0.0
@@ -2360,6 +2552,15 @@ for _i in range(4):
         dgp("pillar_broken" if _bk else "pillar_intact", px, pz, FLOOR_Y,
             yaw=(_idx * 53 % 17) / 17.0 * 6.2832,
             scale=1.25 if _bk else 1.8684, albedo="cut", tag="hall_pillar")
+
+# ── ★23차 — 회랑 낮은 단 둘 (redesign §2 "기둥 여덟 + 단차") ──
+# platforms 문법이라 막지 않고 올라선다. 가운데 복도(기둥 사이 5.2m)에 앉힌다.
+if V2:
+    for (_dx3, _dz3, _dhx, _dhz, _dt3) in ((0.0, 3.3, 1.5, 1.05, 0.18),
+                                           (0.2, 9.2, 1.2, 0.85, 0.12)):
+        add_box(buf_trim, _dx3, _dz3, FLOOR_Y, FLOOR_Y + _dt3, _dhx, _dhz,
+                seg=0.9, top_boost=TOP_BONUS + 0.05)
+        push_plat_box(_dx3, _dz3, _dhx, _dhz, FLOOR_Y + _dt3, "hall_dais")
 
 # ── 세워 두는 화로 (자리는 4절 FREE_BRAZIERS 에 있다) ──
 # ★15차. 처방전 E-2 — 화로도 **무작위 회전과 크기 ±15%**. 여덟이 똑같이 서 있으면
@@ -2395,6 +2596,13 @@ ALT_HX, ALT_HZ = 2.6, 1.9
 add_box(buf_altar, ALTAR_X, ALTAR_Z, FLOOR_Y, FLOOR_Y + ALTAR_TOP, ALT_HX, ALT_HZ,
         seg=1.0, top_boost=TOP_BONUS + 0.06)
 push_plat_box(ALTAR_X, ALTAR_Z, ALT_HX, ALT_HZ, FLOOR_Y + ALTAR_TOP, "altar")
+if V2:
+    # ★redesign §5 수직성 — 제단 단(0.32) 앞 계단식 2단. platforms 문법 그대로
+    #   (콜라이더 없음 · 올라설 수 있는 높이만). 남쪽(정예 캠프 쪽)에서 오르게 한다.
+    for (_sz2, _st2) in ((ALTAR_Z + ALT_HZ + 0.40, 0.21), (ALTAR_Z + ALT_HZ + 1.22, 0.10)):
+        add_box(buf_altar, ALTAR_X, _sz2, FLOOR_Y, FLOOR_Y + _st2, 2.0, 0.42,
+                seg=0.9, top_boost=TOP_BONUS + 0.06)
+        push_plat_box(ALTAR_X, _sz2, 2.0, 0.42, FLOOR_Y + _st2, "altar_step")
 # 제단석. 증표가 이 위에 뜬다(높이는 web/level2.js 가 groundY + 0.9 로 잡는다)
 # ★16차. 단(올라서는 낮은 계단)은 그대로 두고 **그 위의 돌만** Meshy 제단으로 바꾼다.
 #   원자재는 1.89 x 0.77 x 1.55 이라 콜라이더(1.72 x 1.20)에 맞추려면 0.82 배다
@@ -2504,7 +2712,7 @@ EXIT_X, EXIT_Z = STAIR_X, STAIR_Z0 - 1.4
 #   ② `RND` 를 한 번도 안 당긴다(좌표가 전부 상수) -> 난수 스트림 불변
 #      = 잔해·횃불·nav 배치가 통째로 그대로다(13차B 의 그 사고를 안 되풀이한다)
 #   ③ 스폰 정면 통로(SPAWN_LANE)와 방 한복판 동선은 비운다 — 벽에서 1.6m 안쪽까지만
-DRESS = [
+DRESS_V1 = [
     # (종류, x, z, yaw, 크기, 알베도)
     # R_NW 북서 우물방 — 판정 컷 09_nw_room 이 "텅 빈 방"의 대표였다
     ("rubble_small",  -22.0, -21.6, 0.42, 0.62, "rubble"),
@@ -2527,6 +2735,32 @@ DRESS = [
     ("rubble_small",   22.6,  16.8, 3.42, 0.60, "rubble"),
     ("coping_chunk",   14.2,  21.8, 2.05, 0.72, "trim"),
 ]
+# ★v2 — 새 방 좌표. 우물(-15.6,-5.6)·캠프 스팟 고리·어귀를 피해 손으로 계산했다.
+#   서쪽 갈래(NW·WEST)는 "잔해 엄폐 빽빽"(redesign §2)이라 한 점씩 더 얹는다.
+DRESS_V2 = [
+    # R_NW (r7-11, x -24..-14 · z -14..-4)
+    ("rubble_small",  -22.0, -12.6, 0.42, 0.62, "rubble"),
+    ("rubble_large",  -22.6,  -8.4, 2.31, 0.78, "rubble"),
+    ("coping_chunk",  -16.2, -13.0, 1.14, 0.70, "trim"),
+    ("rubble_small",  -17.6,  -4.8, 4.02, 0.55, "rubble"),
+    # R_WEST (r14-19, z 0..12)
+    ("rubble_large",  -21.8,  10.6, 0.85, 0.72, "rubble"),
+    ("coping_chunk",  -14.9,   5.0, 3.30, 0.66, "trim"),   # K6 문어귀 잔해(서쪽 좁힘)
+    ("rubble_small",  -16.0,  11.2, 5.10, 0.58, "rubble"),
+    ("rubble_small",  -20.8,   4.6, 1.90, 0.60, "rubble"),
+    # R_EAST (r14-19)
+    ("rubble_small",   18.6,   1.2, 1.72, 0.60, "rubble"),
+    ("coping_chunk",   15.2,  11.2, 0.28, 0.74, "trim"),
+    ("rubble_large",   22.0,   5.4, 3.95, 0.70, "rubble"),
+    # R_NE (r7-11)
+    ("rubble_small",   18.0, -13.2, 2.65, 0.56, "rubble"),
+    ("coping_chunk",   22.4,  -5.2, 4.55, 0.68, "trim"),
+    # R_STAIR (r22-25) — 보상 장면의 좌우(계단 x16..20 은 안 건드린다)
+    ("rubble_large",   13.6,  17.2, 1.05, 0.76, "rubble"),
+    ("rubble_small",   20.8,  23.0, 3.42, 0.60, "rubble"),
+    ("coping_chunk",   13.4,  22.8, 2.05, 0.72, "trim"),
+]
+DRESS = DRESS_V2 if V2 else DRESS_V1
 _dress_bad = []
 for (_dk, _dx2, _dz2, _dy2, _ds2, _da2) in DRESS:
     # ★손으로 적은 좌표는 반드시 검사한다. 벽 속에 놓으면 화면에서 통째로 사라지고
@@ -2537,6 +2771,69 @@ for (_dk, _dx2, _dz2, _dy2, _ds2, _da2) in DRESS:
     dgp(_dk, _dx2, _dz2, FLOOR_Y, yaw=_dy2, scale=_ds2, albedo=_da2, tag="dress17")
 # ★NOTE / FAIL 은 14절에서 만든다. 여기서는 결과만 들고 있다가 거기서 싣는다.
 DRESS_BAD = _dress_bad
+
+# ═════════════════════════════════════════════════════════════
+# 11-8b) ★23차 — 봉인 곳간(R_VAULT) 소품 · 붕괴 틈(K14) 드레싱
+# ═════════════════════════════════════════════════════════════
+if V2:
+    # ── 곳간: 미케네 곳간 무드(피토스 항아리 · 궤짝 · 잉곳 더미) ──
+    # ★전부 저폴리 절차 생성이다(항아리 하나 ~64 삼각형). 오너 허락("일단 만들고
+    #   나중에 Meshy 로 업그레이드") 하의 자리 표시 퀄리티 — Meshy 승격 후보로 보고한다.
+    # ★20차 아이템(청동 소가죽 잉곳·황금 탈란톤)과 세계관이 이어진다(redesign §1).
+    def add_pithos(gx, gz, s, ph=0.0):
+        """피토스(저장 항아리): 배가 부른 원뿔대 두 단 + 아가리. 콜라이더 = 원기둥."""
+        add_prism(buf_cut, gx, gz, FLOOR_Y, FLOOR_Y + 0.62 * s, 0.26 * s, 0.40 * s,
+                  n=8, phase=ph, cap=False, smooth=True)
+        add_prism(buf_cut, gx, gz, FLOOR_Y + 0.62 * s, FLOOR_Y + 1.02 * s, 0.40 * s,
+                  0.20 * s, n=8, phase=ph, cap=False, smooth=True)
+        add_prism(buf_iron, gx, gz, FLOOR_Y + 1.02 * s, FLOOR_Y + 1.12 * s, 0.20 * s,
+                  0.23 * s, n=8, phase=ph)
+        push_col_circle(gx, gz, 0.40 * s, 1.1 * s, "jar")
+
+    # 북벽·서벽을 따라 줄지어 세운다. 캠프(i7: -2,-21 r1.6)의 스팟 고리와
+    # 문(K13, x 2..6)의 동선은 비워 둔다. 벽면 인셋(0.22) 안쪽까지만 나온다.
+    for (_jx, _jz, _js, _jp) in ((-6.8, -23.0, 0.95, 0.3), (-5.3, -23.2, 1.10, 1.1),
+                                 (-3.8, -22.9, 0.85, 2.0), (2.4, -23.1, 1.00, 0.7),
+                                 (4.9, -22.9, 0.90, 1.6), (-7.1, -19.0, 0.90, 2.4)):
+        add_pithos(_jx, _jz, _js, _jp)
+
+    def add_chest(gx, gz, yaw, s):
+        """궤짝: 몸통 + 볼록 뚜껑 + 쇠 띠. 콜라이더 = 원(회전 상자를 AABB 로 못 적는다)."""
+        add_box(buf_trim, gx, gz, FLOOR_Y, FLOOR_Y + 0.50 * s, 0.46 * s, 0.30 * s,
+                rot=yaw, seg=0.6, top_boost=TOP_BONUS)
+        add_box(buf_trim, gx, gz, FLOOR_Y + 0.50 * s, FLOOR_Y + 0.64 * s,
+                0.49 * s, 0.33 * s, rot=yaw, seg=0.6, top_boost=TOP_BONUS + 0.05)
+        add_box(buf_iron, gx, gz, FLOOR_Y + 0.30 * s, FLOOR_Y + 0.38 * s,
+                0.50 * s, 0.34 * s, rot=yaw)
+        push_col_circle(gx, gz, 0.55 * s, 0.7 * s, "chest")
+
+    add_chest(4.6, -22.4, 0.40, 1.00)
+    add_chest(-6.7, -20.4, 1.35, 0.88)
+
+    # 잉곳 더미(소가죽 모양까지는 안 간다 — 납작한 판 여섯 장 엇쌓기. 콜라이더 없음)
+    for _ii in range(6):
+        _ix = 0.9 + (_ii % 3) * 0.34 - 0.34
+        _iz = -22.9 + (_ii // 3) * 0.22
+        add_box(buf_iron, _ix, _iz, FLOOR_Y + (_ii // 3) * 0.07,
+                FLOOR_Y + (_ii // 3) * 0.07 + 0.07,
+                0.19, 0.13, rot=(_ii * 37 % 7) / 7.0 * 0.5)
+
+    # ── 붕괴 틈(K14): 콜라이더 없는 잔해 + 부러진 아치 + 새는 달빛 ──
+    # ★통로 폭 4.0m 계약 — 이 블록은 push_col_* 를 한 번도 안 부른다.
+    #   "시각적으로 좁게"는 낮은 돌무더기(정강이 높이)와 무너진 아치가 만든다.
+    for _ki, (_kx, _kz, _kr) in enumerate(((6.6, -3.4, 0.44), (13.4, -0.6, 0.40),
+                                           (10.6, -3.5, 0.34), (10.6, 0.6, 0.38),
+                                           (13.5, 3.4, 0.42), (8.2, -0.5, 0.30))):
+        add_prism(buf_rubble, _kx, _kz, FLOOR_Y, FLOOR_Y + 0.22 + (_ki % 3) * 0.11,
+                  _kr, _kr * 0.62, n=5, phase=_ki * 1.3, top_boost=TOP_BONUS)
+    # 부러진 아치 — A 의 제단 쪽 어귀(z=-4)와 B 의 감옥 쪽 어귀(x=14)
+    add_arch(buf_trim, 8.0, -4.0, True, ARCH_HALF, ARCH_SPRING, WALL_BACK_H,
+             ARCH_DEPTH, broken=True)
+    add_arch(buf_trim, 14.0, 2.0, False, ARCH_HALF, ARCH_SPRING, WALL_BACK_H,
+             ARCH_DEPTH, broken=True)
+    # 틈으로 새는 달빛 웅덩이(4절 SEEPS_V2 의 광원과 짝이다)
+    add_pool(9.0, -2.0, 1.9, cold=True, squash=0.80)
+    add_pool(12.0, 2.6, 1.7, cold=True, squash=0.80)
 
 # ── 북서 우물 ──
 add_prism(buf_cut, WELL_X, WELL_Z, FLOOR_Y, FLOOR_Y + 0.72, 1.28, 1.22, n=10, smooth=True,
@@ -2567,12 +2864,22 @@ add_box(buf_iron, gx_of(EAST_C1) + 0.55, gz_of(EAST_R0) + 2.8,
 # 컨셉 홀 전경을 가로지르는 그 물건. 자리는 손으로 적는다 - 무리 자리·스폰 정면·
 # 통로 어귀를 다 피해야 해서 난수로 뽑으면 매번 다시 검사해야 한다.
 # (x, z, yaw, 길이, 반지름)
-FALLEN = [
+FALLEN_V1 = [
     (2.20, 7.60, 0.28, 5.6, 0.58),      # 중앙 회랑 남쪽. 화면을 대각으로 가른다
     (-17.4, 7.20, 1.25, 4.6, 0.54),     # 서쪽 창고
     (-6.40, -17.0, -0.50, 5.0, 0.56),   # 제단 방. 정예 무리 서쪽
     (17.2, 7.40, 1.10, 4.2, 0.52),      # 동쪽 감옥
 ]
+# ★v2 — 새 방 기준. 캠프 중심·기둥·어귀와의 간섭을 손으로 계산해 피한 값이다
+#   (캠프 중심 검사는 13절 5 가 다시 잰다).
+FALLEN_V2 = [
+    (0.6, 6.15, 0.35, 4.2, 0.50),       # 중앙 회랑 **가운데 복도** 대각. 옆 복도(x ±4.8
+    #                                     nav 줄)를 막으면 섬이 생겨서 가운데로 옮겼다
+    (-17.0, 2.0, 1.10, 4.4, 0.52),      # 서쪽 창고 북부(캠프는 남쪽이다)
+    (-6.8, -9.0, -0.50, 5.0, 0.56),     # 제단 방 서쪽. 정예 무리 서편
+    (16.4, 3.0, 1.10, 4.2, 0.52),       # 동쪽 감옥. 붕괴 틈(K14B) 어귀 남서
+]
+FALLEN = FALLEN_V2 if V2 else FALLEN_V1
 for (_fx, _fz, _fy, _fl, _fr) in FALLEN:
     add_fallen_column(buf_cut, _fx, _fz, _fy, _fl, _fr)
 
@@ -2787,6 +3094,10 @@ def rubble_ok(gx, gz, rad):
 for (rid, c0, r0, c1, r1) in ROOMS:
     if rid in ("R_ENTRY", "R_STAIR"):
         n = 3
+    elif rid == "R_VAULT":
+        n = 2               # ★곳간은 항아리·궤짝(11-8b)이 채운다. 잔해는 조금만
+    elif V2 and rid in ("R_WEST", "R_NW"):
+        n = 9               # ★서쪽 우회로 "잔해 엄폐 빽빽"(redesign §2)
     else:
         n = 6
     tries = 0
@@ -2954,7 +3265,9 @@ for (_rid, _c0, _r0, _c1, _r1) in ROOMS:
 #   "천장이 통째로 무너진 집"이 되고 어둠이 정보를 잃는다.
 SHAFTS = [
     (SHAFT_X, SHAFT_Z, 1.05, 1.55, 6.2, 0.22),   # 낙하방. 굵고 곧다
-    (gx_of(13), gz_of(12), 0.82, 1.22, 5.6, -0.28),  # 중앙 회랑
+    # 중앙 회랑 — v2 는 회랑이 r14-19 로 내려왔다
+    (gx_of(13), gz_of(16), 0.82, 1.22, 5.6, -0.28) if V2
+    else (gx_of(13), gz_of(12), 0.82, 1.22, 5.6, -0.28),
 ]
 
 
@@ -3000,7 +3313,7 @@ add_pool(STAIR_X, gz_of(STAIR_R0) + 0.4, 2.30, cold=True, squash=0.72)
 # ★enemy.js 가 마릿수를 **순번**으로 정한다: count = 3 + (i % 3).
 #   그래서 이 배열의 **순서가 곧 마릿수 배분**이다(enemy.js 는 소유 밖이라 안 고친다).
 #     i=0 -> 3 / i=1 -> 4 / i=2 -> 5 / i=3 -> 3 / i=4 -> 4 / i=5 -> 5
-MOB_SPEC = [
+MOB_SPEC_V1 = [
     ("R_WEST",  gx_of(4), gz_of(15), 2.4),    # 3마리. 첫 전투
     ("R_EAST",  gx_of(23), gz_of(15), 2.6),   # 4마리
     ("R_ALTAR", ALTAR_X, ALTAR_Z + 4.2, 3.0),  # 5마리. 제단 정예
@@ -3008,6 +3321,23 @@ MOB_SPEC = [
     ("R_NE",    gx_of(23), gz_of(3), 2.6),    # 4마리
     ("R_HALL",  gx_of(13), gz_of(14), 3.0),   # 5마리. 지름길의 값
 ]
+# ★v2 — 8스팟 31마리 (redesign §3. 순서 = 마릿수 3+i%3 이라 순서가 곧 스펙이다).
+# ★좌표·반경은 스윕으로 골랐다(renders/history/v99_wave23/dungeon/scripts/design_check.py):
+#   "설 수 있는 nav 칸에서 두 캠프 스팟이 동시에 어그로(7m) 안"인 칸을 직접 세서
+#   최소화한 값이다. 남는 겹침은 셋뿐이고 전부 **탈출 관문 설계 의도** 안에 있다
+#   (i1+i6 감옥 서편·i2+i6 제단 남동·i2+i7 곳간 문어귀). 진입 세 갈래의 첫 전투
+#   구역(i0·i1·i3·i4·i5 서로)은 겹침 0 이 계약이고 13절이 검증한다.
+MOB_SPEC_V2 = [
+    ("R_WEST",  gx_of(4), gz_of(18), 2.4),     # i0 3마리. 서쪽 길 첫 전투
+    ("R_EAST",  22.0, 10.0, 1.9),              # i1 4마리. 동쪽 길 첫 전투
+    ("R_ALTAR", ALTAR_X, ALTAR_Z + 4.2, 3.0),  # i2 5마리. 정예 — 증표를 몸으로 막는다
+    ("R_NW",    gx_of(4), gz_of(8), 2.2),      # i3 3마리. 서쪽 둘째
+    ("R_NE",    22.2, -9.8, 1.7),              # i4 4마리. 동쪽 둘째(잔해 난수 자리를 피함)
+    ("R_HALL",  -0.8, 9.5, 2.2),               # i5 5마리. 지름길의 값
+    ("K14",     12.0, 0.6, 1.3),               # i6 3마리. ★탈출길 매복(붕괴 틈 어귀)
+    ("R_VAULT", -2.0, -21.0, 1.6),             # i7 4마리. 막다른 곳간의 문지기
+]
+MOB_SPEC = MOB_SPEC_V2 if V2 else MOB_SPEC_V1
 
 SPAWNS_JSON = []
 for _i, (gx, gz) in enumerate(SPAWN_PTS):
@@ -3126,15 +3456,21 @@ else:
     _reach(EXIT_X, EXIT_Z, "탈출 계단", rad=2.6)
 
 # 2) 막다른 길: 방마다 출입구가 둘 이상인가
+# ★23차 — R_VAULT 만 예외다. redesign §1: "막다른 길 0 원칙을 여기 한 곳만 일부러
+#   깬다 — 리스크의 본질이 퇴로 하나이기 때문이다". 정확히 1개인지는 확인한다.
 for (rid, c0, r0, c1, r1) in ROOMS:
     doors = 0
     for (kid, kc0, kr0, kc1, kr1) in CORRIDORS:
         touch = not (kc1 + 1 < c0 or kc0 - 1 > c1 or kr1 + 1 < r0 or kr0 - 1 > r1)
         if touch:
             doors += 1
-    if doors < 2:
+    if rid == "R_VAULT" and V2:
+        if doors != 1:
+            FAIL.append("곳간 출입구가 %d개다(설계상 정확히 1개여야 한다)" % doors)
+    elif doors < 2:
         FAIL.append("방 %s 의 출입구가 %d개다(막다른 길)" % (rid, doors))
-NOTE.append("방 %d개 · 통로 %d개 · 막다른 길 0" % (len(ROOMS), len(CORRIDORS)))
+NOTE.append("방 %d개 · 통로 %d개 · 막다른 길 %s"
+            % (len(ROOMS), len(CORRIDORS), "1(곳간, 의도)" if V2 else "0"))
 NOTE.append("균열 데칼 %d줄 · 갓돌 %d장 · 벽 밑동 잔해 %d무더기" % (_crack_n, _cope, _foot))
 
 # 3) 통로 여유: 통로 단면마다 nav 칸이 **2줄 이상** 살아 있는가
@@ -3175,16 +3511,64 @@ for _i, (sx, sz) in enumerate(SPAWN_PTS):
             FAIL.append("SPAWN_%d 정면 %.1fm 에 콜라이더가 있다" % (_i + 1, _t * 0.5))
             break
 
-# 5) 무리 간격 17m 이상 · 무리가 벽에 안 끼는가
+# 5) 무리 간격 · 무리가 벽에 안 끼는가
+# ★23차 — 17m 원칙의 뜻은 "어그로 원(7m) 두 개가 안 겹쳐서 한 무리만 떼어낼 수
+#   있다"이다(원판 §2). v2 는 매복(K14)·문지기(R_VAULT) 두 캠프가 **설계상** 기존
+#   캠프 곁에 서므로 중심 간 17m 을 전 쌍에 강제할 수 없다(56m 판에 8캠프의 기하 한계.
+#   redesign §3 의 완화 조항이 예상한 그 대목이다). 그래서 v2 계약은 둘로 갈린다:
+#     (가) 진입 경험을 만드는 **방 캠프 여섯끼리**는 여전히 17m 이상
+#     (나) 전 캠프에 대해 **기능적 겹침**(설 수 있는 nav 칸에서 두 캠프의 개체
+#          스팟이 동시에 7m 안)을 직접 세고, 방 캠프끼리의 겹침은 0 이어야 한다.
+#          매복·문지기가 낀 겹침은 탈출 관문 지대(제단 남동·감옥 서편·곳간 어귀)
+#          안에서만 허용하고 개수를 NOTE 로 남긴다.
 _mind = 1e9
+_mind_room = 1e9
+_ROOMCAMP = set(i for i, m in enumerate(MOB_SPEC) if m[0] not in ("K14", "R_VAULT"))
 for _i in range(len(MOB_SPEC)):
     for _j in range(_i + 1, len(MOB_SPEC)):
         _d = math.hypot(MOB_SPEC[_i][1] - MOB_SPEC[_j][1],
                         MOB_SPEC[_i][2] - MOB_SPEC[_j][2])
         _mind = min(_mind, _d)
-if _mind < 17.0:
+        if _i in _ROOMCAMP and _j in _ROOMCAMP:
+            _mind_room = min(_mind_room, _d)
+if _mind_room < 17.0:
+    FAIL.append("방 캠프 최소 간격 %.1fm (17m 이상이어야 어그로 두 개가 안 겹친다)"
+                % _mind_room)
+if not V2 and _mind < 17.0:
     FAIL.append("무리 최소 간격 %.1fm (17m 이상이어야 어그로 두 개가 안 겹친다)" % _mind)
-NOTE.append("무리 최소 간격 %.1fm" % _mind)
+NOTE.append("무리 최소 간격 %.1fm (방 캠프끼리 %.1fm)" % (_mind, _mind_room))
+
+# ── 기능적 어그로 겹침 (enemy.js 의 결정적 스팟 배치식을 그대로 재현한다) ──
+def _h1e(n):
+    _x9 = math.sin(n * 127.1 + 311.7) * 43758.5453
+    return _x9 - math.floor(_x9)
+
+_spots = []
+for _gi, _m in enumerate(MOB_SPEC):
+    _cnt = 3 + _gi % 3
+    for _k in range(_cnt):
+        _ang = (_k / _cnt) * math.pi * 2 + _gi * 0.7
+        _rr2 = _m[3] * (0.45 + 0.55 * _h1e(_gi * 31 + _k))
+        _spots.append((_gi, _m[1] + math.cos(_ang) * _rr2, _m[2] + math.sin(_ang) * _rr2))
+_dbl = {}
+if REACH is not None:
+    for _r9 in range(NW_):
+        for _c9 in range(NW_):
+            if not (navwalk[_r9][_c9] and REACH[_r9][_c9]):
+                continue
+            _x9 = -HALF + (_c9 + 0.5) * NAV_CELL
+            _z9 = -HALF + (_r9 + 0.5) * NAV_CELL
+            _near = set(_gi for (_gi, _sx9, _sz9) in _spots
+                        if (_x9 - _sx9) ** 2 + (_z9 - _sz9) ** 2 < 49.0)
+            if len(_near) >= 2:
+                _key = tuple(sorted(_near))
+                _dbl[_key] = _dbl.get(_key, 0) + 1
+for _key, _n9 in sorted(_dbl.items()):
+    if set(_key) <= _ROOMCAMP:
+        FAIL.append("방 캠프끼리 어그로가 겹친다: %s %d칸" % (_key, _n9))
+NOTE.append("어그로 겹침(매복·문지기 관련만 허용): "
+            + (" ".join("%s%d칸" % ("+".join("i%d" % k for k in _key), _n9)
+                        for _key, _n9 in sorted(_dbl.items())) or "없음"))
 for _i, m in enumerate(MOB_SPEC):
     if _col_hits(m[1], m[2], 0.9):
         FAIL.append("무리 MOB_%d 자리가 콜라이더에 낀다" % (_i + 1))
@@ -3200,6 +3584,75 @@ for _a in range(24):
         break
 if not _ok:
     FAIL.append("제단 반경 1.7m 안에 설 수 있는 자리가 없다(증표를 못 줍는다)")
+
+# 7) ★23차 — 벽 속 금 0 검증 (콜라이더 커버리지 전수 표본)
+# 17차의 금 71군데는 "벽 그림은 차 있는데 콜라이더 사이가 빈" 자리였다. 벽 칸
+# 전부를 0.33m 격자로 찔러서, 커버 안 된 표본이 **걷는 면의 정당한 인셋 띠
+# (0.22m + 여유)** 밖에 있으면 그게 금이다. 하나라도 있으면 굽기를 실패로 친다.
+if V2:
+    _wb = [co for co in COLLIDERS if co["type"] == "box" and co["tag"] == "wall"]
+
+    def _wcov(px, pz):
+        for _co in _wb:
+            if (abs(px - _co["x"]) <= _co["hx"] + 1e-9
+                    and abs(pz - _co["z"]) <= _co["hz"] + 1e-9):
+                return True
+        return False
+
+    _holes = 0
+    _hole_pts = []
+    for _r8 in range(GRID):
+        for _c8 in range(GRID):
+            if not blocked(_c8, _r8):
+                continue
+            for _iy in range(6):
+                for _ix in range(6):
+                    _px = gxf(_c8) + (_ix + 0.5) / 6.0 * CELL
+                    _pz = gzf(_r8) + (_iy + 0.5) / 6.0 * CELL
+                    if _wcov(_px, _pz):
+                        continue
+                    _near_open = False
+                    for (_dc4, _dr4) in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        if blocked(_c8 + _dc4, _r8 + _dr4):
+                            continue
+                        if _dc4 == 1:
+                            _d5 = gxf(_c8 + 1) - _px
+                        elif _dc4 == -1:
+                            _d5 = _px - gxf(_c8)
+                        elif _dr4 == 1:
+                            _d5 = gzf(_r8 + 1) - _pz
+                        else:
+                            _d5 = _pz - gzf(_r8)
+                        if _d5 <= WALL_INSET + 0.08:
+                            _near_open = True
+                            break
+                    if not _near_open:
+                        _holes += 1
+                        if len(_hole_pts) < 8:
+                            _hole_pts.append((round(_px, 2), round(_pz, 2)))
+    NOTE.append("벽 속 커버리지 구멍 표본 %d개 (0 이어야 한다)" % _holes)
+    if _holes:
+        FAIL.append("벽 콜라이더 사이에 금이 남았다: 표본 %d개 %s" % (_holes, _hole_pts))
+
+# 8) ★통로 어둠 구멍(HANDOFF §7-12) — 통로마다 바닥 정점 휘도 p25 를 남긴다.
+# 서쪽 갈래는 어둡게 가되(redesign §2) "한복판 완전 어둠"은 결함이다. 찬 스며듦
+# 빛(SEEPS_V2)이 바닥을 최소한으로 받치는지 여기서 잰다.
+_corp = []
+_fverts = list(zip(buf_floor.v, buf_floor.c)) + list(zip(buf_floorb.v, buf_floorb.c))
+for (kid, c0, r0, c1, r1) in CORRIDORS:
+    _x0b, _x1b = gxf(c0), gxf(c1 + 1)
+    _z0b, _z1b = gzf(r0), gzf(r1 + 1)
+    _ls = [0.2126 * _cc[0] + 0.7152 * _cc[1] + 0.0722 * _cc[2]
+           for (_vv, _cc) in _fverts
+           if _x0b <= _vv[0] <= _x1b and _z0b <= -_vv[1] <= _z1b and _vv[2] < 0.5]
+    if _ls:
+        _corp.append((kid, float(np.percentile(np.array(_ls, np.float32), 25))))
+NOTE.append("통로 바닥 정점휘도 p25: "
+            + " ".join("%s %.3f" % _t for _t in _corp))
+for (kid, _p25v) in _corp:
+    # 0.115 = AMB 휘도(0.165)의 70%. 이 밑이면 접지 어둠·매크로가 겹쳐 "구멍"으로 읽힌다
+    if _p25v < 0.115:
+        FAIL.append("통로 %s 바닥 p25 %.3f — 완전 어둠 구멍(§7-12 재발)" % (kid, _p25v))
 
 
 # ═════════════════════════════════════════════════════════════
@@ -3596,7 +4049,8 @@ data = {
     "name": "level2",
     "title": "탑 1층 - 어둠에 잠긴 회랑",
     "generatedBy": "blender/s40_dungeon1.py",
-    "design": "docs/dungeon1-design.md",
+    "design": ("docs/dungeon1-redesign.md (공학 계약은 docs/dungeon1-design.md 상속)"
+               if V2 else "docs/dungeon1-design.md"),
     "coordinateSystem": (
         "three.js. X=동, Y=위, Z=남. 블렌더 원본은 Z-up 이고 export_yup=True 로 "
         "변환됐다(three.x=blender.x, three.y=blender.z, three.z=-blender.y). "
@@ -3616,11 +4070,15 @@ data = {
     "mobs": MOBS_JSON,
     "mobNote": (
         "★enemy.js 가 마릿수를 순번으로 정한다(count = 3 + i%3). 그래서 이 배열의 "
-        "**순서가 곧 마릿수 배분**이다: 3 / 4 / 5 / 3 / 4 / 5. "
+        "**순서가 곧 마릿수 배분**이다: "
+        + " / ".join(str(3 + i % 3) for i in range(len(MOB_SPEC))) + ". "
         "자리 뜻은 " + " · ".join("%s=%d마리" % (m[0], 3 + i % 3)
                                   for i, m in enumerate(MOB_SPEC)) + ". "
-        "무리 최소 간격 %.1fm (어그로 7m 두 개가 안 겹쳐야 한 무리만 떼어낼 수 있다)."
-        % _mind
+        + ("무리 최소 간격 %.1fm(방 캠프끼리 %.1fm). K14 매복·R_VAULT 문지기는 탈출 "
+           "관문이라 일부러 가깝다 — 진입 갈래의 방 캠프끼리는 어그로(7m)가 안 겹친다."
+           % (_mind, _mind_room) if V2 else
+           "무리 최소 간격 %.1fm (어그로 7m 두 개가 안 겹쳐야 한 무리만 떼어낼 수 있다)."
+           % _mind)
     ),
     # ★보스 없음. boss 키를 일부러 안 넣는다 - 이 층에 각귀(boss.glb)는 안 뜬다.
     "exits": EXITS_JSON,
@@ -3653,9 +4111,14 @@ data = {
         "박스는 축정렬(회전 없음)이라 2D AABB 로 바로 검사하면 된다. circle 은 원기둥. "
         "glb 안에서 COL_ 로 시작하는 메시가 막는 지형이고 DECO_ 는 안 막는다. "
         "tag: wall=돌벽 · pillar=회랑 기둥 · altar=제단 · brazier=화로 · "
-        "well=우물 · campfire=모닥불 · rubble=큰 잔해. "
-        "★벽 콜라이더는 칸 경계에서 %.2fm 안으로 들어가 있다(통로 실폭 %.2fm)."
-        % (WALL_INSET, CELL * 2 + WALL_INSET * 2)
+        "well=우물 · campfire=모닥불 · rubble=큰 잔해"
+        + (" · jar=곳간 항아리 · chest=곳간 궤짝" if V2 else "") + ". "
+        + ("★벽 콜라이더 인셋은 **면 단위**다(23차 벽 금 수리): 걷는 칸을 마주보는 "
+           "면만 %.2fm 안으로 들어가고(통로 실폭 %.2fm), 벽끼리 맞닿는 면은 칸 "
+           "경계까지 붙어 있어 벽 속에 빈 틈이 없다." % (WALL_INSET, CELL * 2 + WALL_INSET * 2)
+           if V2 else
+           "★벽 콜라이더는 칸 경계에서 %.2fm 안으로 들어가 있다(통로 실폭 %.2fm)."
+           % (WALL_INSET, CELL * 2 + WALL_INSET * 2))
     ),
     "platforms": PLATFORMS,
     "platformNote": (

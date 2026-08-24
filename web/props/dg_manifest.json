@@ -10,22 +10,22 @@
    "tris": 2762,
    "mesh": "COL_DGP_ALTAR",
    "gain": [
-    2.96754,
-    3.05424,
-    3.0681
+    2.45758,
+    2.51001,
+    2.53887
    ]
   },
   {
    "kind": "arch_gate",
    "file": "dg_arch_gate.glb",
-   "n": 5,
+   "n": 6,
    "cast": false,
-   "tris": 15410,
+   "tris": 18492,
    "mesh": "DECO_DGP_ARCH_GATE",
    "gain": [
-    4.04678,
-    4.21736,
-    4.16953
+    4.2991,
+    4.4593,
+    4.4172
    ]
   },
   {
@@ -36,22 +36,22 @@
    "tris": 8990,
    "mesh": "COL_DGP_BRAZIER",
    "gain": [
-    3.38743,
-    3.52361,
-    3.55687
+    3.30621,
+    3.43151,
+    3.47209
    ]
   },
   {
    "kind": "coping_chunk",
    "file": "dg_coping_chunk.glb",
-   "n": 25,
+   "n": 26,
    "cast": false,
-   "tris": 9500,
+   "tris": 9880,
    "mesh": "DECO_DGP_COPING_CHUNK",
    "gain": [
-    7.38252,
-    7.65329,
-    7.3504
+    7.15594,
+    7.41689,
+    7.14014
    ]
   },
   {
@@ -62,9 +62,9 @@
    "tris": 5992,
    "mesh": "COL_DGP_PILLAR_BROKEN",
    "gain": [
-    2.65099,
-    2.75632,
-    2.75498
+    2.78992,
+    2.9018,
+    2.88966
    ]
   },
   {
@@ -75,9 +75,9 @@
    "tris": 17580,
    "mesh": "COL_DGP_PILLAR_INTACT",
    "gain": [
-    3.04482,
-    3.15825,
-    3.13364
+    2.38906,
+    2.47169,
+    2.49568
    ]
   },
   {
@@ -88,35 +88,35 @@
    "tris": 14400,
    "mesh": "DECO_DGP_QUOIN_CORNER",
    "gain": [
-    6.54229,
-    6.798,
-    6.62069
+    5.94485,
+    6.17108,
+    6.04
    ]
   },
   {
    "kind": "rubble_large",
    "file": "dg_rubble_large.glb",
-   "n": 13,
+   "n": 18,
    "cast": true,
-   "tris": 14300,
+   "tris": 19800,
    "mesh": "COL_DGP_RUBBLE_LARGE",
    "gain": [
-    8.06775,
-    8.30341,
-    8.06924
+    8.97777,
+    9.26669,
+    8.95378
    ]
   },
   {
    "kind": "rubble_small",
    "file": "dg_rubble_small.glb",
-   "n": 39,
+   "n": 43,
    "cast": true,
-   "tris": 16380,
+   "tris": 18060,
    "mesh": "COL_DGP_RUBBLE_SMALL",
    "gain": [
-    7.99465,
-    8.25461,
-    7.93128
+    7.56815,
+    7.81781,
+    7.54603
    ]
   }
  ]
