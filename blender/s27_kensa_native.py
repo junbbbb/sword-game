@@ -202,6 +202,16 @@ KEEP = [c for c in ("Idle", "Attack", "Heavy", "Wide", "Jump") if c not in NATIV
 #   당긴다. 한 손에 뭘 들고 뛰면 그 팔은 원래 덜 흔든다 - 해부학적으로도 맞는 처리다.
 #   왼팔·다리·척추는 **하나도 안 건드린다**(달리기의 생동감은 거기서 나온다).
 ARM_DAMP = float(os.environ.get("ARM_DAMP", "0.30"))
+# ★24차(2026-08-24): 클립별 감쇠 덮어쓰기 "Run:0.15". 빈 값(기본)이면 전 클립
+#   ARM_DAMP 그대로 = 옛 판 재현. 대검 캐리는 달리기의 오른팔 잔여 스윙(±14도)을
+#   더 눌러야 해서 만들었다 — 무거운 것을 든 팔은 흔들리지 않는다. 걷기는 18차
+#   오너 지시로 튜닝된 판이라 한 도도 안 건드린다.
+DAMP_TABLE = {}
+for _row in os.environ.get("DAMP_TABLE", "").split(","):
+    _row = _row.strip()
+    if _row:
+        _k, _v = _row.split(":")
+        DAMP_TABLE[_k.strip()] = float(_v)
 # 감쇠한 팔을 어깨에서 들어 올리는 각도(도). 0 이면 안 건드린다. 아래 [오른팔 들기] 참조.
 ARM_LIFT = float(os.environ.get("ARM_LIFT", "0"))
 # ★2026-08-12 오너 지시("걸을 때 팔을 너무 뒤로 뺀다") — 드는 **축**을 고른다.
@@ -806,10 +816,13 @@ for nm in NATIVE:
             print("  %-5s %-20s 이동 변화 %.5f  <<< 상수가 아니다" % (nm, bn, max(rng)))
 print("  (출력 없음 = 전부 상수)")
 
-if ARM_DAMP < 1.0:
-    print("\n[오른팔 감쇠] 계수 %.2f (0=평균에 고정, 1=원본 그대로)" % ARM_DAMP)
+if ARM_DAMP < 1.0 or DAMP_TABLE:
+    print("\n[오른팔 감쇠] 계수 %.2f%s (0=평균에 고정, 1=원본 그대로)"
+          % (ARM_DAMP,
+             " / 클립별 %s" % DAMP_TABLE if DAMP_TABLE else ""))
     for nm in NATIVE:
-        for bn, s0, s1 in damp_arm(new[nm], ARM_DAMP):
+        # ★24차: DAMP_TABLE 이 그 클립을 덮으면 그 값, 아니면 ARM_DAMP(옛 판 그대로)
+        for bn, s0, s1 in damp_arm(new[nm], DAMP_TABLE.get(nm, ARM_DAMP)):
             print("  %-5s %-20s 평균에서 최대 %.1f도 -> %.1f도" % (nm, bn, s0, s1))
     print("\n[칼 흔들림] 감쇠 후")
     for nm in NATIVE:
