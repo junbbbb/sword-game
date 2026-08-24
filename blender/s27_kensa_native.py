@@ -255,6 +255,49 @@ for _row in os.environ.get("LIFT_TABLE", "").split(","):
         _k, _v = _row.split(":")
         LIFT_TABLE[_k.strip()] = float(_v)
 
+# ══════════════════════════════════════════════════════════════════════════
+# ★★25차 CARRY_V25 — Walk/Run **오른어깨 거치 캐리** (2026-08-24, 오너 "바바리안이
+#   검 큰거 들고있잖아. 걸을때나 뛸때나 ... 다 모션이상해서 다시 만들어줘. 검이
+#   크니까 물리법칙 논리적으로")
+#   1.83m·31kg 슬래브를 한 손으로 몸 옆에 늘어뜨리고 걷는 것 자체가 물리 위반의
+#   본체다 — 날 폭 0.42m 라 몸에 못 붙이고(PEN_MAX 0.025 계약, 24차 실증) 팔이
+#   벌어지며, 24차 실측 손등은 Walk +40~57도(하늘)/Run -56도(손바닥 하늘)였다.
+#   물리 해법이자 바바리안 정석 = 어깨 거치: 넓적면을 승모근에 얹고 손은 어깨
+#   앞에서 자루를 지그시 누른다. 무게가 어깨(골격)로 직행, 손은 방향만 잡는다.
+#   구현 = 오른팔 4본을 감쇠 0(사이클 평균 고정)으로 만든 뒤 two-bone IK 로 캐리
+#   자세를 **월드 상수 회전**으로 얹는다(프레임별 회전은 관성 양념 하나뿐).
+#   왼팔 자연 스윙(SWING_L)·하체·클립 길이는 한 도도 안 건드린다.
+#   CARRY_V25=0 이면 이 절이 통째로 꺼지고 24차 스택(ELB/LIFT/SWING_R/WRIST)이
+#   그대로 돌아 md5 525d9e99 가 재현된다(25차 롤백 실측).
+CARRY_V25 = os.environ.get("CARRY_V25", "1") == "1"
+CARRY_CLIPS = [c.strip() for c in os.environ.get(
+    "CARRY_CLIPS", "Walk,Run").split(",") if c.strip()]
+# 손목 목표(오른어깨 기준, 게임 m): 앞 / 바깥 / 위  (기본값 = 25차 굽는 값.
+#   6회 반복 실측으로 수렴: 손등 마진 12도+ / 손목꺾임 <=49 / 외전 +14.9 / 접촉 유지)
+CARRY_F = float(os.environ.get("CARRY_F", "0.16"))
+CARRY_O = float(os.environ.get("CARRY_O", "0.04"))
+CARRY_U = float(os.environ.get("CARRY_U", "-0.05"))
+# 칼끝 목표(가슴 좌표계): 고도(+위) / 뒤(180도)에서 바깥으로 벌림(목·머리 회피)
+CARRY_TIP_E = float(os.environ.get("CARRY_TIP_E", "30"))
+CARRY_TIP_B = float(os.environ.get("CARRY_TIP_B", "8"))
+# 관성 양념: 칼끝 고도 출렁 진폭(도. 걸음 주기, 골반 상하 대비 지연) / 지연(게임 초)
+CARRY_AMP = {}
+for _row in os.environ.get("CARRY_AMP", "Walk:2.5,Run:3.5").split(","):
+    _row = _row.strip()
+    if _row:
+        _k, _v = _row.split(":")
+        CARRY_AMP[_k.strip()] = float(_v)
+CARRY_DELAY = float(os.environ.get("CARRY_DELAY", "0.10"))
+CARRY_TS = {"Walk": 1.18, "Run": 1.27}     # main.js 재생속도(지연 프레임 환산)
+# 오른 주먹 손등 노멀(손뼈 로컬). probe_wrist v24committed 실측(칼끝 쪽 재잡기 후
+# 최종 bak). 리그 고정 상수 — 최종 glb 의 probe_wrist 재실측으로 매 파도 검증한다.
+CARRY_BACK_L = Vector((-0.965, +0.161, +0.209)).normalized()
+
+
+def carry_on(nm):
+    return CARRY_V25 and nm in CARRY_CLIPS
+
+
 # ★팔 스윙 자연화 (2026-08-12 오너 지시). 아래 [팔 스윙] 절 참조.
 #   빈 값이면 그 팔을 안 건드린다(옛 판 재현 스위치).
 SWING_R = os.environ.get("SWING_R", "").strip()      # 오른팔 목표 중립 스윙각(도)
@@ -822,8 +865,12 @@ if ARM_DAMP < 1.0 or DAMP_TABLE:
              " / 클립별 %s" % DAMP_TABLE if DAMP_TABLE else ""))
     for nm in NATIVE:
         # ★24차: DAMP_TABLE 이 그 클립을 덮으면 그 값, 아니면 ARM_DAMP(옛 판 그대로)
-        for bn, s0, s1 in damp_arm(new[nm], DAMP_TABLE.get(nm, ARM_DAMP)):
-            print("  %-5s %-20s 평균에서 최대 %.1f도 -> %.1f도" % (nm, bn, s0, s1))
+        # ★25차: 캐리 클립은 감쇠 0 = 오른팔 4본을 사이클 평균에 완전 고정한다.
+        #   거치 팔은 안 흔든다 — 프레임별 움직임은 아래 캐리 절의 관성 양념 하나뿐.
+        _k25 = 0.0 if carry_on(nm) else DAMP_TABLE.get(nm, ARM_DAMP)
+        for bn, s0, s1 in damp_arm(new[nm], _k25):
+            print("  %-5s %-20s 평균에서 최대 %.1f도 -> %.1f도%s"
+                  % (nm, bn, s0, s1, "  (캐리: 평균 고정)" if carry_on(nm) else ""))
     print("\n[칼 흔들림] 감쇠 후")
     for nm in NATIVE:
         blade_arc(new[nm], "DMP " + nm)
@@ -1047,6 +1094,9 @@ if ELB_R:
         if nm not in ELB_CLIPS:
             print("  %-5s 건너뜀(ELB_CLIPS 밖)" % nm)
             continue
+        if carry_on(nm):
+            print("  %-5s 건너뜀(25차 캐리가 팔꿈치까지 통째로 정한다)" % nm)
+            continue
         n, ax, f0, f1 = bend_elbow(new[nm], ELB_R, ELB_DIR)
         print("  %-5s 팔뚝 키 %d개 / 축 (%+.3f,%+.3f,%+.3f) / 팔꿈치각 %.1f~%.1f -> "
               "**%.1f~%.1f도**" % (nm, n, ax.x, ax.y, ax.z, f0[0], f0[1], f1[0], f1[1]))
@@ -1065,6 +1115,9 @@ if ARM_LIFT or LIFT_TABLE:
     for nm in NATIVE:
         if nm not in LIFT_CLIPS:
             print("  %-5s 건너뜀(LIFT_CLIPS 밖)" % nm)
+            continue
+        if carry_on(nm):
+            print("  %-5s 건너뜀(25차 캐리가 팔 각을 통째로 정한다)" % nm)
             continue
         deg = LIFT_TABLE.get(nm, ARM_LIFT)
         if abs(deg) < 1e-9:
@@ -1154,6 +1207,9 @@ if SWING_R or SWING_L:
                 (SWING_R, UPPER_R, r_end, SWING_R_CLIPS, 1.0, 1.0),
                 (SWING_L, UPPER_L, HAND_L, SWING_L_CLIPS, SWING_GF, SWING_GB)):
             if not tgt or nm not in clips:
+                continue
+            if bone == UPPER_R and carry_on(nm):
+                print("  %-5s 오른팔 건너뜀(25차 캐리. 왼팔 자연 스윙은 유지)" % nm)
                 continue
             b4, af, const = swing_arm(new[nm], bone, hand, float(tgt),
                                       gf, gb, SWING_H, axes)
@@ -1272,6 +1328,10 @@ if WRIST_FIX:
           % (TIP_ELEV, CLEAR_MIN, PEN_MAX))
     cands_n, cands_w = cand_deltas(False), cand_deltas(True)
     for nm in NATIVE:
+        if carry_on(nm):
+            print("  %-5s 건너뜀(25차 캐리가 손목·칼 방향을 통째로 정한다)" % nm)
+            WRIST_USED[nm] = None
+            continue
         wide = WRIST_WIDE and (not WIDE_CLIPS or nm in WIDE_CLIPS)
         cands = cands_w if wide else cands_n
         mats = hand_mats(new[nm])
@@ -1328,6 +1388,201 @@ if WRIST_FIX:
     M_FIX = {nm: measure(new[nm], "FIX " + nm, 2) for nm in NATIVE}
 else:
     M_FIX = M_RAW
+
+# ================================================== 7.5) 25차 어깨 거치 캐리
+# (스테이지 순서: 감쇠 0 -> [왼팔 SWING_L 은 위에서 이미] -> 여기서 오른팔을
+#  two-bone IK 로 캐리 자세에 앉히고 손목으로 칼끝·날면·손등을 정한다.
+#  프레임별 회전은 관성 양념 하나 — 나머지는 전부 월드 상수라 방향호가 안 벌어진다)
+if CARRY_V25 and any(nm in CARRY_CLIPS for nm in NATIVE):
+    HEAD_B = "Bip001 Head"
+
+    def const_rot(act, bone, Rq):
+        """월드 상수 회전을 그 뼈의 키 수에 정확히 맞춰 먹인다."""
+        _, fr = key_frames(act, bone)
+        return apply_world_rot(act, bone, [Rq.to_matrix()] * len(fr))
+
+    print("\n[25차 어깨 거치 캐리] 손목목표 어깨 기준 앞%.2f 바깥%.2f 위%+.2f (게임 m)"
+          " / 칼끝 고도+%.0f 뒤-바깥%.0f도 / 양념 %s 지연 %.2fs"
+          % (CARRY_F, CARRY_O, CARRY_U, CARRY_TIP_E, CARRY_TIP_B,
+             CARRY_AMP, CARRY_DELAY))
+    for nm in NATIVE:
+        if not carry_on(nm):
+            continue
+        act = new[nm]
+        lat, up, fwd = chest_axes(act)
+        out = -lat                                   # 오른쪽 = 바깥
+        use(armK, act)
+        # ★fwd 부호를 얼굴(HeadFront)로 실측 보정 — 1차 렌더 눈검증에서 칼끝이
+        #   목표(뒤-위)의 정반대(앞-위)로 나갔다. chest_axes 의 lat x up 은 이
+        #   리그에서 **등 뒤**를 향한다(bend_elbow 는 ELB_DIR 부호가 흡수해 왔다).
+        sc.frame_set(int(round(act.frame_range[0])))
+        bpy.context.view_layer.update()
+        _nose = bwpos("Bip001 HeadFront") - bwpos("Bip001 Head")
+        print("  %-5s nose |%.4f| fwd.dot %.3f fwd=%s out=%s up=%s"
+              % (nm, _nose.length, fwd.dot(_nose.normalized()),
+                 tuple(round(v, 2) for v in fwd), tuple(round(v, 2) for v in out),
+                 tuple(round(v, 2) for v in up)))
+        if fwd.dot(_nose) < 0:
+            fwd = -fwd
+            print("  %-5s (fwd 부호를 얼굴 방향으로 뒤집었다)" % nm)
+        fcs_u, frames = key_frames(act, UPPER_R)
+        n = len(frames)
+        sc.frame_set(frames[0])
+        bpy.context.view_layer.update()
+        S = bwpos(UPPER_R)
+        E = bwpos(FORE_R)
+        W = bwpos(HAND_R)
+        a_len, b_len = (E - S).length, (W - E).length
+        # ── 1) 손목 목표 + two-bone IK (팔꿈치 pole = 아래+바깥) ──
+        T = S + (fwd * CARRY_F + out * CARRY_O + up * CARRY_U) / SCALE
+        d = T - S
+        dl = min(d.length, (a_len + b_len) * 0.999)
+        d = d.normalized()
+        # ★pole 을 바깥(out 0.6)에 두면 위팔 순수외전이 +36 까지 벌어진다(2차 실측.
+        #   계약 <=25 위반). 아래-앞-약간바깥이면 팔꿈치가 몸 옆 아래로 떨어진다.
+        pole = (-up * 0.85 + fwd * 0.30 + out * 0.30).normalized()
+        p = pole - d * pole.dot(d)
+        if p.length < 1e-5:
+            p = -up + d * up.dot(d)
+        p.normalize()
+        ca = (a_len * a_len + dl * dl - b_len * b_len) / (2 * a_len * dl)
+        al = math.acos(max(-1.0, min(1.0, ca)))
+        E2 = S + d * (a_len * math.cos(al)) + p * (a_len * math.sin(al))
+        R1 = (E - S).rotation_difference(E2 - S)
+        const_rot(act, UPPER_R, R1)
+        sc.frame_set(frames[0])
+        bpy.context.view_layer.update()
+        E1, W1 = bwpos(FORE_R), bwpos(HAND_R)
+        R2 = (W1 - E1).rotation_difference(T - E1)
+        const_rot(act, FORE_R, R2)
+        # ── 2) 손목: 칼끝 목표 + 칼축 롤(손등 계약 우선·날면 눕힘 차선) ──
+        sc.frame_set(frames[0])
+        bpy.context.view_layer.update()
+        HM = armK.matrix_world @ armK.pose.bones[HAND_R].matrix
+        R3h = HM.to_3x3()
+        R3h.normalize()
+        u0 = (R3h @ TIP_L).normalized()
+        eR = math.radians(CARRY_TIP_E)
+        bR = math.radians(CARRY_TIP_B)
+        d_t = ((-fwd * math.cos(bR) + out * math.sin(bR)) * math.cos(eR)
+               + up * math.sin(eR)).normalized()    # 뒤-위-바깥
+        q0 = u0.rotation_difference(d_t)
+        n_fl = (R3h @ FLAT_L).normalized()
+        bak0 = (R3h @ CARRY_BACK_L).normalized()
+        # ── 롤 선택 2패스 (1·2차 실측 교훈) ──
+        #   f0 만 보면 몸통 요동(Run 은 사이클에서 손등이 ±20도 출렁인다)에 계약이
+        #   깨진다. 그래서 **전 프레임의 원본 손등 월드**를 먼저 모으고, 후보 롤마다
+        #   사이클 전체가 계약 안인지(하드 게이트) 본 뒤 날면 눕힘을 최적화한다.
+        _, frames_h = key_frames(act, HAND_R)
+        nh = len(frames_h)
+        bak_fs, nfl_fs = [], []
+        for f in frames_h:
+            sc.frame_set(f)
+            bpy.context.view_layer.update()
+            Rf = (armK.matrix_world @ armK.pose.bones[HAND_R].matrix).to_3x3()
+            Rf.normalize()
+            bak_fs.append((Rf @ CARRY_BACK_L).normalized())
+            nfl_fs.append((Rf @ FLAT_L).normalized())
+        best = None
+        for pd in range(-90, 91, 3):
+            qr = Quaternion(d_t, math.radians(pd)) @ q0
+            evs, outs, flats = [], [], []
+            for bk0, nf0 in zip(bak_fs, nfl_fs):
+                bk = (qr @ bk0).normalized()
+                evs.append(math.degrees(math.asin(max(-1.0, min(1.0, bk.z)))))
+                outs.append(bk.dot(out))
+                flats.append(1.0 - abs((qr @ nf0).normalized().dot(up)))
+            # ★게이트 하한을 -15(계약 -25 + 마진 10)로 둔다. 3차 실측: -25 그대로
+            #   두면 날면 눕힘이 롤을 경계(-23~-24)까지 끌고 가 마진이 1도로 준다
+            #   (관성 양념·하류 s42 가 흔들면 이탈). 이 파지의 기하상 손등을 올릴수록
+            #   날이 서는 트레이드라(15도 롤당 손등 26도/날면 31도), -15 는 손등
+            #   여유와 "넓적면을 얹는" 그림의 절충점이다.
+            ok = (min(evs) >= -15.0 and max(evs) <= 35.0 and min(outs) > 0.0)
+            pen = (0.0 if ok else 100.0 + max(0.0, max(evs) - 35.0)
+                   + max(0.0, -15.0 - min(evs)) + max(0.0, -min(outs)) * 100.0)
+            flat_pen = sum(flats) / len(flats)
+            cost = pen + flat_pen + 0.002 * abs(pd)
+            if best is None or cost < best[0]:
+                best = (cost, pd, evs[0], outs[0], flat_pen)
+        qr = Quaternion(d_t, math.radians(best[1])) @ q0
+        abd = math.degrees(math.asin(max(-1.0, min(1.0,
+                                                   (E2 - S).normalized().dot(out)))))
+        flx = math.degrees(math.asin(max(-1.0, min(1.0,
+                                                   (E2 - S).normalized().dot(fwd)))))
+        print("  %-5s IK: 팔 %.3f+%.3f, |어깨->손목| %.3f (게임 %.3fm)"
+              " / 위팔 순수외전 %+.1f 앞굽힘 %+.1f / 롤 %+d도"
+              " -> 손등 고도 %+.1f 바깥 %+.2f / 날면수평이탈 %.2f"
+              % (nm, a_len, b_len, dl, dl * SCALE, abd, flx, best[1], best[2],
+                 best[3], best[4]))
+        # ── 3) 관성 양념: 칼끝 고도가 골반 상하를 CARRY_DELAY 늦게 따라온다 ──
+        #   (Catmull 등차 함정 무관 — 골반 신호 자체가 사인형이고, 이 회전은 칼축
+        #    둘레가 아니라 수평축이라 칼끝 고도만 ±amp 출렁인다 = 질량이 따라오는 맛)
+        _, frames_h = key_frames(act, HAND_R)     # ★손목 키 프레임 기준(안전)
+        nh = len(frames_h)
+        pz = []
+        for f in frames_h:
+            sc.frame_set(f)
+            bpy.context.view_layer.update()
+            pz.append(bwpos(PELVIS).z)
+        mid = (max(pz) + min(pz)) * 0.5
+        half = max(1e-9, (max(pz) - min(pz)) * 0.5)
+        dly = int(round(CARRY_DELAY * 30.0 * CARRY_TS.get(nm, 1.0)))
+        amp = math.radians(CARRY_AMP.get(nm, 0.0))
+        h_ax = d_t.cross(up)
+        if h_ax.length < 1e-5:
+            h_ax = out.copy()
+        h_ax.normalize()
+        Rs = []
+        for i in range(nh):
+            s_i = max(-1.0, min(1.0, (pz[(i - dly) % nh] - mid) / half))
+            Rs.append((Quaternion(h_ax, amp * s_i) @ qr).to_matrix())
+        apply_world_rot(act, HAND_R, Rs)
+        print("        양념: 골반 z 폭 %.4f / 지연 %d장 / 칼끝 고도 ±%.1f도"
+              % (half * 2 * SCALE, dly, math.degrees(amp)))
+        # ── 4) 감사: 팔각·어깨 간격·머리 여유·손등(프레임별) ──
+        arm_report(act, "CAR " + nm)
+        blade_arc(act, "CAR " + nm)
+        sh_gap, hd_gap, baks, tipE, fless = [], [], [], [], []
+        for f in frames:
+            sc.frame_set(f)
+            bpy.context.view_layer.update()
+            HM2 = armK.matrix_world @ armK.pose.bones[HAND_R].matrix
+            Rr = HM2.to_3x3()
+            Rr.normalize()
+            w2 = HM2.translation
+            uu = (Rr @ TIP_L).normalized()
+            # 어깨 상단(승모근 근사: 어깨관절 위 5cm·안쪽 3cm)·머리 중심
+            Psh = bwpos(UPPER_R) + (up * 0.05 - out * 0.03) / SCALE
+            Phd = bwpos(HEAD_B) + (up * 0.05) / SCALE
+            L_bl = BLADE_L * TIP_K            # 월드 단위 칼축 선분 길이(하류 배율 포함)
+            for Pq, box in ((Psh, sh_gap), (Phd, hd_gap)):
+                t_ = max(0.0, min(L_bl, (Pq - w2).dot(uu)))
+                box.append(((Pq - (w2 + uu * t_)).length) * SCALE)
+            bk = (Rr @ CARRY_BACK_L).normalized()
+            baks.append((math.degrees(math.asin(max(-1.0, min(1.0, bk.z)))),
+                         bk.dot(out)))
+            tipE.append(math.degrees(math.asin(max(-1.0, min(1.0, uu.z)))))
+            if f == frames[0]:
+                print("        [f0 방위 실측] 칼끝 uu·fwd %+.2f uu·out %+.2f"
+                      " / 손목-어깨 fwd %+.3f out %+.3f up %+.3f (게임 m)"
+                      % (uu.dot(fwd), uu.dot(out),
+                         (w2 - bwpos(UPPER_R)).dot(fwd) * SCALE,
+                         (w2 - bwpos(UPPER_R)).dot(out) * SCALE,
+                         (w2 - bwpos(UPPER_R)).dot(up) * SCALE))
+            nf3 = (Rr @ FLAT_L).normalized()
+            fless.append(abs(nf3.dot(up)))
+        print("        어깨-칼축 거리 %.3f~%.3f / 머리-칼축 %.3f~%.3f (게임 m)"
+              % (min(sh_gap), max(sh_gap), min(hd_gap), max(hd_gap)))
+        print("        손등 고도 %+.1f~%+.1f (바깥 %+.2f~%+.2f) / 칼끝 고도"
+              " %+.1f~%+.1f (폭 %.1f도) / 날면|cos| %.2f~%.2f"
+              % (min(b[0] for b in baks), max(b[0] for b in baks),
+                 min(b[1] for b in baks), max(b[1] for b in baks),
+                 min(tipE), max(tipE), max(tipE) - min(tipE),
+                 min(fless), max(fless)))
+    print("\n[칼 간섭 실측] 캐리 후")
+    for nm in NATIVE:
+        if carry_on(nm):
+            M_FIX[nm] = measure(new[nm], "CAR " + nm, 2)
 
 # ================================================================ 8) T 포즈 감시
 # 경로를 고쳤어도 슬롯이 안 물리면 조용히 안 움직인다. **실제로 움직이는지** 본다.

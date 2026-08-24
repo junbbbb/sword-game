@@ -873,6 +873,33 @@ if FF_L:
           % (FF_L[0].x, FF_L[0].y, FF_L[0].z, FF_L[1].x, FF_L[1].y, FF_L[1].z,
              FF_L[2].x, FF_L[2].y, FF_L[2].z))
 
+# ══════════════════════════════════════════════════════════════════════════
+# ★★25차 GRIP_V25 — **손등 계약** (2026-08-24, 오너 "지금은 손등이 하늘로오게
+#   이상하게 들고있잖아")
+#   계약: 지속 자세(Idle 전 프레임 등)에서 오른손 손등 노멀의 월드 고도가
+#   [-25, +35]도 안이고 캐릭터 바깥쪽(오른쪽) 반구를 향할 것. 물리 근거:
+#   31kg 급 슬래브의 토크는 중립 손목(악수 자세, 엄지 위)으로만 전완 뼈에 실린다.
+#   손등이 하늘 = 완전 회내 = 손목이 토크를 못 받는 자세다.
+#   ★칼축 둘레 회전은 칼끝 궤적을 안 바꾸는 공짜 자유도다(칼이 오른손에 강체
+#     스킨 + 손뼈 머리가 자루축 위). 손등 교정은 전부 이 자유도로 한다.
+#   GRIP_V25=0 이면 이 파일의 25차 갈래(Idle 손등 롤 + 베기 날 정렬)가 전부 꺼져
+#   24차 판이 바이트까지 그대로 나온다(2026-08-24 롤백 실측).
+GRIP_V25 = os.environ.get("GRIP_V25", "1") == "1"
+# 오른 주먹 손등 노멀(손뼈 로컬). ★부호 함정 둘(25차 실측으로 확정):
+#   1) 주먹을 돌린 판이라 엄지축은 THUMB_REF 가 아니라 **칼끝 쪽**이다(probe_wrist
+#      와 같은 재잡기). 2) 오른손은 로컬 외적 부호가 해부학과 반대다(LOG:3400,
+#      왼손 t x arm = 손등 / 오른손은 그 반대). 결과값은 probe_wrist 의 최종
+#      bak (-0.965,+0.161,+0.209) 와 일치해야 한다(아래 로그로 매 굽기 확인).
+BACK_L = None
+FF_R = fist_frame(arm, DST_BODY, HAND_R) if (GRIP_V25 and TIP_DIR is not None) else None
+if FF_R:
+    _t_r = FF_R[2].copy()
+    if _t_r.dot(TIP_DIR) < 0:              # 엄지축을 칼끝 쪽으로(주먹 돌린 판)
+        _t_r = -_t_r
+    BACK_L = (-(_t_r.cross(FF_R[1]))).normalized()   # ★오른손 외적 반전
+    print("   오른 주먹 손등 노멀(손뼈 로컬) (%+.3f,%+.3f,%+.3f)"
+          "  ★probe_wrist 최종 bak 과 일치해야 한다" % (BACK_L.x, BACK_L.y, BACK_L.z))
+
 # ================================================================ 6) 엔진
 def src_world_rot(bn):
     """소스 뼈의 현재 프레임 월드 회전(정규화)."""
@@ -1722,6 +1749,47 @@ def pct(xs, p):
     return s[min(len(s) - 1, max(0, int(len(s) * p)))]
 
 
+# ---- ★25차 GRIP_V25: 손등 계약 롤 도구 (Idle 이 쓴다) ----
+def _back_roll_solve(pose):
+    """f0 자세에서 손등 계약([-25,+35]도 + 바깥 반구)을 만드는 최소 칼축 롤.
+    반환 (롤 rad, 칼축 월드, 전 고도, 전 바깥, 후 고도, 후 바깥)."""
+    Hr = (A2W @ pose[HAND_R]).to_3x3()
+    Hr.normalize()
+    u = (Hr @ TIP_DIR).normalized()
+    bak = (Hr @ BACK_L).normalized()
+    Ci = torso_frame(pose).inverted()
+
+    def stat(v):
+        return (math.degrees(math.asin(max(-1.0, min(1.0, v.z)))), -(Ci @ v).x)
+
+    e0, o0 = stat(bak)
+    best = None
+    for pd in range(-90, 91):
+        b2 = (Quaternion(u, math.radians(pd)) @ bak).normalized()
+        e, o = stat(b2)
+        ok = (-25.0 <= e <= 35.0) and o > 0.0
+        pen = 0.0 if ok else (max(0.0, e - 35.0) + max(0.0, -25.0 - e)
+                              + max(0.0, -o) * 100.0)
+        key = (0 if ok else 1, pen, abs(pd))
+        if best is None or key < best[0]:
+            best = (key, pd, e, o)
+    return math.radians(best[1]), u, e0, o0, best[2], best[3]
+
+
+def _apply_axis_roll(Rw, ang, axis):
+    """칼축 둘레 롤을 손목(상한 45도) + 잔여는 팔 체인 강체 롤로 나눠 먹인다.
+    축이 칼축이라 칼끝·칼 선분은 불변이다(판정·FX 무영향)."""
+    cap = math.radians(45.0)
+    wr = max(-cap, min(cap, ang))
+    rest = ang - wr
+    if abs(rest) > 1e-6:
+        m = Quaternion(axis, rest).to_matrix()
+        for bn in R_ARM:
+            Rw[bn] = m @ Rw[bn]
+    if abs(wr) > 1e-6:
+        Rw[HAND_R] = Quaternion(axis, wr).to_matrix() @ Rw[HAND_R]
+
+
 # ================================================================ 7) 굽기
 def bake(name):
     f0, f1 = use_src(name)
@@ -1731,6 +1799,7 @@ def bake(name):
     idl = IDLE_GUARD and name in IDLE_CLIPS and TIP_DIR is not None
     IDL_M = [None]          # f0 에서 한 번 정하고 **전 프레임에 같은 회전**을 먹인다
                             # (프레임마다 다시 잡으면 숨쉬기 흔들림이 죽는다)
+    IDL_ROLL = [None]       # ★25차: 손등 계약 롤도 f0 에서 한 번(전 프레임 동일)
     print("\n[%s] 소스 f%d~%d (%d장)%s%s"
           % (name, f0, f1, nf, "  ★한 손 파지(왼팔=균형)" if rel else "",
              "  ★오른팔 내리기(검)" if swd else ""))
@@ -1824,6 +1893,17 @@ def bake(name):
             else:
                 Rw[HAND_R] = q.to_matrix() @ Rw[HAND_R]
             pose, basis = build(Rw, pw)
+            # ★25차 GRIP_V25: 손등 계약 롤(칼축 둘레 = 칼끝 E/AZ·칼 선분 불변)
+            if GRIP_V25 and BACK_L is not None:
+                if IDL_ROLL[0] is None:
+                    ang, u1, e0, o0, e1, o1 = _back_roll_solve(pose)
+                    IDL_ROLL[0] = (ang, u1)
+                    print("   ★손등 계약(GRIP_V25): 고도 %+.1f 바깥 %+.2f -> 롤 %+.1f도"
+                          " -> 고도 %+.1f 바깥 %+.2f  (계약 [-25,+35] + 바깥 반구)"
+                          % (e0, o0, math.degrees(ang), e1, o1))
+                if abs(IDL_ROLL[0][0]) > 1e-6:
+                    _apply_axis_roll(Rw, IDL_ROLL[0][0], IDL_ROLL[0][1])
+                    pose, basis = build(Rw, pw)
         if DO_GRIP:
             T, bef, _, w, Ch, wh = apply_grip(pose, Rw, gts[i], phase(i))
             pose, basis = build(Rw, pw)
@@ -2045,6 +2125,10 @@ def bake(name):
             else:
                 Rw[HAND_R] = q.to_matrix() @ Rw[HAND_R]
             pose, basis = build(Rw, pw)
+            # ★25차 GRIP_V25: 1차와 같은 자리·같은 롤
+            if GRIP_V25 and IDL_ROLL[0] is not None and abs(IDL_ROLL[0][0]) > 1e-6:
+                _apply_axis_roll(Rw, IDL_ROLL[0][0], IDL_ROLL[0][1])
+                pose, basis = build(Rw, pw)
         if DO_GRIP:
             _, _, _, _, Ch, wh = apply_grip(pose, Rw, gts[i], phase(i))
             pose, basis = build(Rw, pw)
@@ -2466,7 +2550,10 @@ HAND_SPEC = {
 }
 
 HAND_CH = ("bel", "baz", "arl", "bend", "ty", "tp", "tr", "hy", "cr", "lg",
-           "wf", "ws", "gw")
+           "wf", "ws", "gw", "wrl")
+# ★25차 신설 채널 wrl: 오른손목의 **칼축 둘레** 롤(도). 칼끝·칼 선분이 불변이라
+#   궤적·판정·FX 에 한 톨도 안 가고 **날면 방향만** 돈다(날 정렬 계약용).
+#   GRIP_V25=0 이면 키 자체가 안 들어가 24차 판 그대로다.
 
 # ══════════════════════════════════════════════════════════════════════════
 # ★★18차 X 신작 — **검도 정면베기(마키리오로시)** (2026-08-13, 오너 지시)
@@ -2913,6 +3000,67 @@ if MOVES_V24:
     for _k in ("Attack", "Heavy", "Wide"):
         HAND_SPEC[_k] = HAND_SPEC_V24[_k]
 
+# ══════════════════════════════════════════════════════════════════════════
+# ★★25차 GRIP_V25 — **날 정렬 계약**: hot 프레임에서 칼은 날로 벤다(칼끝 속도
+#   벡터와 날 평면의 사잇각 <=30도). 슬래브가 넓적면으로 때리면 베기가 아니라
+#   뺨때리기다. 커밋본 실측(probe_blade25, v99_wave25/motion/probe/blade_before2):
+#     Z 1타 f8~11 정렬 8~25도(통과. f12 30.2 = 경계라 불변) / 2타 f22~25 **54~70도
+#     위반**(need +60~+76) / 3타 f36~37 통과·f38 47.8 위반(need -49)
+#     X f9~11 5.8~17.0 전부 통과(**한 글자도 안 건드린다**)
+#     C f8~13 **전부 67~71도 위반**(need +70~+72)
+#   처방 = 칼축 둘레 롤(궤적·타격 슬롯 불변): arl 증분(팔+칼이 같이 롤) 우선
+#   + 잔여는 손목 롤 wrl(해부 상한 45도 캡). 진입은 장전 구간 램프, 복귀는
+#   프레임당 8도 이하(비-hot 손목 중립 계약).
+#   ★값은 (arl 증분, wrl 절대값(None=키 없음)) 표다. hot 슬롯·bel/baz 는 불변.
+#   ★1차 굽기 실측(griptest vs repro25, s24 진단 표 대조)이 설계 가설 하나를
+#     뒤집었다: wrl(손목 칼축 롤)은 궤적을 **한 톨도 안 바꾸지만**(1·3타 v 표
+#     바이트 일치), arl 증분은 손목을 어깨 중심 원뿔로 **평행이동**시켜 칼끝
+#     속도를 살짝 바꾼다(2타 f22 43.7->38.6). hot 창 프레임은 그래도 불변이었다.
+#     그래서 arl 몫을 최소화한다: Wide 는 wrl 45 단독(need 70~72 -> 잔여 25~27,
+#     계약 상한 30 안), Attack 2타만 arl +12(합 57. 잔여 2~19도).
+V25_BLADE = {
+    "Attack": {
+        # 2타(수평 되베기) hot f22~25: need +60~+76 = arl +12 + wrl +45 (합 57)
+        16: (0, 0.0),                    # wrl 램프 시작(재장전 초입. 중립 고정점)
+        22: (+12, +45.0), 23: (+12, +45.0), 24: (+12, +45.0), 25: (+12, +45.0),
+        26: (+6, None), 27: (+3, None),   # 팔로스루 arl 감쇠 램프(팝 방지)
+        31: (0, 0.0),                    # wrl 복귀 종점(6장 = 7.5도/장)
+        # 1타 꼬리 f12(need -30): 국소 -10 롤(f8~11 정렬 8~25 는 격리 유지)
+        8: (0, 0.0), 11: (0, 0.0), 12: (0, -10.0), 14: (0, 0.0),
+        # 3타 꼬리 f37~38(need -24/-49): f36 중립 -> 램프 -> f42 복귀(8도/장)
+        36: (0, 0.0), 37: (0, -18.0), 38: (0, -32.0), 42: (0, 0.0),
+    },
+    "Wide": {
+        # 횡일섬 hot f8~13: need +70~+72 = wrl +45 단독(arl 0 = 궤적 완전 불변)
+        8: (0, +45.0), 9: (0, +45.0), 10: (0, +45.0), 11: (0, +45.0),
+        12: (0, +45.0), 13: (0, +45.0),
+        19: (0, 0.0),                    # wrl 복귀 종점(6장 = 7.5도/장)
+    },
+}
+if MOVES_V24 and GRIP_V25:
+    for _k, _tab in V25_BLADE.items():
+        _nf, _keys = HAND_SPEC[_k]
+        _seen = set()
+        for _f, _kv in _keys:
+            if _f in _tab:
+                _da, _wl = _tab[_f]
+                if _da:
+                    _kv["arl"] = _kv.get("arl", 0) + _da
+                if _wl is not None:
+                    _kv["wrl"] = _wl
+                _seen.add(_f)
+        for _f, (_da, _wl) in sorted(_tab.items()):
+            if _f in _seen:
+                continue
+            _kv = {}
+            if _da:
+                _kv["arl"] = _da          # (지금 표에는 이 갈래가 없다. 안전망)
+            if _wl is not None:
+                _kv["wrl"] = _wl
+            if _kv:
+                _keys.append((_f, _kv))
+        _keys.sort(key=lambda t: t[0])
+
 # ================================ 16차 신설: 게임 카메라 화면 좌표 ================================
 # ★★15차까지 세 판을 전부 **월드 좌표**(칼끝의 위/옆/앞)로 판정했고 세 판 다 통과했는데
 #   오너는 세 판 다 기각했다. 16차에 처음으로 화면으로 재 보니 이유가 나왔다:
@@ -3176,7 +3324,7 @@ def bake_hand(name):
     BASE = dict(zip(("bel", "baz"), _unsph(C0.inverted() @ d0w)))
     _e1, _e2 = _bframe(d0w, C0)
     BASE["arl"] = math.degrees(math.atan2(a0w.dot(_e2), a0w.dot(_e1)))
-    for c in ("bend", "ty", "tp", "tr", "hy", "cr", "lg", "wf", "ws"):
+    for c in ("bend", "ty", "tp", "tr", "hy", "cr", "lg", "wf", "ws", "wrl"):
         BASE[c] = 0.0
     BASE["gw"] = 1.0
     print("\n[%s] ★수제 키프레임 %d장 (%.3f초 @30fps) / 키 %d개"
@@ -3299,6 +3447,12 @@ def bake_hand(name):
         mq = q.to_matrix()
         for bn in R_ARM:
             Rw[bn] = mq @ Rw[bn]
+        # ★25차 GRIP_V25: 날 정렬 손목 롤(wrl). 축이 칼축(bt)이라 칼끝 궤적·타격
+        #   슬롯이 불변이고 날면 방향만 돈다. GRIP_V25=0 이면 키가 없어 늘 0 이다.
+        if GRIP_V25:
+            _wl = math.radians(val("wrl", i))
+            if abs(_wl) > 1e-6:
+                Rw[HAND_R] = Quaternion(bt, _wl).to_matrix() @ Rw[HAND_R]
         pose, basis = build(Rw, pw)
         # 왼손 파지(두 손). gw=0 이면 왼팔은 바탕 자세 그대로 남는다
         dev, reach = 0.0, 0.0

@@ -12,7 +12,12 @@
 ★★md5 계보: 18차 여섯 줄 = fa19aa9d → +s42 = 5013a2f4(구 커밋본)
   → 23차 모션재작(MOVES_V23=1, s24 베기 3종 재작) 여섯 줄 = 106f43ae → +s42 = 9c5d4f7e
   → 24차 대검 물리(MOVES_V24=1·JUMP_V24=1 + s27 달리기 캐리 4손잡이) 여섯 줄 =
-    155c7409 → +s42 = **525d9e99**
+    155c7409 → +s42 = 525d9e99
+  → 25차 파지·캐리(GRIP_V25=1: 손등 계약+베기 날 정렬 wrl / CARRY_V25=1: Walk·Run
+    어깨 거치. s27 에 CARRY_TIP_E=30 CARRY_U=-0.05 CARRY_O=0.04 CARRY_TIP_B=8 명시
+    = 코드 기본값) 여섯 줄 = b7bf59a1 → +s42 = **32bc2c79**
+  ★25차 롤백: GRIP_V25=0 CARRY_V25=0 (+아래 24차 환경 그대로) = 525d9e99 재현
+    (2026-08-24 실측. renders/history/v99_wave25/motion/scripts/run8_rollback_check.sh)
   ★2번 줄 재현 주의: 커밋본은 **IDLE_E=70 IDLE_AZ=35 를 명시**해서 구웠다(run6.sh 기본값.
     s24 코드 기본은 78/22 라 안 넘기면 md5 가 어긋난다. 23차 재현으로 실측 확인.
     24차도 같은 값을 명시해 idle 을 그대로 뒀다 — 하단세는 장대 게이트와 충돌해
@@ -20,7 +25,8 @@
   ★24차 3번 줄은 s27 에 네 손잡이가 붙는다(안 주면 23차 판):
     LIFT_TABLE=Walk:-10,Run:8 TIP_TABLE=Walk:-24,Run:-24 DAMP_TABLE=Run:0.15 NCAND=60
     WRIST_WIDE=Walk,Run   (걷기 값은 23차와 동일 — 달리기만 캐리로 바뀐다)
-  일곱 줄 전체 = renders/history/v99_wave24/motion/scripts/run7_v24.sh
+  일곱 줄 전체 = renders/history/v99_wave25/motion/scripts/run8_v25.sh (25차 정본.
+    24차 판 = v99_wave24/motion/scripts/run7_v24.sh)
   (23차 재현 검증용 = v99_wave23/.../run7_repro.sh — 24차 착수 전에 9c5d4f7e 를
    run7_repro24.sh 로 재현 확인했다. 로그 = v99_wave24/motion/logs/repro_*.log)
 
