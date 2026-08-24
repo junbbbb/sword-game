@@ -18,6 +18,17 @@
     = 코드 기본값) 여섯 줄 = b7bf59a1 → +s42 = **32bc2c79**
   ★25차 롤백: GRIP_V25=0 CARRY_V25=0 (+아래 24차 환경 그대로) = 525d9e99 재현
     (2026-08-24 실측. renders/history/v99_wave25/motion/scripts/run8_rollback_check.sh)
+  → 26차 걷기·트레일·X(HEAVY_V26=1: s24 X 오버헤드 대각 클리브 재작(챔버 +84·중력
+    낙하 hot f9~13·바닥 스침 오버슛) / RUN_TRAIL_V26=1: s27 Run 오른팔 트레일 캐리,
+    TR_F=-0.34 TR_O=0.22 TR_U=-0.46 명시 = 코드 기본값(수렴 12회. Walk 어깨 거치는
+    25차 그대로) / GAIT_V26=1: s42 Walk 하체를 절차 보행으로(듀티 0.55·양발지지
+    21%·발끝 들림 0.12m·무미끄러짐 — Soldier 합성 걷기의 -54% 지면 스케이트 수리.
+    main.js walk.ts 1.18→1.42 가 한 몸이다)) 여섯 줄 = ded97ce3 → +s42 = **a3e730ea**
+  ★26차 롤백: HEAVY_V26=0 RUN_TRAIL_V26=0 GAIT_V26=0 (+25차 환경 그대로) = 여섯 줄
+    b7bf59a1·일곱 줄 32bc2c79 바이트 재현(2026-08-25 실측.
+    renders/history/v99_wave26/motion/scripts/run9_rollback_check.sh)
+  ★26차 웹 짝: Z 봉인(main.js SKILL_Z_ON=false, HUD·안내 동반) + ATK_COMMIT.Heavy
+    0.35→0.40(라이브 재실측) — glb 만 롤백하면 걷기 ts·X 커밋이 어긋난다. 셋이 한 벌.
   ★2번 줄 재현 주의: 커밋본은 **IDLE_E=70 IDLE_AZ=35 를 명시**해서 구웠다(run6.sh 기본값.
     s24 코드 기본은 78/22 라 안 넘기면 md5 가 어긋난다. 23차 재현으로 실측 확인.
     24차도 같은 값을 명시해 idle 을 그대로 뒀다 — 하단세는 장대 게이트와 충돌해
@@ -25,8 +36,10 @@
   ★24차 3번 줄은 s27 에 네 손잡이가 붙는다(안 주면 23차 판):
     LIFT_TABLE=Walk:-10,Run:8 TIP_TABLE=Walk:-24,Run:-24 DAMP_TABLE=Run:0.15 NCAND=60
     WRIST_WIDE=Walk,Run   (걷기 값은 23차와 동일 — 달리기만 캐리로 바뀐다)
-  일곱 줄 전체 = renders/history/v99_wave25/motion/scripts/run8_v25.sh (25차 정본.
-    24차 판 = v99_wave24/motion/scripts/run7_v24.sh)
+  일곱 줄 전체 = renders/history/v99_wave26/motion/scripts/run9_v26.sh (26차 정본.
+    25차 판 = v99_wave25/motion/scripts/run8_v25.sh · 24차 판 = run7_v24.sh.
+    ★26차 1차 본굽기가 s27 TR_* 를 수렴 전 초안값으로 박제해 관통이 회귀했던 사고가
+    있다 — run9_v26.sh 는 수렴값으로 고쳐져 있고, 그 재개 기록이 run9_resume3.sh 다)
   (23차 재현 검증용 = v99_wave23/.../run7_repro.sh — 24차 착수 전에 9c5d4f7e 를
    run7_repro24.sh 로 재현 확인했다. 로그 = v99_wave24/motion/logs/repro_*.log)
 

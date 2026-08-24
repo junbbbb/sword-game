@@ -293,9 +293,65 @@ CARRY_TS = {"Walk": 1.18, "Run": 1.27}     # main.js 재생속도(지연 프레�
 # 최종 bak). 리그 고정 상수 — 최종 glb 의 probe_wrist 재실측으로 매 파도 검증한다.
 CARRY_BACK_L = Vector((-0.965, +0.161, +0.209)).normalized()
 
+# ★★26차 RUN_TRAIL_V26 — Run **트레일 캐리** (2026-08-25, 오너 "어 근데 뛸때는
+#   어깨에 매는게 좀 이상한데 흠". Walk 어깨 거치는 "큰검을 어깨로 한건 좋았어"로 확정)
+#   전력질주에서 대형 질량은 무게중심 뒤로 흘려야 다리 구동과 안 싸운다 — 오른팔을
+#   뒤-아래로 흘리고 칼이 몸 뒤를 따라오는 스프린트(FF7 클라우드/버서크 가츠 형).
+#   구현은 캐리와 같은 기계(감쇠 0 -> two-bone IK -> 손목 칼끝·롤 2패스 -> 관성 양념)에
+#   목표만 다르다: 손목 뒤-아래-바깥 / 칼끝 고도 음수(뒤-아래) / 날은 아래(엣지) /
+#   관성 절제(±2도). ★제1 계약 = 바닥여유 >= 0.12 전 사이클(24차 "칼을 땅에 끌며
+#   달림" 재발 금지), PEN <= 0.025, 손등 계약은 캐리와 동일.
+#   롤백 세 경로: RUN_TRAIL_V26=1(기본) = 트레일 / RUN_TRAIL_V26=0 = 25차 어깨 거치
+#   (CARRY_CLIPS 의 Run 이 다시 캐리를 탄다) / RUN_TRAIL_V26=0 CARRY_CLIPS=Walk
+#   = 24차 낮은 캐리(네 손잡이 스택).
+RUN_TRAIL_V26 = os.environ.get("RUN_TRAIL_V26", "1") == "1"
+TRAIL_CLIPS = [c.strip() for c in os.environ.get(
+    "TRAIL_CLIPS", "Run").split(",") if c.strip()]
+# 손목 목표(오른어깨 기준, 게임 m): 앞(음수=뒤) / 바깥 / 위(음수=아래)
+# ★1차 실측 교훈: (-0.20,0.10,-0.46)=|0.51| 은 팔 0.62 의 83%라 팔꿈치가 59~72도
+#   과굴곡되고, 칼끝 -12도(수평)가 팔뚝과 ~120도 폴드를 만들어 손등 게이트가
+#   전패했다(+60.9)·엉덩이 높이 관통 0.108. 트레일은 **거의 편 팔**이 정답:
+#   |0.60|(97%)로 신전 ~31도, 칼은 팔 선을 잇는 뒤-아래 -20도.
+# (8~11차 실측이 범인을 확정했다: 관통점은 늘 손목거리 0.37~0.40·높이 0.7 안팎
+#  = **자루끝(폼멜, 칼끝 반대로 -0.24m)**이 오른엉덩이를 찌르는 것이었다. 칼날이
+#  아니라 폼멜이라 칼끝 고도로는 안 풀렸다. 처방 = 주먹을 몸에서 더 바깥·뒤로
+#  (폼멜 = 주먹 - 0.24 x 칼끝방향이 몸 반폭 0.20 밖에 남게))
+TR_F = float(os.environ.get("TR_F", "-0.34"))
+TR_O = float(os.environ.get("TR_O", "0.22"))
+TR_U = float(os.environ.get("TR_U", "-0.46"))
+# 칼끝 목표(가슴 좌표계): 고도 / 뒤(180도)에서 바깥으로 벌림(다리 회피)
+# ★2~3차 실측 교훈: 이 리그는 팔-칼 사잇각이 79.6도(자루가 주먹에 수직꼴)라
+#   팔이 뒤-아래 ~54도로 흘러가면 **손목 중립의 칼은 뒤-위 ~+25도**다. 칼끝을
+#   -20~-8(뒤-아래)로 강제한 2·3차는 손목꺾임 105~113도(부러진 손)에 손등 게이트
+#   전패·엉덩이 관통 0.083~0.108 이었다. 가츠/클라우드 실루엣의 실제 기하도
+#   "자루는 골반 옆에 낮게, 날은 뒤-위로 비스듬"이다 — 그 자세로 간다.
+#   (지시 시안 -5~-20 에서 벗어난 값이다. 시안 자체가 "화면 자로 조정" 단서를
+#   달고 있고, 이 이탈은 해부·관통·손등 세 계약이 강제한 것이다 — 보고서에 명시)
+TR_TIP_E = float(os.environ.get("TR_TIP_E", "22"))
+TR_TIP_B = float(os.environ.get("TR_TIP_B", "30"))
+# 관성 양념(도). 트레일은 절제한다(±2도 이내 지시)
+TR_AMP = {}
+for _row in os.environ.get("TR_AMP", "Run:2.0").split(","):
+    _row = _row.strip()
+    if _row:
+        _k, _v = _row.split(":")
+        TR_AMP[_k.strip()] = float(_v)
+
+
+def trail_on(nm):
+    return RUN_TRAIL_V26 and nm in TRAIL_CLIPS
+
 
 def carry_on(nm):
-    return CARRY_V25 and nm in CARRY_CLIPS
+    # ★트레일이 이긴다(같은 클립에 둘 다 적혀 있으면 트레일). RUN_TRAIL_V26=0 이면
+    #   Run 은 CARRY_CLIPS 기본값대로 25차 어깨 거치로 돌아간다.
+    return CARRY_V25 and nm in CARRY_CLIPS and not trail_on(nm)
+
+
+def styled(nm):
+    """26차: 오른팔을 통째로 IK 로 앉히는 클립(캐리든 트레일이든). 24차 네 손잡이
+    (ELB/LIFT/SWING_R/WRIST)와 감쇠 테이블은 이 클립들에서 게이트로 잠든다."""
+    return carry_on(nm) or trail_on(nm)
 
 
 # ★팔 스윙 자연화 (2026-08-12 오너 지시). 아래 [팔 스윙] 절 참조.
@@ -867,10 +923,11 @@ if ARM_DAMP < 1.0 or DAMP_TABLE:
         # ★24차: DAMP_TABLE 이 그 클립을 덮으면 그 값, 아니면 ARM_DAMP(옛 판 그대로)
         # ★25차: 캐리 클립은 감쇠 0 = 오른팔 4본을 사이클 평균에 완전 고정한다.
         #   거치 팔은 안 흔든다 — 프레임별 움직임은 아래 캐리 절의 관성 양념 하나뿐.
-        _k25 = 0.0 if carry_on(nm) else DAMP_TABLE.get(nm, ARM_DAMP)
+        # ★26차: 트레일 클립도 같다(styled).
+        _k25 = 0.0 if styled(nm) else DAMP_TABLE.get(nm, ARM_DAMP)
         for bn, s0, s1 in damp_arm(new[nm], _k25):
             print("  %-5s %-20s 평균에서 최대 %.1f도 -> %.1f도%s"
-                  % (nm, bn, s0, s1, "  (캐리: 평균 고정)" if carry_on(nm) else ""))
+                  % (nm, bn, s0, s1, "  (캐리/트레일: 평균 고정)" if styled(nm) else ""))
     print("\n[칼 흔들림] 감쇠 후")
     for nm in NATIVE:
         blade_arc(new[nm], "DMP " + nm)
@@ -1094,8 +1151,8 @@ if ELB_R:
         if nm not in ELB_CLIPS:
             print("  %-5s 건너뜀(ELB_CLIPS 밖)" % nm)
             continue
-        if carry_on(nm):
-            print("  %-5s 건너뜀(25차 캐리가 팔꿈치까지 통째로 정한다)" % nm)
+        if styled(nm):
+            print("  %-5s 건너뜀(캐리/트레일이 팔꿈치까지 통째로 정한다)" % nm)
             continue
         n, ax, f0, f1 = bend_elbow(new[nm], ELB_R, ELB_DIR)
         print("  %-5s 팔뚝 키 %d개 / 축 (%+.3f,%+.3f,%+.3f) / 팔꿈치각 %.1f~%.1f -> "
@@ -1116,8 +1173,8 @@ if ARM_LIFT or LIFT_TABLE:
         if nm not in LIFT_CLIPS:
             print("  %-5s 건너뜀(LIFT_CLIPS 밖)" % nm)
             continue
-        if carry_on(nm):
-            print("  %-5s 건너뜀(25차 캐리가 팔 각을 통째로 정한다)" % nm)
+        if styled(nm):
+            print("  %-5s 건너뜀(캐리/트레일이 팔 각을 통째로 정한다)" % nm)
             continue
         deg = LIFT_TABLE.get(nm, ARM_LIFT)
         if abs(deg) < 1e-9:
@@ -1208,8 +1265,8 @@ if SWING_R or SWING_L:
                 (SWING_L, UPPER_L, HAND_L, SWING_L_CLIPS, SWING_GF, SWING_GB)):
             if not tgt or nm not in clips:
                 continue
-            if bone == UPPER_R and carry_on(nm):
-                print("  %-5s 오른팔 건너뜀(25차 캐리. 왼팔 자연 스윙은 유지)" % nm)
+            if bone == UPPER_R and styled(nm):
+                print("  %-5s 오른팔 건너뜀(캐리/트레일. 왼팔 자연 스윙은 유지)" % nm)
                 continue
             b4, af, const = swing_arm(new[nm], bone, hand, float(tgt),
                                       gf, gb, SWING_H, axes)
@@ -1328,8 +1385,8 @@ if WRIST_FIX:
           % (TIP_ELEV, CLEAR_MIN, PEN_MAX))
     cands_n, cands_w = cand_deltas(False), cand_deltas(True)
     for nm in NATIVE:
-        if carry_on(nm):
-            print("  %-5s 건너뜀(25차 캐리가 손목·칼 방향을 통째로 정한다)" % nm)
+        if styled(nm):
+            print("  %-5s 건너뜀(캐리/트레일이 손목·칼 방향을 통째로 정한다)" % nm)
             WRIST_USED[nm] = None
             continue
         wide = WRIST_WIDE and (not WIDE_CLIPS or nm in WIDE_CLIPS)
@@ -1393,7 +1450,7 @@ else:
 # (스테이지 순서: 감쇠 0 -> [왼팔 SWING_L 은 위에서 이미] -> 여기서 오른팔을
 #  two-bone IK 로 캐리 자세에 앉히고 손목으로 칼끝·날면·손등을 정한다.
 #  프레임별 회전은 관성 양념 하나 — 나머지는 전부 월드 상수라 방향호가 안 벌어진다)
-if CARRY_V25 and any(nm in CARRY_CLIPS for nm in NATIVE):
+if any(styled(nm) for nm in NATIVE):
     HEAD_B = "Bip001 Head"
 
     def const_rot(act, bone, Rq):
@@ -1401,13 +1458,21 @@ if CARRY_V25 and any(nm in CARRY_CLIPS for nm in NATIVE):
         _, fr = key_frames(act, bone)
         return apply_world_rot(act, bone, [Rq.to_matrix()] * len(fr))
 
-    print("\n[25차 어깨 거치 캐리] 손목목표 어깨 기준 앞%.2f 바깥%.2f 위%+.2f (게임 m)"
-          " / 칼끝 고도+%.0f 뒤-바깥%.0f도 / 양념 %s 지연 %.2fs"
+    print("\n[25차 어깨 거치 캐리 + 26차 트레일] 캐리 손목 앞%.2f 바깥%.2f 위%+.2f"
+          " 칼끝 +%.0f/%.0f / 트레일 손목 앞%.2f 바깥%.2f 위%+.2f 칼끝 %+.0f/%.0f"
+          " / 양념 캐리 %s 트레일 %s 지연 %.2fs"
           % (CARRY_F, CARRY_O, CARRY_U, CARRY_TIP_E, CARRY_TIP_B,
-             CARRY_AMP, CARRY_DELAY))
+             TR_F, TR_O, TR_U, TR_TIP_E, TR_TIP_B,
+             CARRY_AMP, TR_AMP, CARRY_DELAY))
     for nm in NATIVE:
-        if not carry_on(nm):
+        if not styled(nm):
             continue
+        # ── 26차: 스타일별 목표 (트레일 = 뒤-아래로 흘림 / 캐리 = 어깨 거치) ──
+        _tr = trail_on(nm)
+        STY = "TRL" if _tr else "CAR"
+        p_f, p_o, p_u = (TR_F, TR_O, TR_U) if _tr else (CARRY_F, CARRY_O, CARRY_U)
+        tip_e, tip_b = (TR_TIP_E, TR_TIP_B) if _tr else (CARRY_TIP_E, CARRY_TIP_B)
+        amp_tab = TR_AMP if _tr else CARRY_AMP
         act = new[nm]
         lat, up, fwd = chest_axes(act)
         out = -lat                                   # 오른쪽 = 바깥
@@ -1433,14 +1498,17 @@ if CARRY_V25 and any(nm in CARRY_CLIPS for nm in NATIVE):
         E = bwpos(FORE_R)
         W = bwpos(HAND_R)
         a_len, b_len = (E - S).length, (W - E).length
-        # ── 1) 손목 목표 + two-bone IK (팔꿈치 pole = 아래+바깥) ──
-        T = S + (fwd * CARRY_F + out * CARRY_O + up * CARRY_U) / SCALE
+        # ── 1) 손목 목표 + two-bone IK (팔꿈치 pole: 캐리=아래+앞+바깥 / 트레일=뒤+바깥) ──
+        T = S + (fwd * p_f + out * p_o + up * p_u) / SCALE
         d = T - S
         dl = min(d.length, (a_len + b_len) * 0.999)
         d = d.normalized()
         # ★pole 을 바깥(out 0.6)에 두면 위팔 순수외전이 +36 까지 벌어진다(2차 실측.
         #   계약 <=25 위반). 아래-앞-약간바깥이면 팔꿈치가 몸 옆 아래로 떨어진다.
-        pole = (-up * 0.85 + fwd * 0.30 + out * 0.30).normalized()
+        # ★26차 트레일: 팔이 뒤-아래로 흘러가므로 팔꿈치는 바깥-뒤-살짝위로 뺀다
+        #   (달리기 이완 팔의 팔꿈치 방향. 렌더 눈검증으로 조정).
+        pole = ((out * 0.55 - fwd * 0.50 + up * 0.35) if _tr
+                else (-up * 0.85 + fwd * 0.30 + out * 0.30)).normalized()
         p = pole - d * pole.dot(d)
         if p.length < 1e-5:
             p = -up + d * up.dot(d)
@@ -1455,6 +1523,48 @@ if CARRY_V25 and any(nm in CARRY_CLIPS for nm in NATIVE):
         E1, W1 = bwpos(FORE_R), bwpos(HAND_R)
         R2 = (W1 - E1).rotation_difference(T - E1)
         const_rot(act, FORE_R, R2)
+        # ── 1.5) ★26차 트레일: 팔뚝 회내(twist)가 칼의 조준기다 ──
+        #   rotation_difference 는 팔뚝 비틀림을 임의(최소)로 고정하는데, 그 중립이
+        #   칼을 앞-옆(5차 실측 fwd+0.41 out+0.89)으로 보내 오른다리를 벴다(관통
+        #   0.048). 손목은 중립인 채 팔뚝 축 둘레 비틀림만 훑어 칼끝을 **뒤-바깥,
+        #   고도 [-25,+10]** 원뿔로 보내는 각을 고른다(손·칼은 FK 강체로 따라온다).
+        if _tr:
+            sc.frame_set(frames[0])
+            bpy.context.view_layer.update()
+            E1b = bwpos(FORE_R)
+            W1b = bwpos(HAND_R)
+            ax_f = (W1b - E1b).normalized()
+            HMt = armK.matrix_world @ armK.pose.bones[HAND_R].matrix
+            R3t = HMt.to_3x3()
+            R3t.normalize()
+            u_t = (R3t @ TIP_L).normalized()
+            bak_t = (R3t @ CARRY_BACK_L).normalized()
+            bestw = None
+            for tw in range(-120, 121, 5):
+                qt = Quaternion(ax_f, math.radians(tw))
+                uu2 = (qt @ u_t).normalized()
+                e2 = math.degrees(math.asin(max(-1.0, min(1.0, uu2.z))))
+                # ★손등 게이트 실현가능성(6차 실측: 비틀림 +60 은 어떤 롤로도 손등
+                #   바깥이 안 나왔다). 칼축 롤 ±45 안에서 손등이 바깥(+)이 되는
+                #   후보가 있는지 미리 본다 — 없으면 그 비틀림은 못 쓴다.
+                bko = max((Quaternion(uu2, math.radians(r)) @ (qt @ bak_t)).dot(out)
+                          for r in (-45, -30, -15, 0, 15, 30, 45))
+                # (8~10차 실측 + 렌더 눈검증: 고도 +27 이하는 어떤 방위로도 칼 선이
+                #  달리기 뒤차기 다리 궤적(z 0.2~0.85·뒤 0.2~0.55)을 지나간다(관통
+                #  0.075~0.096). 유일한 청정 볼륨은 **뒤-위 대각** — 자루는 골반
+                #  옆에 낮게, 날은 +22~+38 로 등 뒤를 비스듬히 가로지른다(FF7 형).
+                #  이래야 칼 선의 최저점이 손목(0.86)이고 나머지 전부 그 위다.)
+                c = (3.0 * max(0.0, uu2.dot(fwd) + 0.62)     # 뒤로(fwd<=-0.62. 폼멜은 앞-안으로)
+                     + max(0.0, 0.2 - uu2.dot(out))          # 바깥으로
+                     + max(0.0, abs(e2 - 10.0) - 10.0) / 30.0  # 고도 [0,+20](콘 실현가능 대역)
+                     + 2.0 * max(0.0, 0.10 - bko)            # 손등 바깥 실현가능
+                     + 0.002 * abs(tw))
+                if bestw is None or c < bestw[0]:
+                    bestw = (c, tw, uu2, e2)
+            # (R2 는 위에서 이미 먹였다 — 여기서는 비틀림 **만** 추가한다)
+            const_rot(act, FORE_R, Quaternion(ax_f, math.radians(bestw[1])))
+            print("  %-5s [TRL] 팔뚝 비틀림 %+d도 -> 칼끝 고도 %+.1f fwd %+.2f out %+.2f"
+                  % (nm, bestw[1], bestw[3], bestw[2].dot(fwd), bestw[2].dot(out)))
         # ── 2) 손목: 칼끝 목표 + 칼축 롤(손등 계약 우선·날면 눕힘 차선) ──
         sc.frame_set(frames[0])
         bpy.context.view_layer.update()
@@ -1462,11 +1572,23 @@ if CARRY_V25 and any(nm in CARRY_CLIPS for nm in NATIVE):
         R3h = HM.to_3x3()
         R3h.normalize()
         u0 = (R3h @ TIP_L).normalized()
-        eR = math.radians(CARRY_TIP_E)
-        bR = math.radians(CARRY_TIP_B)
-        d_t = ((-fwd * math.cos(bR) + out * math.sin(bR)) * math.cos(eR)
-               + up * math.sin(eR)).normalized()    # 뒤-위-바깥
-        q0 = u0.rotation_difference(d_t)
+        if _tr:
+            # ★26차 4차 실측 교훈: 트레일에서 칼끝을 손목 회전으로 재조준하면
+            #   (2차 -20도: 꺾임 105~113 / 4차 +22도 + 롤 -135: 136~147) 손목이
+            #   부러진다. 트레일의 조준기는 **팔**이다 — 손목은 중립(재조준 0),
+            #   칼은 IK 가 데려다 놓은 방향을 그대로 쓰고, 손등 계약만 ±45도
+            #   칼축 롤로 만든다. TR_TIP_E/B 는 트레일에선 문서값일 뿐 안 쓴다.
+            d_t = u0.copy()
+            q0 = Quaternion()
+            print("  %-5s [TRL] 손목 중립 칼끝: 고도 %+.1f / fwd %+.2f out %+.2f up %+.2f"
+                  % (nm, math.degrees(math.asin(max(-1.0, min(1.0, u0.z)))),
+                     u0.dot(fwd), u0.dot(out), u0.dot(up)))
+        else:
+            eR = math.radians(tip_e)
+            bR = math.radians(tip_b)
+            d_t = ((-fwd * math.cos(bR) + out * math.sin(bR)) * math.cos(eR)
+                   + up * math.sin(eR)).normalized()    # 캐리 뒤-위-바깥
+            q0 = u0.rotation_difference(d_t)
         n_fl = (R3h @ FLAT_L).normalized()
         bak0 = (R3h @ CARRY_BACK_L).normalized()
         # ── 롤 선택 2패스 (1·2차 실측 교훈) ──
@@ -1484,22 +1606,40 @@ if CARRY_V25 and any(nm in CARRY_CLIPS for nm in NATIVE):
             bak_fs.append((Rf @ CARRY_BACK_L).normalized())
             nfl_fs.append((Rf @ FLAT_L).normalized())
         best = None
-        for pd in range(-90, 91, 3):
+        # ★26차: 트레일은 손목이 중립(재조준 0)이므로 롤도 ±45 만 허용한다(4차에서
+        #   ±135 를 열었더니 손등 게이트를 사려고 손목꺾임 136~147 을 팔았다).
+        #   캐리는 25차 그대로 ±90(재현 경로 불변).
+        for pd in (range(-45, 46, 3) if _tr else range(-90, 91, 3)):
             qr = Quaternion(d_t, math.radians(pd)) @ q0
             evs, outs, flats = [], [], []
             for bk0, nf0 in zip(bak_fs, nfl_fs):
                 bk = (qr @ bk0).normalized()
                 evs.append(math.degrees(math.asin(max(-1.0, min(1.0, bk.z)))))
                 outs.append(bk.dot(out))
+                # ★26차: 날면은 트레일도 캐리처럼 **눕힌다**(넓적면 수평). 7차 실측:
+                #   엣지(날 아래)로 세우면 폭 0.42m 슬래브의 아래 모서리가 처져
+                #   달리기 뒤차기 발꿈치를 벤다(관통 0.030). 눕히면 모서리가 0.21
+                #   올라가고, 이 카메라(내려보기 49도)에선 넓은 면이 실루엣도 크다.
                 flats.append(1.0 - abs((qr @ nf0).normalized().dot(up)))
             # ★게이트 하한을 -15(계약 -25 + 마진 10)로 둔다. 3차 실측: -25 그대로
             #   두면 날면 눕힘이 롤을 경계(-23~-24)까지 끌고 가 마진이 1도로 준다
             #   (관성 양념·하류 s42 가 흔들면 이탈). 이 파지의 기하상 손등을 올릴수록
             #   날이 서는 트레이드라(15도 롤당 손등 26도/날면 31도), -15 는 손등
             #   여유와 "넓적면을 얹는" 그림의 절충점이다.
-            ok = (min(evs) >= -15.0 and max(evs) <= 35.0 and min(outs) > 0.0)
-            pen = (0.0 if ok else 100.0 + max(0.0, max(evs) - 35.0)
-                   + max(0.0, -15.0 - min(evs)) + max(0.0, -min(outs)) * 100.0)
+            # ★26차 트레일: 손목 중립이면 칼 방향과 손바닥 방향이 결박이라 "손등
+            #   바깥" 반구는 이 자세에서 원리적으로 안 나온다(6·7차 실측: 어떤
+            #   비틀림+롤 조합도 바깥을 사려면 손목을 105~147도로 부러뜨려야 했다).
+            #   계약의 본체(손등 하늘 금지 = 고도 [-25,+35])는 하드로 지키고,
+            #   바깥은 soft 선호로 강등한다(트레일 요동은 ±2도라 마진 10 불요).
+            if _tr:
+                ok = (min(evs) >= -25.0 and max(evs) <= 35.0)
+                pen = (0.0 if ok else 100.0 + max(0.0, max(evs) - 35.0)
+                       + max(0.0, -25.0 - min(evs)))
+                pen += 0.5 * max(0.0, 0.1 - min(outs))
+            else:
+                ok = (min(evs) >= -15.0 and max(evs) <= 35.0 and min(outs) > 0.0)
+                pen = (0.0 if ok else 100.0 + max(0.0, max(evs) - 35.0)
+                       + max(0.0, -15.0 - min(evs)) + max(0.0, -min(outs)) * 100.0)
             flat_pen = sum(flats) / len(flats)
             cost = pen + flat_pen + 0.002 * abs(pd)
             if best is None or cost < best[0]:
@@ -1509,10 +1649,10 @@ if CARRY_V25 and any(nm in CARRY_CLIPS for nm in NATIVE):
                                                    (E2 - S).normalized().dot(out)))))
         flx = math.degrees(math.asin(max(-1.0, min(1.0,
                                                    (E2 - S).normalized().dot(fwd)))))
-        print("  %-5s IK: 팔 %.3f+%.3f, |어깨->손목| %.3f (게임 %.3fm)"
+        print("  %-5s [%s] IK: 팔 %.3f+%.3f, |어깨->손목| %.3f (게임 %.3fm)"
               " / 위팔 순수외전 %+.1f 앞굽힘 %+.1f / 롤 %+d도"
-              " -> 손등 고도 %+.1f 바깥 %+.2f / 날면수평이탈 %.2f"
-              % (nm, a_len, b_len, dl, dl * SCALE, abd, flx, best[1], best[2],
+              " -> 손등 고도 %+.1f 바깥 %+.2f / 날면비용 %.2f"
+              % (nm, STY, a_len, b_len, dl, dl * SCALE, abd, flx, best[1], best[2],
                  best[3], best[4]))
         # ── 3) 관성 양념: 칼끝 고도가 골반 상하를 CARRY_DELAY 늦게 따라온다 ──
         #   (Catmull 등차 함정 무관 — 골반 신호 자체가 사인형이고, 이 회전은 칼축
@@ -1527,7 +1667,7 @@ if CARRY_V25 and any(nm in CARRY_CLIPS for nm in NATIVE):
         mid = (max(pz) + min(pz)) * 0.5
         half = max(1e-9, (max(pz) - min(pz)) * 0.5)
         dly = int(round(CARRY_DELAY * 30.0 * CARRY_TS.get(nm, 1.0)))
-        amp = math.radians(CARRY_AMP.get(nm, 0.0))
+        amp = math.radians(amp_tab.get(nm, 0.0))
         h_ax = d_t.cross(up)
         if h_ax.length < 1e-5:
             h_ax = out.copy()
@@ -1540,8 +1680,8 @@ if CARRY_V25 and any(nm in CARRY_CLIPS for nm in NATIVE):
         print("        양념: 골반 z 폭 %.4f / 지연 %d장 / 칼끝 고도 ±%.1f도"
               % (half * 2 * SCALE, dly, math.degrees(amp)))
         # ── 4) 감사: 팔각·어깨 간격·머리 여유·손등(프레임별) ──
-        arm_report(act, "CAR " + nm)
-        blade_arc(act, "CAR " + nm)
+        arm_report(act, STY + " " + nm)
+        blade_arc(act, STY + " " + nm)
         sh_gap, hd_gap, baks, tipE, fless = [], [], [], [], []
         for f in frames:
             sc.frame_set(f)
@@ -1579,10 +1719,10 @@ if CARRY_V25 and any(nm in CARRY_CLIPS for nm in NATIVE):
                  min(b[1] for b in baks), max(b[1] for b in baks),
                  min(tipE), max(tipE), max(tipE) - min(tipE),
                  min(fless), max(fless)))
-    print("\n[칼 간섭 실측] 캐리 후")
+    print("\n[칼 간섭 실측] 캐리/트레일 후")
     for nm in NATIVE:
-        if carry_on(nm):
-            M_FIX[nm] = measure(new[nm], "CAR " + nm, 2)
+        if styled(nm):
+            M_FIX[nm] = measure(new[nm], ("TRL " if trail_on(nm) else "CAR ") + nm, 2)
 
 # ================================================================ 8) T 포즈 감시
 # 경로를 고쳤어도 슬롯이 안 물리면 조용히 안 움직인다. **실제로 움직이는지** 본다.

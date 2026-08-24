@@ -415,10 +415,24 @@ addEventListener('keydown', e => {
   // M = 음소거. HUD 의 마지막 줄이 상태를 그대로 보여준다.
   if (e.code === 'KeyM') { e.preventDefault(); setMute(sfx.toggleMute()); }
 });
+// ── 26차: Z(기본 3연타) 봉인 (2026-08-25 오너 "z 스킬은 없애고 x 스킬 ... 다시해줘") ──
+// DASH_ON 과 같은 문법이다: 갈림은 tryAttack 첫 줄 하나뿐이고, 콤보 표(ATK_STEP_T/
+// ATK_STEP_COMMIT)·배율(enemy.js SKILL_MUL.Attack)·Attack 클립·원격 재생(mp.js)은
+// 전부 산 채로 남는다(다른 캐릭터·복귀 대비. 스위치를 켜면 그대로 돌아온다).
+// ★궁수(개발용 F 전환)의 Z 는 화살 발사라 남긴다 — 봉인은 검사 기본기만이다.
+// 같이 접히는 것: 계기판 Z 칸(mountSpaceChip 옆), 아래 조작 안내 Z 줄(#hZatk),
+// 홈 화면 조작 요약(home.js)의 Z 표기. ★선언이 여기(파일 앞)인 이유: 바로 아래
+// top-level 블록이 모듈 평가 때 읽는다 — DASH_ON 자리(전투 절)에 두면 TDZ 다.
+const SKILL_Z_ON = false;
 // 조작 안내의 F 줄은 개발용이라 기본이 숨김이다(index.html). ?dev 에서만 켠다.
 {
   const fRow = document.getElementById('hFchar');
   if (fRow && DEV) fRow.style.display = '';
+}
+// 조작 안내의 Z 줄도 기본 숨김이다(26차 Z 봉인). 스위치를 켜면 여기서 다시 펼쳐진다.
+{
+  const zRow = document.getElementById('hZatk');
+  if (zRow && SKILL_Z_ON) zRow.style.display = '';
 }
 // ★sfx 는 이 파일 위쪽에서 만들어지지만 HUD 요소는 index.html 에 있다.
 const muteEl = document.getElementById('mute');
@@ -2578,13 +2592,24 @@ const CHAR_CFG = {
   //   s42_basic2_soldier_legs.py 가 Soldier 골반 이동 + 양쪽 Thigh/Calf/Foot/Toe0
   //   회전을 레스트 델타로 굽고, 현재 basic2 의 골반 회전·상체·팔·검 자세는
   //   정규화 위상으로 유지한다. 전투/대기/점프 5종도 그대로다.
-  //   Soldier 원팩에는 Walk 가 없어 s12_soldier.py 가 Run 을 완화해 만든 34키
-  //   보행을 쓴다. Run 은 원본 infantry_combat_run 의 26키다.
-  // 보폭/Three 실제 클립 길이(게임 키 1.75 환산):
-  //   Walk 0.82065m · 1.1333초 -> 1.71m/s 에 ts 1.18 (약 125걸음/분)
-  //   Run  1.09320m · 0.8667초 -> 3.20m/s 에 ts 1.27 (약 176걸음/분)
+  //   Run 은 원본 infantry_combat_run 의 26키다.
+  // ★★2026-08-25 26차: Walk 하체를 s42 GAIT_V26 **절차 보행**으로 재작(오너 "질질
+  //   끌며 걷는 느낌" 수리). 병의 규명: Soldier 원팩에 Walk 가 없어 s12 가 Run 을
+  //   완화 합성한 클립이었고(달리기 골격), 접지 듀티 12~18%(정상 60%)·양발 동시접지
+  //   0%·접지 중 발이 골반 대비 2.23m/s 로 긁혀 **ts 1.18 에서 지면 대비 초당 0.92m
+  //   역방향 스케이트(-54%)**였다. 게다가 회전 리타게팅이라 다리가 긴 basic2 에서
+  //   발끝 들림이 0.33~0.38m(하이니 행진)로 증폭됐다. ts 로는 못 고치는 병이라
+  //   (접지 동기 ts 0.766 을 주면 보폭x케이던스가 모자라 몸이 +49% 앞으로 미끄러진다)
+  //   클립을 보행의 산수로 다시 구웠다: 듀티 0.55·양발 동시접지 15%·발끝 들림
+  //   0.125~0.133m·무릎 130~173도·직립.
+  // 실측(gait26.py, 26차 최종 glb): 접지 발속도 1.190 m/s(클립초)
+  //   -> 이동 1.71 에 ts **1.42** = 미끄러짐 +0.2% (26차 최종 glb 실측 접지 발속도
+  //   1.202, 필요 ts 1.422. 분당 ~150걸음. 구 1.18 은 새 클립에서 -19% 스케이트가
+  //   된다 — 클립과 ts 는 한 몸이다)
+  //   Run 1.09320m · 0.8667초 -> 3.20m/s 에 ts 1.27 (약 176걸음/분. 26차 불변 —
+  //   접지가 3장 미만짜리 전력질주 클립이라 s27 식 접지 발속도 측정은 불가)
   // 점프는 slayer 이식본이라 구간(초)이 kensa 와 같다.
-  basic2: { h: 1.75, walk: { spd: 1.71, ts: 1.18 }, run: { spd: 3.20, ts: 1.27 },
+  basic2: { h: 1.75, walk: { spd: 1.71, ts: 1.42 }, run: { spd: 3.20, ts: 1.27 },
             jump: { start: 0.00, rise: 0.20, fall: 0.40, land: 0.50, end: 0.73 } },
 };
 const DEF_CFG = { h: 1.75, walk: { spd: 1.8, ts: 1.0 }, run: { spd: 3.2, ts: 1.0 },
@@ -2806,7 +2831,17 @@ let heavy = false;                 // 일격기 중이면 궤적이 커진다
 //     Heavy  : hot [254~354]   (18차 0.289~0.401 → 회수 유령이 빠져 끝이 당겨졌다)
 //     Wide   : hot [249~382]
 //   커밋 = "그 스윙의 타격이 끝나는 순간" → Heavy 0.40 -> 0.35, Wide 0.37 -> 0.38.
-const ATK_COMMIT = { Attack: 0.30, Heavy: 0.35, Wide: 0.38 };
+// ── 2026-08-25 26차 X 재작(HEAVY_V26)·Z 봉인(SKILL_Z_ON): X 의 hot 창이 옮겨졌다 ──
+// 챔버가 +84 로 높아지고 낙하가 중력 가속(한 장 늦은 hot 진입)이라 창이 뒤로 밀렸다.
+// 같은 자(mo_live26.mjs 단발, 평시 URL 로컬 미러, 요괴 없는 자리)로 다시 잰 값 —
+//   증거 renders/history/v99_wave26/motion/live_after26b/
+//     Heavy : hot [게임 ~300~401ms] (베이크 표 f9~13 = 클립 0.300~0.433 과 궤합.
+//             마지막 hot 표본 clipT 0.461 = 게임 0.401초)
+//     Wide  : hot [264~392]   (23차 [249~382] 와 표본 간격 안 일치 = 불변 대조군 ✓)
+//     Attack: 창 없음(SKILL_Z_ON=false 봉인 실증. 표는 산 채로 둔다)
+//   커밋 = "그 스윙의 타격이 끝나는 순간" → Heavy 0.35 -> 0.40 (18차 검도판과 같은 값
+//   으로 회귀 — 깊어진 낙하만큼 창이 늦게 닫힌다).
+const ATK_COMMIT = { Attack: 0.30, Heavy: 0.40, Wide: 0.38 };
 let atkClip = null;                // 지금 도는 공격 클립 이름. 없으면 공격 중이 아니다
 let atkStartT = 0;                 // 공격이 시작된 **게임시간**(히트스톱 중에는 안 흐른다)
 let atkStruck = false;             // 이번 공격에서 타격 구간(hot)을 한 번이라도 지났나
@@ -2907,6 +2942,8 @@ function canCancelAttack(now) {
 //   ②내려찍기 원(반경 3.6m) 한복판에 서 있었을 때. 나머지 셋은 boss.js 가 "제일 느린
 //   걸음으로도 예고 안에 빠져나올 수 있게" 잡아 둔 값이라 회피 없이도 성립한다.
 const DASH_ON = false;
+// ★26차: Z(기본 3연타) 봉인 스위치 SKILL_Z_ON 은 파일 앞(조작 안내 접는 자리 위)에
+//   있다 — 그 자리가 top-level 에서 먼저 실행돼 여기 두면 TDZ 다. 문법은 DASH_ON 과 같다.
 const DASH_DIST = 3.5, DASH_DUR = 0.18, DASH_IFRAME = 0.20, DASH_CD = 1.2;
 let dashLeft = 0, dashDX = 0, dashDZ = 0, dashGone = 0;
 let dashReadyT = -99;              // 이 게임시간이 지나면 다시 쓸 수 있다
@@ -4005,6 +4042,8 @@ const BOW_AIM_R = 13.0;
 let arrowShot = false;
 
 function tryAttack() {
+  // ★26차 오너 지시. 갈림은 이 한 줄뿐이다(DASH_ON 전례). 궁수(개발용)의 화살은 남긴다.
+  if (!SKILL_Z_ON && !isArcher()) return;
   if (!actions.Attack) return;
   if (isCleared()) return;         // 층 돌파 뒤에는 안 받는다(입력 버퍼로 새는 경로까지 막는다)
   if (dashLeft > 0) { bufferInput('atk'); return; }   // 대시 중에 누른 Z 는 착지에 이어진다
@@ -4312,6 +4351,12 @@ let dashChip = null;
 (function mountSpaceChip(tries = 0) {
   const host = document.getElementById('uiSkills');
   if (!host) { if (tries < 40) setTimeout(() => mountSpaceChip(tries + 1), 150); return; }
+  // ★26차: Z 봉인이면 계기판의 Z(베기) 칸을 접는다. X·C 는 flex 라 그대로 왼쪽 정렬.
+  //   ui.js 의 updateSkills 가 이 노드를 계속 만져도 display:none 이라 안 보인다.
+  if (!SKILL_Z_ON) {
+    const zSlot = host.querySelector('[data-k="Basic"]');
+    if (zSlot) zSlot.style.display = 'none';
+  }
   const d = document.createElement('div');
   d.className = 'sk rdy';
   d.dataset.k = DASH_ON ? 'Dash' : 'Jump';

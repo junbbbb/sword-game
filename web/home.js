@@ -115,7 +115,8 @@ home.innerHTML =
     '</div>' +
 
     '<div class="hmFoot">' +
-      '이동 <b>방향키</b> · 달리기 <b>Shift</b> · 점프 <b>Space</b> · 베기 <b>Z X C</b> · 안내 <b>H</b><br>' +
+      // ★26차: Z 봉인(main.js SKILL_Z_ON=false). 스위치를 켜면 이 줄도 Z 를 되살릴 것.
+      '이동 <b>방향키</b> · 달리기 <b>Shift</b> · 점프 <b>Space</b> · 베기 <b>X C</b> · 안내 <b>H</b><br>' +
       '게임 중 <b>브라우저 뒤로가기</b>를 누르면 이 화면으로 돌아온다.' +
       '<label class="hmDev"><input type="checkbox" class="hmDevBox"' + (sel.dev ? ' checked' : '') + '> 개발 모드</label>' +
     '</div>' +

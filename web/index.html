@@ -207,7 +207,9 @@
        이제 이동 중이든 아니든 Space 는 점프 하나라, 조건을 말할 것이 없다. -->
   <div class="hRow"><span class="ks"><span class="k">Space</span></span><span class="t">점프</span></div>
   <div class="hSep"></div>
-  <div class="hRow"><span class="ks"><span class="k">Z</span></span><span class="t">베기, 연속으로 3연타</span></div>
+  <!-- ★26차: Z(기본 3연타)는 봉인됐다(main.js SKILL_Z_ON). hFchar 와 같은 문법으로
+       기본 숨김이고, 스위치를 켜면 main.js 가 이 줄을 다시 펼친다. -->
+  <div class="hRow" id="hZatk" style="display:none"><span class="ks"><span class="k">Z</span></span><span class="t">베기, 연속으로 3연타</span></div>
   <div class="hRow"><span class="ks"><span class="k">X</span></span><span class="t">수면참, 크게 한 번</span></div>
   <div class="hRow"><span class="ks"><span class="k">C</span></span><span class="t">횡일섬, 가로로 넓게</span></div>
   <div class="hSep"></div>
