@@ -2608,8 +2608,35 @@ const CHAR_CFG = {
   //   된다 — 클립과 ts 는 한 몸이다)
   //   Run 1.09320m · 0.8667초 -> 3.20m/s 에 ts 1.27 (약 176걸음/분. 26차 불변 —
   //   접지가 3장 미만짜리 전력질주 클립이라 s27 식 접지 발속도 측정은 불가)
-  // 점프는 slayer 이식본이라 구간(초)이 kensa 와 같다.
-  basic2: { h: 1.75, walk: { spd: 1.71, ts: 1.42 }, run: { spd: 3.20, ts: 1.27 },
+  // ★★★2026-08-26 27차: 수제 키프레임을 버리고 Mixamo Great Sword 팩을 리타게팅했다.
+  //   Walk=walk · Run=run(2) 스프린트 · Jump=jump(2)(골반 z 억제) · Wide=slash(3).
+  //   Attack(Z)만 옛 수제본 유지 — SKILL_Z_ON=false 로 봉인돼 있다.
+  // ★2026-08-27 27차b: **전 클립 60fps 로 통일**(게임이 60+ 로 도니 빠른 베기는 키가
+  //   촘촘해야 궤적과 칼끝 속도 판정이 산다). 30fps 소스는 반프레임 보간으로 60 격자에
+  //   다시 담았고, 타깃 glb 도 60fps 로 읽어 기존 Attack 길이가 안 뒤틀리게 했다.
+  //   오너가 직접 받은 60fps 소스 3종으로 교체: Idle=Great Sword Idle2_new(2.02s
+  //   두 손 겨눔) · **IdleAlt 신설**=Great Sword Idle_new(7.57s 칼 내리고 둘러보기) ·
+  //   Heavy=Great Sword Slash 3_new(1.28s, 위→아래 대각).
+  //   IdleAlt 는 가만히 6~12초(매번 새로 뽑음) 서 있으면 한 번 나온다 — playIdle() 참고.
+  // ★날 세우기(BLADE_ROLL 295도): ALIGN_TO_AXE 가 쓰는 rotation_difference 는 축만
+  //   맞추는 최소 회전이라 칼축 둘레 롤이 임의로 남는다. 오너 "뾰족한 날이 아니라
+  //   넓적면으로 내리치는 느낌" → 25차 날 정렬 자로 재니 48.3도(Heavy)·51.7도(Wide)로
+  //   날과 넓적면의 딱 중간이었다. 0~360도를 훑어 속도가중 최소인 295도를 찾아 적용:
+  //   Heavy 24.4 · Wide 29.1(계약 ≤30), 최고속 프레임은 12.2도·1.1도로 거의 날 진입.
+  //   롤 축이 칼 자신의 축이라 칼끝 궤적·히트 창은 불변이다.
+  //   ⚠IdleAlt 는 칼끝을 바닥에 짚는 구간에서 **-0.23m 관통**한다(클립의 절반 이상).
+  //     Brute 도끼(1.19m)보다 우리 칼(1.32m)이 길어서다. 어깨·팔 ~10도 들어올리면 맞는다.
+  //   ★첫단추: Mixamo 모션은 Brute 의 BattleAxe_GEO 를 전제로 만들어졌고, 그 도끼
+  //   레스트 축과 우리 칼 레스트 축이 **66도** 어긋나 있었다(칼끝으로 0.75m). 그대로
+  //   먹이면 Brute 가 도끼를 세워 드는 자리에서 우리는 칼을 땅으로 늘어뜨린다.
+  //   blender 쪽 ALIGN_TO_AXE 가 오른손 로컬에 상수 보정을 곱해 맞춘다.
+  //   (mixamorig:Weapon 뼈는 실제 도끼와 86.8도 어긋난 미사용 뼈다 — 기준 삼았다가 기각)
+  //   정렬 후 관통이 통째로 풀렸다: slash -0.763 -> +0.163, jump attack -0.704 -> +0.289.
+  // 실측: Walk 접지 발속도 1.054 m/s(게임) -> 이동 1.71 에 ts 1.62, 미끄러짐 +0.15%.
+  //   Run(2) 3.936 m/s -> 이동 3.20 에 ts 0.81. (ts 1.0 으로 두려면 이동 3.94)
+  // 점프 구간(초)은 아직 옛 클립 기준이다. jump(2) 실측 위상은
+  //   웅크림 0.03~0.30 / 이륙 0.30 / 정점 0.43~0.47 / 착지 0.67 / 회복끝 0.93.
+  basic2: { h: 1.75, walk: { spd: 1.71, ts: 1.62 }, run: { spd: 3.20, ts: 0.81 },
             jump: { start: 0.00, rise: 0.20, fall: 0.40, land: 0.50, end: 0.73 } },
 };
 const DEF_CFG = { h: 1.75, walk: { spd: 1.8, ts: 1.0 }, run: { spd: 3.2, ts: 1.0 },
@@ -2841,7 +2868,15 @@ let heavy = false;                 // 일격기 중이면 궤적이 커진다
 //     Attack: 창 없음(SKILL_Z_ON=false 봉인 실증. 표는 산 채로 둔다)
 //   커밋 = "그 스윙의 타격이 끝나는 순간" → Heavy 0.35 -> 0.40 (18차 검도판과 같은 값
 //   으로 회귀 — 깊어진 낙하만큼 창이 늦게 닫힌다).
-const ATK_COMMIT = { Attack: 0.30, Heavy: 0.40, Wide: 0.38 };
+// ── 2026-08-26 27차 Mixamo 교체: 클립이 통째로 바뀌어 창을 다시 쟀다 ───────────
+// 베이크 실측(칼끝 속도 → fast=clamp((v/45−0.12)/0.55), HOT_ON 0.42=15.8m/s, OFF 9.4).
+// 게임속도 = 클립속도 × 1.2177(h=1.75 정규화) × ts. Heavy ts 1.15 · Wide ts 1.20.
+//   Heavy(slash)     : 본 스윙 hot [348~754ms], 최고 50.2 m/s @493ms  -> 커밋 0.75
+//   Wide (slash 3)   : hot [472~889ms] 한 구간뿐, 최고 52.9 m/s       -> 커밋 0.89
+// ⚠Heavy 는 치켜드는 예비 구간에도 창이 하나 열린다 [87~319ms]. CAST_SETTLE 0.20 이
+//   앞을 가리므로 노출은 200~319ms. 원샷 가드 덕에 이중 타격은 없지만, 예비에 스친
+//   적이 본 타격에 면역이 되는 손해가 가능하다(설정 연장 또는 클립 앞 트림이 근본책).
+const ATK_COMMIT = { Attack: 0.30, Heavy: 0.75, Wide: 0.89 };
 let atkClip = null;                // 지금 도는 공격 클립 이름. 없으면 공격 중이 아니다
 let atkStartT = 0;                 // 공격이 시작된 **게임시간**(히트스톱 중에는 안 흐른다)
 let atkStruck = false;             // 이번 공격에서 타격 구간(hot)을 한 번이라도 지났나
@@ -3498,6 +3533,8 @@ function loadChar(name, onDone) {
       if (c.name === 'Attack' || c.name === 'Heavy' || c.name === 'Wide') {
         a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true;
       }
+      // IdleAlt = 가만히 서 있으면 가끔 한 번 나오는 곁동작. 루프면 계속 둘러본다.
+      if (c.name === 'IdleAlt') { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; }
     });
 
     CHARS[name] = { model: m, mixer: mx, actions: acts, handBone: hand, lhandBone: lhand,
@@ -3921,6 +3958,46 @@ function play(name, fade = 0.18) {
   if (current) current.crossFadeTo(a, fade, false);
   else a.fadeIn(fade);
   current = a;
+}
+
+// ── 대기 곁동작(IdleAlt) ────────────────────────────────────────────────────
+// 2026-08-27 27차b. 오너 "칼 내리고 주변 둘러보는 건 몇 초 이상 가만히 있을 때
+// 간헐적으로 나오게". 기본 Idle 은 짧은 두 손 겨눔(2.0초)이 계속 돌고, 그 상태가
+// IDLE_ALT_MIN~MAX 초 이어지면 긴 곁동작(7.6초)을 **한 번만** 재생하고 돌아온다.
+// ★간격을 상수로 두면 시계처럼 규칙적이라 눈에 띈다. 매번 새로 뽑아 흩뜨린다.
+// ★곁동작 클립은 LoopOnce 다(위 로더). 여기서는 남은 시간만 세고, 다 돌면 Idle 로
+//   크로스페이드해 돌아온다. 걷기·공격·점프로 빠지면 상태 기계가 아래 리셋을 부른다.
+const IDLE_ALT_MIN = 6.0, IDLE_ALT_MAX = 12.0;
+const IDLE_ALT_FADE = 0.30;          // 곁동작은 전투 전환이 아니니 느리게 섞는다
+let idleT = 0;                       // 가만히 있은 시간(초)
+let idleAltLeft = 0;                 // 곁동작 남은 시간(초). >0 이면 재생 중
+let idleAltNext = IDLE_ALT_MIN;      // 다음 곁동작까지 필요한 대기(초)
+function idleAltReroll() {
+  idleAltNext = IDLE_ALT_MIN + Math.random() * (IDLE_ALT_MAX - IDLE_ALT_MIN);
+}
+idleAltReroll();
+function idleReset() { idleT = 0; idleAltLeft = 0; }
+// 곁동작이 실제로 도는지 밖에서 확인하는 자(QA 용). 게임 동작에는 영향이 없다.
+window.__idleDbg = () => ({
+  clip: current ? current.getClip().name : null,
+  idleT: +idleT.toFixed(2), idleAltLeft: +idleAltLeft.toFixed(2),
+  idleAltNext: +idleAltNext.toFixed(2), hasAlt: !!actions.IdleAlt,
+});
+function playIdle(dt) {
+  if (idleAltLeft > 0) {             // 곁동작 재생 중 — 끝날 때까지 붙든다
+    idleAltLeft -= dt;
+    if (idleAltLeft > 0) { play('IdleAlt', IDLE_ALT_FADE); return; }
+    idleT = 0; idleAltReroll();      // 다 돌았다. 기본으로 복귀
+  }
+  const alt = actions.IdleAlt;
+  idleT += dt;
+  if (alt && idleT >= idleAltNext) {
+    // 크로스페이드가 겹치는 만큼 빼야 끝에서 잘리지 않고 자연스럽게 넘어간다
+    idleAltLeft = Math.max(0.1, alt.getClip().duration - IDLE_ALT_FADE);
+    play('IdleAlt', IDLE_ALT_FADE);
+    return;
+  }
+  play('Idle');
 }
 
 // 3연타 클립의 단수별 진입점(초)과 그 단수의 커밋 길이(초).
@@ -6070,16 +6147,16 @@ function tick() {
     mixer.update(preview.paused ? 0 : dt * preview.rate);
     if (grounded) groundFeet();
   } else if (mixer && !window.__freeze) {
-    if (attacking) { /* Attack 유지 */ }
-    else if (dashLeft > 0) { /* 대시 클립 유지. 안 막으면 아래 play('Idle') 이 매 프레임 덮는다 */ }
-    else if (jumping) { /* Jump 유지 */ }
-    else if (moving) play(running ? 'Run' : 'Walk');
+    if (attacking) { idleReset(); /* Attack 유지 */ }
+    else if (dashLeft > 0) { idleReset(); /* 대시 클립 유지. 안 막으면 아래 play('Idle') 이 매 프레임 덮는다 */ }
+    else if (jumping) { idleReset(); /* Jump 유지 */ }
+    else if (moving) { idleReset(); play(running ? 'Run' : 'Walk'); }
     // ★코스트 앞 절반은 걷기/달리기 클립을 붙들고 있는다. 몸이 아직 0.2m 쯤
     //   미끄러지는 중인데 클립만 Idle 로 넘기면 그게 발 미끄러짐이다.
     //   뒤 절반에서 Idle 로 넘기면 남은 크로스페이드(0.18초)와 남은 코스트가 겹쳐
     //   "속도가 줄면서 자세가 선다" 한 문장이 된다.
-    else if (coastLeft > COAST_T * 0.5) play(coastRun ? 'Run' : 'Walk');
-    else play('Idle');
+    else if (coastLeft > COAST_T * 0.5) { idleReset(); play(coastRun ? 'Run' : 'Walk'); }
+    else playIdle(dt);
     mixer.update(dt);
     if (jumping && !actions.Jump) {
       // ★점프 클립이 없는 캐릭터(Meshy 임포트 등)에서 여기서 a.time 을 건드려
