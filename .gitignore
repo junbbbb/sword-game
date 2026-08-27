@@ -1,3 +1,9 @@
+# 아래 셋은 통째로 무시하되, 다른 기계에서 이어 작업하려면 반드시 있어야 하는 몇 개는
+# `git add -f` 로 이미 추적 중이다(추적된 파일에는 이 규칙이 안 걸린다).
+#   renders/history/LOG.md  = 함정 정본(HANDOFF 가 읽기만 하라고 지목한 그 파일)
+#   renders/**/*.md         = 파도별 조사·판정 기록
+#   dist/.vercel/project.json = 없으면 vercel 이 새 프로젝트를 만들어 배포 주소가 바뀐다
+# 나머지(렌더 png 12G · 원자재 incoming 2.1G · 빌드 산출물 dist)는 기계에 남는다.
 renders/
 incoming/
 dist/
